@@ -183,16 +183,18 @@ flowchart TB
 | Desktop shell | Tauri v2, pending spike validation per `docs/architecture/adr/0001-desktop-shell-tauri-v2.md`. |
 | Desktop-to-backend realtime transport | WebSocket over TLS. |
 | Audio frame encoding | Binary frames for audio, JSON frames for control and events. |
+| Backend runtime | TypeScript/Node.js for initial services, with generated JSON Schema contract artifacts. |
 | Backend topology | Modular services behind an API gateway; monorepo acceptable initially. |
-| Data store | PostgreSQL for relational data, vector store for embeddings, object storage for raw artifacts. |
+| Data store | Managed PostgreSQL for relational data, pgvector for initial embeddings, object storage for raw artifacts. |
+| Workflow execution | Workflow service backed by a PostgreSQL job queue initially. |
 | Provider abstraction | STT, embeddings, LLM, billing, and integrations must sit behind internal adapters. |
 | Workspace isolation | Enforced at every request and retrieval boundary. |
 | Local-first readiness | Pipeline stages must declare cloud, local, or hybrid execution location. |
+| Realtime STT routing | Desktop audio routes through the Dokeza realtime service before any cloud STT provider. |
 
 ## 7. Open Architecture Decisions
 
 - Whether the Tauri v2 spike passes all accepted ADR criteria.
-- Whether realtime STT is client-to-provider direct or routed through Dokeza backend.
-- Whether vector isolation uses per-workspace collections or shared collections with mandatory namespace filters.
-- Whether post-call processing is handled by the workflow service or AI orchestrator service directly.
+- When direct client-to-provider STT is worth reconsidering for enterprise policy exceptions.
+- When vector isolation must move from pgvector shared tables to per-workspace collections or a dedicated vector store.
 - Whether enterprise deployments require regional service stacks from the beginning.

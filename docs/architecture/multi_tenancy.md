@@ -29,8 +29,9 @@ Baseline:
 
 - PostgreSQL with `workspace_id` on every tenant-owned table.
 - Application authorization middleware required on every request.
-- PostgreSQL row-level security should be enabled for high-risk tables.
+- PostgreSQL row-level security must be enabled for high-risk tenant tables before they contain non-synthetic customer data.
 - All queries must be scoped by workspace through repository-level APIs.
+- RLS policy bypass is allowed only for documented internal maintenance jobs that run under a dedicated service role and emit audit events where customer data may be affected.
 
 High-risk tables:
 
@@ -45,7 +46,14 @@ High-risk tables:
 
 ## 5. Vector Store Isolation
 
-Preferred options, in order:
+Initial implementation:
+
+- Use pgvector in PostgreSQL with shared embedding tables.
+- Store `workspace_id`, `document_id`, and document permission metadata alongside each embedding row.
+- Apply RLS to tenant-owned vector tables where PostgreSQL owns the vector data.
+- Permit vector queries only through the knowledge or retrieval service.
+
+Future options, in order:
 
 1. Separate collection or namespace per workspace.
 2. Shared collection with mandatory `workspace_id` and document permission filters enforced by the retrieval service.
@@ -136,4 +144,3 @@ Required tests:
 - Integration credential for workspace A cannot be used for workspace B.
 - Signed object URLs cannot be generated without workspace authorization.
 - Admin role boundaries are enforced.
-

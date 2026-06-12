@@ -48,12 +48,12 @@ docs/
 | Desktop native layer | Rust |
 | Desktop UI | React + TypeScript |
 | Web app | React + TypeScript |
-| Backend services | TypeScript or Go |
+| Backend services | TypeScript/Node.js for initial implementation |
 | Realtime protocol contracts | TypeScript schemas plus generated JSON Schema |
 | Database migrations | Versioned migration tool owned by backend |
 | Infrastructure | Terraform-first |
 
-If Go is chosen for backend services, keep shared protocol schemas in language-neutral JSON Schema or Protobuf.
+Go remains acceptable for later performance-sensitive services, but only behind stable contract boundaries. Shared schemas must stay language-neutral at the artifact boundary through generated JSON Schema, even when TypeScript is the source format.
 
 ## 4. Dependency Rules
 
@@ -147,4 +147,3 @@ Before merge, implementation changes must answer:
 - Which tests prove the change?
 - Which telemetry proves it in production?
 - Which docs were updated?
-

@@ -31,9 +31,9 @@ Production data must not be copied to lower environments without explicit approv
 | --- | --- |
 | Compute | Containerized services on managed container platform |
 | Database | Managed PostgreSQL |
-| Vector store | pgvector initially, Qdrant or managed vector DB if scale requires |
+| Vector store | pgvector in managed PostgreSQL initially; Qdrant or managed vector DB only if scale requires |
 | Object storage | S3-compatible object storage |
-| Queue/workflows | Managed queue plus workflow engine |
+| Queue/workflows | PostgreSQL-backed job queue initially; Temporal or managed workflow engine if long-running workflows require it |
 | Secrets | Cloud secrets manager |
 | Realtime ingress | Load-balanced WebSocket-capable ingress |
 | CDN | Static web app and downloads |
@@ -177,10 +177,9 @@ Before commercial launch, define and test:
 
 - Cloud provider.
 - Managed container platform.
-- Whether to use pgvector or Qdrant first.
-- Workflow engine.
+- When to move from pgvector to a dedicated vector database, based on measured latency, scale, and operational complexity.
+- When to move from the PostgreSQL-backed job queue to Temporal or a managed workflow engine.
 - Billing provider.
 - Observability vendor.
 - First production region.
 - Whether enterprise data residency is required before launch.
-
