@@ -71,13 +71,15 @@ flowchart LR
     CTX --> DB
 ```
 
+For the initial implementation, the desktop does not stream audio directly to STT providers and does not call LLM or embedding providers directly. Cloud AI provider access is mediated by Dokeza backend services so workspace policy, credential isolation, telemetry, and retention controls remain enforceable server-side.
+
 ## 4. Data Flow Table
 
 | Flow | Data | Sensitive Content | Protection | Opt-Out / Policy |
 | --- | --- | --- | --- | --- |
 | Device to realtime service | Audio chunks | Voice, meeting content, PII | TLS, session token, retention policy | Disable capture; local mode where supported |
 | Device to context service | Screen text, active window metadata | Visible documents, customer data, secrets | TLS, redaction, permission prompt | Disable screen context |
-| Realtime service to STT provider | Audio or audio stream | Voice, meeting content | TLS, provider DPA, retention settings | Local STT or provider disabled by policy |
+| Realtime service to STT provider | Audio or audio stream | Voice, meeting content | TLS, provider DPA, Dokeza-managed provider credentials, retention settings | Local STT or provider disabled by policy |
 | STT provider to Dokeza | Transcript | Meeting content, PII | TLS, provider retention controls | Local STT |
 | Knowledge source to Dokeza | Documents and metadata | Company confidential data | OAuth scopes, TLS, encrypted storage | Connector disabled; document deletion |
 | Dokeza to embedding provider | Document chunks | Company confidential data | TLS, provider retention controls | Local embeddings or provider disabled |
@@ -138,4 +140,3 @@ Workspace policy can disable:
 - Deletion behavior documented.
 - Integration scopes documented.
 - Incident response contact and process documented.
-

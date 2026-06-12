@@ -11,7 +11,7 @@ This document defines the first version of the desktop-to-backend realtime proto
 | Protocol | WebSocket over TLS |
 | URL | `wss://api.dokeza.com/v1/realtime` |
 | Control encoding | JSON text frames |
-| Audio encoding | Binary frames |
+| Audio encoding | Binary PCM payload frames paired with preceding `audio.chunk_meta` JSON frames |
 | Auth | Short-lived session token sent in `auth.hello` |
 | Heartbeat | Client sends ping every 30 seconds; server times out after 90 seconds |
 | Versioning | Every JSON message includes `protocol_version` |
@@ -24,7 +24,7 @@ desktop opens WSS connection
 desktop sends auth.hello
 server sends auth.accepted
 desktop sends session.start
-desktop streams audio.chunk frames and context.update messages
+desktop streams audio.chunk_meta + binary audio frame pairs and context.update messages
 server streams transcript, suggestion, and status messages
 desktop sends session.end
 server sends session.closed
@@ -95,28 +95,54 @@ All JSON messages must use this envelope:
 }
 ```
 
-### 5.3 `audio.chunk`
+### 5.3 `audio.chunk_meta` + binary payload
 
-Audio chunks should be sent as binary frames. The binary frame must be preceded by or associated with metadata:
+For protocol version `2026-06-12`, audio chunks use a two-frame pair:
+
+1. A JSON `audio.chunk_meta` message using the standard envelope.
+2. Exactly one binary WebSocket frame immediately after that metadata message.
+
+No other JSON or binary frame may appear between the metadata frame and its binary payload. The binary payload is raw audio bytes for the declared `chunk_id`; it has no nested JSON envelope and does not increment the JSON `seq` counter.
 
 ```json
 {
   "type": "audio.chunk_meta",
   "payload": {
     "chunk_id": "aud_123",
+    "chunk_index": 42,
     "stream": "microphone",
     "format": "pcm_s16le",
     "sample_rate_hz": 16000,
     "channels": 1,
     "duration_ms": 100,
-    "timestamp_ms": 4500
+    "timestamp_ms": 4500,
+    "byte_length": 3200
   }
 }
 ```
 
-The next binary frame contains the PCM payload for `chunk_id`.
+The server must reject or recoverably error on missing payload frames, extra payload frames, unsupported formats, out-of-order `chunk_index` values within a stream, or binary payloads whose byte length does not match `byte_length`.
 
-### 5.4 `context.update`
+### 5.4 `audio.gap`
+
+When local buffering overflows or the desktop intentionally drops unsent audio, the client must send an `audio.gap` message after reconnect or when the session is still connected.
+
+```json
+{
+  "type": "audio.gap",
+  "payload": {
+    "stream": "microphone",
+    "start_ms": 120000,
+    "end_ms": 138000,
+    "dropped_chunks": 180,
+    "reason": "local_buffer_full"
+  }
+}
+```
+
+The backend must persist the gap in the session timeline so downstream transcript, summary, and diagnostics views do not imply continuous capture.
+
+### 5.5 `context.update`
 
 ```json
 {
@@ -131,7 +157,7 @@ The next binary frame contains the PCM payload for `chunk_id`.
 }
 ```
 
-### 5.5 `suggestion.request`
+### 5.6 `suggestion.request`
 
 ```json
 {
@@ -145,7 +171,7 @@ The next binary frame contains the PCM payload for `chunk_id`.
 }
 ```
 
-### 5.6 `session.end`
+### 5.7 `session.end`
 
 ```json
 {
@@ -170,7 +196,9 @@ The next binary frame contains the PCM payload for `chunk_id`.
     "policy": {
       "screen_context_allowed": true,
       "cloud_stt_allowed": true,
-      "retention_mode": "30_days"
+      "direct_provider_stt_allowed": false,
+      "retention_mode": "30_days",
+      "max_local_audio_buffer_ms": 300000
     }
   }
 }
@@ -273,12 +301,26 @@ The next binary frame contains the PCM payload for `chunk_id`.
 }
 ```
 
+### 6.8 `session.closed`
+
+```json
+{
+  "type": "session.closed",
+  "payload": {
+    "reason": "user_stopped",
+    "final_server_seq": 1042
+  }
+}
+```
+
 ## 7. Reconnection
 
 The client shall:
 
 - Retry with exponential backoff: 1s, 2s, 4s, 8s, up to 30s.
-- Preserve unsent audio chunks according to local buffer limits.
+- Preserve unsent audio chunks up to the active workspace policy limit.
+- Use a default local buffer cap of five minutes per active audio stream or 25 MB per active audio stream, whichever is lower, unless workspace policy sets a stricter value.
+- Send `audio.gap` for any dropped buffered audio range.
 - Send `resume.request` after reconnect.
 
 ```json
@@ -323,10 +365,11 @@ The client shall pause sending audio frames temporarily, continue local capture 
 - The backend must support at least the current stable desktop version and one previous stable version.
 - The desktop must include client version and protocol version in every session.
 
-## 10. Open Decisions
+## 10. Initial Routing and Encoding Decisions
 
-- Whether audio metadata and binary payload should be merged into a single binary envelope.
-- Whether MessagePack should replace JSON for high-volume event streams.
-- Whether client-to-provider direct STT is allowed for selected enterprise policies.
-- Maximum local audio buffer size during network loss.
-
+- The desktop sends audio only to the Dokeza realtime service for the initial implementation.
+- The Dokeza realtime service routes cloud STT through an internal STT adapter using Dokeza-managed provider credentials and workspace policy checks.
+- Direct client-to-provider STT is not allowed in the initial implementation. Any future exception requires a new ADR, updated data-flow documentation, token-broker design, and workspace policy controls.
+- JSON remains the control and event encoding for protocol version `2026-06-12`.
+- Audio uses the `audio.chunk_meta` JSON frame plus immediate binary payload frame pair defined in this document.
+- MessagePack or a single custom binary envelope may be reconsidered only after measured protocol overhead threatens latency or cost targets.

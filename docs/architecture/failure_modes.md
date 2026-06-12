@@ -36,7 +36,7 @@ FULL
 | Component | Failure Mode | Detection | User Impact | Required Behavior | Data Loss |
 | --- | --- | --- | --- | --- | --- |
 | WebSocket | Connection drop | Missed heartbeat or socket close | Live updates stop | Reconnect with exponential backoff; send resume request | Possible loss of unbuffered audio |
-| WebSocket | Server backpressure | `flow_control` message | Transcript delayed | Pause sends, buffer locally within limit, show degraded state | Possible loss if buffer fills |
+| WebSocket | Server backpressure | `flow_control` message | Transcript delayed | Pause sends, buffer locally within limit, show degraded state, emit `audio.gap` if buffered audio is dropped | Possible loss if buffer fills |
 | Microphone | Permission denied | OS permission response | No user audio | Show permission guidance; allow retry | No audio captured |
 | Microphone | Device unplugged | Device change event | User audio stops | Pause mic capture; prompt device selection | Audio missing while unplugged |
 | System audio | Loopback unavailable | Platform capture error | Remote speaker audio missing | Continue mic-only; show setup guidance | Remote audio unavailable |
@@ -72,9 +72,10 @@ The UI should avoid alarming copy during meetings. Detailed errors belong in dia
 ## 5. Local Buffering Requirements
 
 - The client should buffer unsent audio during short network interruptions.
-- Buffer limits must be configurable by platform and policy.
+- The default buffer cap is five minutes per active audio stream or 25 MB per active audio stream, whichever is lower.
+- Buffer limits must be configurable by platform and workspace policy.
 - When the buffer is near capacity, the client must show a degraded indicator.
-- If audio must be dropped, the client must record a gap marker in the transcript timeline.
+- If audio must be dropped, the client must send `audio.gap` so the backend records a gap marker in the transcript timeline.
 
 ## 6. Recovery Requirements
 
@@ -96,4 +97,3 @@ Each release candidate should run failure injection tests for:
 - OAuth expiration.
 - Local disk write failure.
 - Backend restart during active session.
-
