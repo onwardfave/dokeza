@@ -15,7 +15,6 @@ export interface TelemetryEvent {
 
 const restrictedKeyFragments = [
   "audio",
-  "chunk",
   "content",
   "document",
   "prompt",

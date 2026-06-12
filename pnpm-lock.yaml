@@ -33,6 +33,39 @@ importers:
 
   packages/telemetry: {}
 
+  services/ai-orchestrator:
+    dependencies:
+      '@dokeza/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
+
+  services/api:
+    dependencies:
+      '@dokeza/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
+      '@dokeza/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@dokeza/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
+
+  services/knowledge:
+    dependencies:
+      '@dokeza/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
+
+  services/realtime:
+    dependencies:
+      '@dokeza/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@dokeza/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
+
 packages:
 
   '@esbuild/aix-ppc64@0.21.5':

@@ -4,6 +4,10 @@
     { "path": "./packages/contracts" },
     { "path": "./packages/config" },
     { "path": "./packages/authz" },
-    { "path": "./packages/telemetry" }
+    { "path": "./packages/telemetry" },
+    { "path": "./services/api" },
+    { "path": "./services/realtime" },
+    { "path": "./services/ai-orchestrator" },
+    { "path": "./services/knowledge" }
   ]
 }

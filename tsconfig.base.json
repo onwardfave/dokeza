@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
     "composite": true,
     "declaration": true,
     "declarationMap": true,
@@ -17,6 +18,12 @@
     "noImplicitReturns": true,
     "noUncheckedIndexedAccess": true,
     "outDir": "dist",
+    "paths": {
+      "@dokeza/authz": ["packages/authz/src/index.ts"],
+      "@dokeza/config": ["packages/config/src/index.ts"],
+      "@dokeza/contracts": ["packages/contracts/src/index.ts"],
+      "@dokeza/telemetry": ["packages/telemetry/src/index.ts"]
+    },
     "resolveJsonModule": true,
     "rootDir": ".",
     "skipLibCheck": true,
