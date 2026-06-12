@@ -1,0 +1,1387 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "auth.hello",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "token",
+            "client_version",
+            "platform",
+            "device_id"
+          ],
+          "properties": {
+            "token": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "client_version": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "platform": {
+              "anyOf": [
+                {
+                  "const": "windows",
+                  "type": "string"
+                },
+                {
+                  "const": "macos",
+                  "type": "string"
+                }
+              ]
+            },
+            "device_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "session.start",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "workspace_id",
+            "meeting_source",
+            "capture",
+            "processing"
+          ],
+          "properties": {
+            "workspace_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "meeting_source": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "capture": {
+              "type": "object",
+              "required": [
+                "microphone",
+                "system_audio",
+                "screen_context"
+              ],
+              "properties": {
+                "microphone": {
+                  "type": "boolean"
+                },
+                "system_audio": {
+                  "type": "boolean"
+                },
+                "screen_context": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "processing": {
+              "type": "object",
+              "required": [
+                "stt",
+                "llm",
+                "retrieval"
+              ],
+              "properties": {
+                "stt": {
+                  "anyOf": [
+                    {
+                      "const": "cloud",
+                      "type": "string"
+                    },
+                    {
+                      "const": "local",
+                      "type": "string"
+                    },
+                    {
+                      "const": "hybrid",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "llm": {
+                  "anyOf": [
+                    {
+                      "const": "cloud",
+                      "type": "string"
+                    },
+                    {
+                      "const": "local",
+                      "type": "string"
+                    },
+                    {
+                      "const": "hybrid",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "retrieval": {
+                  "anyOf": [
+                    {
+                      "const": "cloud",
+                      "type": "string"
+                    },
+                    {
+                      "const": "local",
+                      "type": "string"
+                    },
+                    {
+                      "const": "hybrid",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "audio.chunk_meta",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "chunk_id",
+            "chunk_index",
+            "stream",
+            "format",
+            "sample_rate_hz",
+            "channels",
+            "duration_ms",
+            "timestamp_ms",
+            "byte_length"
+          ],
+          "properties": {
+            "chunk_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "chunk_index": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "stream": {
+              "anyOf": [
+                {
+                  "const": "microphone",
+                  "type": "string"
+                },
+                {
+                  "const": "system",
+                  "type": "string"
+                }
+              ]
+            },
+            "format": {
+              "const": "pcm_s16le",
+              "type": "string"
+            },
+            "sample_rate_hz": {
+              "const": 16000,
+              "type": "number"
+            },
+            "channels": {
+              "const": 1,
+              "type": "number"
+            },
+            "duration_ms": {
+              "minimum": 1,
+              "type": "number"
+            },
+            "timestamp_ms": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "byte_length": {
+              "minimum": 1,
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "audio.gap",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "stream",
+            "start_ms",
+            "end_ms",
+            "dropped_chunks",
+            "reason"
+          ],
+          "properties": {
+            "stream": {
+              "anyOf": [
+                {
+                  "const": "microphone",
+                  "type": "string"
+                },
+                {
+                  "const": "system",
+                  "type": "string"
+                }
+              ]
+            },
+            "start_ms": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "end_ms": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "dropped_chunks": {
+              "minimum": 1,
+              "type": "number"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "const": "local_buffer_full",
+                  "type": "string"
+                },
+                {
+                  "const": "policy_buffer_disabled",
+                  "type": "string"
+                },
+                {
+                  "const": "user_paused_capture",
+                  "type": "string"
+                },
+                {
+                  "const": "device_unavailable",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "context.update",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "source",
+            "captured_at"
+          ],
+          "properties": {
+            "source": {
+              "anyOf": [
+                {
+                  "const": "active_window",
+                  "type": "string"
+                },
+                {
+                  "const": "screen_text",
+                  "type": "string"
+                },
+                {
+                  "const": "browser_extension",
+                  "type": "string"
+                }
+              ]
+            },
+            "title": {
+              "type": "string"
+            },
+            "app": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "captured_at": {
+              "description": "ISO 8601 timestamp",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "suggestion.request",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "request_id",
+            "kind",
+            "include_sources"
+          ],
+          "properties": {
+            "request_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "kind": {
+              "anyOf": [
+                {
+                  "const": "answer_question",
+                  "type": "string"
+                },
+                {
+                  "const": "summarize_so_far",
+                  "type": "string"
+                },
+                {
+                  "const": "suggest_follow_up",
+                  "type": "string"
+                },
+                {
+                  "const": "objection_response",
+                  "type": "string"
+                }
+              ]
+            },
+            "user_prompt": {
+              "type": "string"
+            },
+            "include_sources": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "session.end",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "reason",
+            "last_client_seq"
+          ],
+          "properties": {
+            "reason": {
+              "anyOf": [
+                {
+                  "const": "user_stopped",
+                  "type": "string"
+                },
+                {
+                  "const": "app_shutdown",
+                  "type": "string"
+                },
+                {
+                  "const": "policy_stopped",
+                  "type": "string"
+                }
+              ]
+            },
+            "last_client_seq": {
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "resume.request",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "previous_connection_id",
+            "last_client_seq",
+            "last_server_seq"
+          ],
+          "properties": {
+            "previous_connection_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "last_client_seq": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "last_server_seq": {
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "auth.accepted",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "connection_id",
+            "workspace_id",
+            "policy"
+          ],
+          "properties": {
+            "connection_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "workspace_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "policy": {
+              "type": "object",
+              "required": [
+                "screen_context_allowed",
+                "cloud_stt_allowed",
+                "direct_provider_stt_allowed",
+                "retention_mode",
+                "max_local_audio_buffer_ms"
+              ],
+              "properties": {
+                "screen_context_allowed": {
+                  "type": "boolean"
+                },
+                "cloud_stt_allowed": {
+                  "type": "boolean"
+                },
+                "direct_provider_stt_allowed": {
+                  "const": false,
+                  "type": "boolean"
+                },
+                "retention_mode": {
+                  "anyOf": [
+                    {
+                      "const": "live_only",
+                      "type": "string"
+                    },
+                    {
+                      "const": "local_only",
+                      "type": "string"
+                    },
+                    {
+                      "const": "7_days",
+                      "type": "string"
+                    },
+                    {
+                      "const": "30_days",
+                      "type": "string"
+                    },
+                    {
+                      "const": "1_year",
+                      "type": "string"
+                    },
+                    {
+                      "const": "indefinite",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "max_local_audio_buffer_ms": {
+                  "minimum": 0,
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "transcript.partial",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "segment_id",
+            "speaker",
+            "text",
+            "start_ms",
+            "end_ms",
+            "confidence"
+          ],
+          "properties": {
+            "segment_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "speaker": {
+              "anyOf": [
+                {
+                  "const": "user",
+                  "type": "string"
+                },
+                {
+                  "const": "remote",
+                  "type": "string"
+                },
+                {
+                  "const": "unknown",
+                  "type": "string"
+                }
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "start_ms": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "end_ms": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "confidence": {
+              "minimum": 0,
+              "maximum": 1,
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "transcript.final",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "segment_id",
+            "speaker",
+            "text",
+            "start_ms",
+            "end_ms",
+            "confidence"
+          ],
+          "properties": {
+            "segment_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "speaker": {
+              "anyOf": [
+                {
+                  "const": "user",
+                  "type": "string"
+                },
+                {
+                  "const": "remote",
+                  "type": "string"
+                },
+                {
+                  "const": "unknown",
+                  "type": "string"
+                }
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "start_ms": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "end_ms": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "confidence": {
+              "minimum": 0,
+              "maximum": 1,
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "suggestion.stream_token",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "suggestion_id",
+            "request_id",
+            "token",
+            "index"
+          ],
+          "properties": {
+            "suggestion_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "request_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "token": {
+              "type": "string"
+            },
+            "index": {
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "suggestion.complete",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "suggestion_id",
+            "request_id",
+            "kind",
+            "content",
+            "sources",
+            "confidence",
+            "prompt_version",
+            "model"
+          ],
+          "properties": {
+            "suggestion_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "request_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "kind": {
+              "anyOf": [
+                {
+                  "const": "answer_question",
+                  "type": "string"
+                },
+                {
+                  "const": "summarize_so_far",
+                  "type": "string"
+                },
+                {
+                  "const": "suggest_follow_up",
+                  "type": "string"
+                },
+                {
+                  "const": "objection_response",
+                  "type": "string"
+                }
+              ]
+            },
+            "content": {
+              "type": "string"
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "document_id",
+                  "title",
+                  "chunk_id"
+                ],
+                "properties": {
+                  "document_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "chunk_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "confidence": {
+              "anyOf": [
+                {
+                  "const": "low",
+                  "type": "string"
+                },
+                {
+                  "const": "medium",
+                  "type": "string"
+                },
+                {
+                  "const": "high",
+                  "type": "string"
+                }
+              ]
+            },
+            "prompt_version": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "model": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "session.status",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "mode",
+            "message",
+            "recoverable"
+          ],
+          "properties": {
+            "mode": {
+              "anyOf": [
+                {
+                  "const": "full",
+                  "type": "string"
+                },
+                {
+                  "const": "degraded_network",
+                  "type": "string"
+                },
+                {
+                  "const": "offline",
+                  "type": "string"
+                },
+                {
+                  "const": "reconnecting",
+                  "type": "string"
+                },
+                {
+                  "const": "degraded_provider",
+                  "type": "string"
+                },
+                {
+                  "const": "degraded_permission",
+                  "type": "string"
+                }
+              ]
+            },
+            "message": {
+              "type": "string"
+            },
+            "recoverable": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "error",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "code",
+            "message",
+            "recoverable"
+          ],
+          "properties": {
+            "code": {
+              "anyOf": [
+                {
+                  "const": "auth_failed",
+                  "type": "string"
+                },
+                {
+                  "const": "invalid_message",
+                  "type": "string"
+                },
+                {
+                  "const": "missing_binary_payload",
+                  "type": "string"
+                },
+                {
+                  "const": "unexpected_binary_payload",
+                  "type": "string"
+                },
+                {
+                  "const": "audio_byte_length_mismatch",
+                  "type": "string"
+                },
+                {
+                  "const": "audio_chunk_out_of_order",
+                  "type": "string"
+                },
+                {
+                  "const": "unsupported_audio_format",
+                  "type": "string"
+                },
+                {
+                  "const": "stt_provider_timeout",
+                  "type": "string"
+                },
+                {
+                  "const": "session_not_resumable",
+                  "type": "string"
+                }
+              ]
+            },
+            "message": {
+              "type": "string"
+            },
+            "recoverable": {
+              "type": "boolean"
+            },
+            "retry_after_ms": {
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "flow_control",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "audio_paused",
+            "reason",
+            "retry_after_ms"
+          ],
+          "properties": {
+            "audio_paused": {
+              "type": "boolean"
+            },
+            "reason": {
+              "const": "server_backpressure",
+              "type": "string"
+            },
+            "retry_after_ms": {
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "seq",
+        "session_id",
+        "sent_at",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": "2026-06-12",
+          "type": "string"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "session_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sent_at": {
+          "description": "ISO 8601 timestamp",
+          "type": "string"
+        },
+        "type": {
+          "const": "session.closed",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "reason",
+            "final_server_seq"
+          ],
+          "properties": {
+            "reason": {
+              "anyOf": [
+                {
+                  "const": "user_stopped",
+                  "type": "string"
+                },
+                {
+                  "const": "server_closed",
+                  "type": "string"
+                },
+                {
+                  "const": "policy_violation",
+                  "type": "string"
+                },
+                {
+                  "const": "unrecoverable_error",
+                  "type": "string"
+                }
+              ]
+            },
+            "final_server_seq": {
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

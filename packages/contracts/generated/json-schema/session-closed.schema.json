@@ -1,0 +1,66 @@
+{
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "seq",
+    "session_id",
+    "sent_at",
+    "type",
+    "payload"
+  ],
+  "properties": {
+    "protocol_version": {
+      "const": "2026-06-12",
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "session_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "sent_at": {
+      "description": "ISO 8601 timestamp",
+      "type": "string"
+    },
+    "type": {
+      "const": "session.closed",
+      "type": "string"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "reason",
+        "final_server_seq"
+      ],
+      "properties": {
+        "reason": {
+          "anyOf": [
+            {
+              "const": "user_stopped",
+              "type": "string"
+            },
+            {
+              "const": "server_closed",
+              "type": "string"
+            },
+            {
+              "const": "policy_violation",
+              "type": "string"
+            },
+            {
+              "const": "unrecoverable_error",
+              "type": "string"
+            }
+          ]
+        },
+        "final_server_seq": {
+          "minimum": 0,
+          "type": "number"
+        }
+      }
+    }
+  }
+}

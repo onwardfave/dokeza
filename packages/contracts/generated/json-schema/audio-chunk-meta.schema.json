@@ -1,0 +1,93 @@
+{
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "seq",
+    "session_id",
+    "sent_at",
+    "type",
+    "payload"
+  ],
+  "properties": {
+    "protocol_version": {
+      "const": "2026-06-12",
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "session_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "sent_at": {
+      "description": "ISO 8601 timestamp",
+      "type": "string"
+    },
+    "type": {
+      "const": "audio.chunk_meta",
+      "type": "string"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "chunk_id",
+        "chunk_index",
+        "stream",
+        "format",
+        "sample_rate_hz",
+        "channels",
+        "duration_ms",
+        "timestamp_ms",
+        "byte_length"
+      ],
+      "properties": {
+        "chunk_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "chunk_index": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "stream": {
+          "anyOf": [
+            {
+              "const": "microphone",
+              "type": "string"
+            },
+            {
+              "const": "system",
+              "type": "string"
+            }
+          ]
+        },
+        "format": {
+          "const": "pcm_s16le",
+          "type": "string"
+        },
+        "sample_rate_hz": {
+          "const": 16000,
+          "type": "number"
+        },
+        "channels": {
+          "const": 1,
+          "type": "number"
+        },
+        "duration_ms": {
+          "minimum": 1,
+          "type": "number"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "byte_length": {
+          "minimum": 1,
+          "type": "number"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "seq",
+    "session_id",
+    "sent_at",
+    "type",
+    "payload"
+  ],
+  "properties": {
+    "protocol_version": {
+      "const": "2026-06-12",
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "session_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "sent_at": {
+      "description": "ISO 8601 timestamp",
+      "type": "string"
+    },
+    "type": {
+      "const": "audio.gap",
+      "type": "string"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "stream",
+        "start_ms",
+        "end_ms",
+        "dropped_chunks",
+        "reason"
+      ],
+      "properties": {
+        "stream": {
+          "anyOf": [
+            {
+              "const": "microphone",
+              "type": "string"
+            },
+            {
+              "const": "system",
+              "type": "string"
+            }
+          ]
+        },
+        "start_ms": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "end_ms": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "dropped_chunks": {
+          "minimum": 1,
+          "type": "number"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "const": "local_buffer_full",
+              "type": "string"
+            },
+            {
+              "const": "policy_buffer_disabled",
+              "type": "string"
+            },
+            {
+              "const": "user_paused_capture",
+              "type": "string"
+            },
+            {
+              "const": "device_unavailable",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
