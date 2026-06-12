@@ -1,0 +1,16 @@
+[package]
+name = "dokeza-desktop"
+version = "0.0.0"
+description = "Dokeza desktop spike shell"
+authors = ["Dokeza"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[lib]
+name = "dokeza_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]

@@ -8,6 +8,7 @@
     { "path": "./services/api" },
     { "path": "./services/realtime" },
     { "path": "./services/ai-orchestrator" },
-    { "path": "./services/knowledge" }
+    { "path": "./services/knowledge" },
+    { "path": "./apps/desktop" }
   ]
 }
