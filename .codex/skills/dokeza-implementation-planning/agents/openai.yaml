@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dokeza Implementation Planning"
+  short_description: "Create implementation plans from Dokeza specs"
+  default_prompt: "Create a Dokeza implementation plan for this feature."

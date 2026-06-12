@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dokeza TDD Execution"
+  short_description: "Implement Dokeza features with TDD and review gates"
+  default_prompt: "Implement this Dokeza feature using TDD."

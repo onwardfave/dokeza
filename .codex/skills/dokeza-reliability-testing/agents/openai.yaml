@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dokeza Reliability Testing"
+  short_description: "Design property and fault tests for Dokeza"
+  default_prompt: "Design reliability tests for this Dokeza component."
