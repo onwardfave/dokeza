@@ -244,13 +244,13 @@ Supported meeting environments should include:
 | Desktop Backend | Rust | Node.js native modules |
 | UI | React + TypeScript | Svelte |
 | Local Storage | SQLite | IndexedDB |
-| Backend API | TypeScript/Node or Go | Python/FastAPI |
+| Backend API | TypeScript/Node.js | Go behind stable contracts |
 | Primary Database | PostgreSQL | Cloud SQL equivalent |
-| Vector Search | pgvector or Qdrant | Pinecone, Weaviate |
-| Queue/Workflow | Temporal, BullMQ, or Cloud Tasks | SQS-style queue |
+| Vector Search | pgvector initially | Qdrant or managed vector DB |
+| Queue/Workflow | PostgreSQL-backed queue initially | Temporal or managed workflow engine |
 | Realtime Transport | WebSocket | WebRTC data channels |
-| STT | Deepgram/AssemblyAI streaming | whisper.cpp local |
-| LLM | Fast hosted model for live, stronger model for post-call | Local model for privacy mode |
+| STT | Deepgram streaming through backend adapter | AssemblyAI or whisper.cpp local |
+| LLM | OpenAI through model gateway for initial live and post-call paths | Anthropic, Google, or local model |
 | Observability | OpenTelemetry + Sentry | Datadog |
 
 ### 3.4 Processing Location Model
@@ -799,10 +799,10 @@ Before public beta:
 
 ## 14. Open Questions
 
-- Which STT provider should be used for the first beta?
 - Did the Tauri v2 implementation spike satisfy the ADR acceptance criteria?
 - What is the first target user segment: sales, recruiting, consulting, or general meetings?
 - Which integrations are mandatory for beta customers?
-- What retention policies should be available at launch?
 - What level of local processing is required for privacy-sensitive users?
 - What legal consent/disclosure copy should be shown during onboarding?
+
+Initial backend, vector, workflow, realtime audio, provider, and retention defaults are documented in `docs/architecture/adr/0002-backend-runtime-and-contracts.md`, `docs/architecture/adr/0003-data-store-vector-and-workflow-baseline.md`, `docs/architecture/adr/0004-realtime-audio-routing-and-framing.md`, and `docs/architecture/adr/0005-initial-provider-and-retention-defaults.md`.

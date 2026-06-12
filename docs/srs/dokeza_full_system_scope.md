@@ -71,6 +71,10 @@ The full system scope is supported by these engineering specifications:
 - `docs/architecture/c4_architecture.md`
 - `docs/architecture/code_architecture.md`
 - `docs/architecture/adr/0001-desktop-shell-tauri-v2.md`
+- `docs/architecture/adr/0002-backend-runtime-and-contracts.md`
+- `docs/architecture/adr/0003-data-store-vector-and-workflow-baseline.md`
+- `docs/architecture/adr/0004-realtime-audio-routing-and-framing.md`
+- `docs/architecture/adr/0005-initial-provider-and-retention-defaults.md`
 - `docs/architecture/realtime_protocol.md`
 - `docs/architecture/failure_modes.md`
 - `docs/architecture/multi_tenancy.md`
@@ -555,7 +559,7 @@ Deliverables:
 - Threat model.
 - SRS-to-scope traceability matrix.
 - Data model draft.
-- Provider selection for STT, LLM, embeddings, storage, auth, and billing.
+- Initial provider selection for STT, LLM, embeddings, storage, auth, and billing.
 - UX flows for onboarding, live session, knowledge base, and post-call review.
 - Initial evaluation plan.
 
@@ -1079,13 +1083,12 @@ A Dokeza feature is done only when:
 
 ## 17. Open Decisions
 
+Initial implementation decisions for backend runtime, data store, vector store, workflow queue, realtime audio routing/framing, AI providers, and retention defaults are resolved in the architecture ADRs. The remaining decisions below are product, commercial, legal, or enterprise-launch decisions.
+
 - Which vertical should be the first commercial wedge: sales, CS, recruiting, consulting, or support?
 - Did the Tauri v2 implementation spike satisfy the accepted ADR criteria?
-- Which STT provider should serve as the default low-latency engine?
-- Which LLM providers should be supported at launch?
 - Should local STT be prioritized before enterprise launch or after?
 - Which CRM should be first: Salesforce or HubSpot?
 - Which ATS should be first for recruiting workflows?
-- What exact retention defaults should be used for individual, team, and enterprise plans?
 - What regions must be supported for first enterprise customers?
 - What disclosure and consent UX should be configurable by admins?

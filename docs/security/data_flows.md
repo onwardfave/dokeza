@@ -108,6 +108,14 @@ Default retention options:
 - 1-year cloud retention.
 - Indefinite retention where explicitly configured.
 
+Initial launch defaults:
+
+- Raw audio is transient by default and is not stored in Dokeza Cloud after STT processing unless a workspace policy explicitly enables storage for a defined purpose.
+- Individual workspaces default to 7-day cloud retention for transcripts, suggestions, and post-call artifacts.
+- Team and business workspaces default to 30-day cloud retention.
+- Enterprise workspaces default to 30-day cloud retention until a contract or admin policy sets a stricter or longer period.
+- Indefinite retention is never the default; it requires explicit workspace admin configuration.
+
 Retention jobs must delete:
 
 - Meeting sessions.

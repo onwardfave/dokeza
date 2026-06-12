@@ -188,6 +188,8 @@ flowchart TB
 | Data store | Managed PostgreSQL for relational data, pgvector for initial embeddings, object storage for raw artifacts. |
 | Workflow execution | Workflow service backed by a PostgreSQL job queue initially. |
 | Provider abstraction | STT, embeddings, LLM, billing, and integrations must sit behind internal adapters. |
+| Initial cloud STT provider | Deepgram through the backend STT adapter. |
+| Initial LLM and embedding provider | OpenAI through the model gateway. |
 | Workspace isolation | Enforced at every request and retrieval boundary. |
 | Local-first readiness | Pipeline stages must declare cloud, local, or hybrid execution location. |
 | Realtime STT routing | Desktop audio routes through the Dokeza realtime service before any cloud STT provider. |
