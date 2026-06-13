@@ -36,6 +36,17 @@ The baseline GitHub Actions workflow is defined in `.github/workflows/ci.yml` an
 - Terraform format/init/validate for the provider-neutral Terraform root.
 - Gitleaks and Trivy scans.
 
+The `main` branch is protected in GitHub with strict required status checks for:
+
+- `Node workspace checks`.
+- `Desktop native smoke`.
+- `Terraform validation`.
+- `Security scans`.
+
+Branch protection also requires linear history and resolved conversations, and blocks force pushes and branch deletion. Administrator bypass remains enabled for repository setup and emergency recovery.
+
+Dependency maintenance is configured in `.github/dependabot.yml` for weekly updates across the pnpm workspace, Tauri Cargo crate, Terraform root, local observability Docker Compose stack, and GitHub Actions.
+
 Service-specific checks:
 
 - Desktop: Tauri build smoke test, native unit tests, frontend tests.
