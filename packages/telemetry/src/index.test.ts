@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createTelemetryEvent, redactTelemetryFields } from "./index.js";
+import {
+  createOtelResourceAttributes,
+  createTelemetryEvent,
+  redactTelemetryFields,
+} from "./index.js";
 
 describe("telemetry redaction", () => {
   it("redacts restricted content by default", () => {
@@ -38,6 +42,20 @@ describe("telemetry redaction", () => {
         latencyMs: 420,
         errorCode: "none",
       },
+    });
+  });
+
+  it("creates OpenTelemetry resource attributes without content fields", () => {
+    expect(
+      createOtelResourceAttributes({
+        environment: "staging",
+        serviceName: "realtime",
+        serviceVersion: "0.0.0-test",
+      }),
+    ).toEqual({
+      "deployment.environment.name": "staging",
+      "service.name": "realtime",
+      "service.version": "0.0.0-test",
     });
   });
 });

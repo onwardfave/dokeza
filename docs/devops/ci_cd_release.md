@@ -29,6 +29,13 @@ Every pull request must pass:
 - Dependency audit.
 - Changed-docs check for architecture, contract, security, or requirement changes.
 
+The baseline GitHub Actions workflow is defined in `.github/workflows/ci.yml` and currently runs:
+
+- Node workspace formatting, linting, type checks, tests, generated-schema drift checks, frontend desktop build, and dependency audit.
+- Windows desktop native smoke checks with Rustfmt, Clippy, Cargo tests, and `tauri build --debug --no-bundle`.
+- Terraform format/init/validate for the provider-neutral Terraform root.
+- Gitleaks and Trivy scans.
+
 Service-specific checks:
 
 - Desktop: Tauri build smoke test, native unit tests, frontend tests.
@@ -90,4 +97,3 @@ Backend rollback should prefer redeploying the previous immutable artifact. Desk
 No artifact should be rebuilt between staging and production. Promotion moves the same artifact through environments.
 
 Configuration differences must come from environment-specific secrets and config, not source changes.
-

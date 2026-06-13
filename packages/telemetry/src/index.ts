@@ -13,6 +13,12 @@ export interface TelemetryEvent {
   fields: TelemetryFields;
 }
 
+export interface TelemetryResourceInput {
+  environment: string;
+  serviceName: string;
+  serviceVersion?: string;
+}
+
 const restrictedKeyFragments = [
   "audio",
   "content",
@@ -63,4 +69,19 @@ export function createTelemetryEvent(name: string, fields: TelemetryFields): Tel
     name,
     fields: redactTelemetryFields(fields),
   };
+}
+
+export function createOtelResourceAttributes(
+  input: TelemetryResourceInput,
+): Record<string, string> {
+  const attributes: Record<string, string> = {
+    "deployment.environment.name": input.environment,
+    "service.name": input.serviceName,
+  };
+
+  if (input.serviceVersion !== undefined) {
+    attributes["service.version"] = input.serviceVersion;
+  }
+
+  return attributes;
 }

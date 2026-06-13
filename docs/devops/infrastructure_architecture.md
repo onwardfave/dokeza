@@ -150,6 +150,19 @@ Required signals:
 
 Logs must exclude raw transcript, prompt, document, and suggestion content by default.
 
+### 9.1 Local Observability Baseline
+
+The repository includes a local OpenTelemetry stack under `infra/observability`:
+
+- OpenTelemetry Collector for OTLP ingest on ports `4317` and `4318`.
+- Prometheus for local metrics at `http://localhost:9090`.
+- Jaeger for local trace inspection at `http://localhost:16686`.
+- Grafana for local dashboards at `http://localhost:3001`.
+
+Start it with `pnpm observability:up` and validate the compose configuration with `pnpm observability:config`.
+
+Local telemetry is for synthetic development data by default. Application code must emit redacted fields through the shared telemetry package and must not send raw transcript, prompt, document, suggestion, or audio content to the collector.
+
 ## 10. Reliability Targets
 
 | Target | Internal Beta | Production | Enterprise |

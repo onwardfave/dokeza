@@ -6,6 +6,12 @@ export interface DokezaConfig {
   serviceName: string;
   port: number;
   logLevel: "debug" | "info" | "warn" | "error";
+  telemetry: {
+    enabled: boolean;
+    otlpEndpoint: string;
+    tracesSampleRate: number;
+    contentLoggingAllowed: boolean;
+  };
   providers: {
     stt: "deepgram";
     llm: "openai";
@@ -58,11 +64,53 @@ function readPort(value: string | undefined): number | undefined {
   return Number.isInteger(parsed) && parsed > 0 && parsed < 65536 ? parsed : undefined;
 }
 
+function readBoolean(value: string | undefined, defaultValue: boolean): boolean | undefined {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  return undefined;
+}
+
+function readSampleRate(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return 1;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : undefined;
+}
+
+function readOtlpEndpoint(value: string | undefined): string | undefined {
+  const endpoint = value ?? "http://localhost:4318";
+
+  try {
+    const parsed = new URL(endpoint);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): ConfigParseResult {
   const errors: string[] = [];
   const environment = readEnvironment(env.DOKEZA_ENV);
   const port = readPort(env.PORT);
   const logLevel = readLogLevel(env.LOG_LEVEL);
+  const telemetryEnabled = readBoolean(env.DOKEZA_TELEMETRY_ENABLED, true);
+  const tracesSampleRate = readSampleRate(env.OTEL_TRACES_SAMPLER_ARG);
+  const otlpEndpoint = readOtlpEndpoint(env.OTEL_EXPORTER_OTLP_ENDPOINT);
+  const contentLoggingAllowed = readBoolean(env.DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED, false);
 
   if (environment === undefined) {
     errors.push("DOKEZA_ENV must be local, test, preview, staging, or production.");
@@ -73,6 +121,21 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   if (logLevel === undefined) {
     errors.push("LOG_LEVEL must be debug, info, warn, or error.");
   }
+  if (telemetryEnabled === undefined) {
+    errors.push("DOKEZA_TELEMETRY_ENABLED must be true or false.");
+  }
+  if (tracesSampleRate === undefined) {
+    errors.push("OTEL_TRACES_SAMPLER_ARG must be a number from 0 to 1.");
+  }
+  if (otlpEndpoint === undefined) {
+    errors.push("OTEL_EXPORTER_OTLP_ENDPOINT must be an absolute http or https URL.");
+  }
+  if (contentLoggingAllowed === undefined) {
+    errors.push("DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED must be true or false.");
+  }
+  if (environment === "production" && contentLoggingAllowed === true) {
+    errors.push("DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED cannot be true in production.");
+  }
   if (serviceName.trim().length === 0) {
     errors.push("serviceName is required.");
   }
@@ -81,7 +144,11 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     errors.length > 0 ||
     environment === undefined ||
     port === undefined ||
-    logLevel === undefined
+    logLevel === undefined ||
+    telemetryEnabled === undefined ||
+    tracesSampleRate === undefined ||
+    otlpEndpoint === undefined ||
+    contentLoggingAllowed === undefined
   ) {
     return { ok: false, errors };
   }
@@ -93,6 +160,12 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
       serviceName,
       port,
       logLevel,
+      telemetry: {
+        enabled: telemetryEnabled,
+        otlpEndpoint,
+        tracesSampleRate,
+        contentLoggingAllowed,
+      },
       providers: {
         stt: "deepgram",
         llm: "openai",

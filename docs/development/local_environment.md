@@ -58,3 +58,23 @@ pnpm security:vulns
 ## Telemetry Defaults
 
 Local telemetry and observability are for synthetic development data by default. Do not enable prompt, transcript, document, suggestion, or raw audio logging unless a workspace policy and privacy review explicitly allow it.
+
+Start the local observability stack:
+
+```powershell
+pnpm observability:up
+```
+
+Local endpoints:
+
+- OTLP gRPC: `localhost:4317`
+- OTLP HTTP: `http://localhost:4318`
+- Prometheus: `http://localhost:9090`
+- Jaeger: `http://localhost:16686`
+- Grafana: `http://localhost:3001`
+
+Stop the stack:
+
+```powershell
+pnpm observability:down
+```
