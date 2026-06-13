@@ -9,11 +9,11 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@dokeza/contracts": resolve(repoRoot, "packages/contracts/src/index.ts")
-    }
+      "@dokeza/contracts": resolve(repoRoot, "packages/contracts/src/index.ts"),
+    },
   },
   server: {
     port: 1420,
-    strictPort: true
-  }
+    strictPort: true,
+  },
 });

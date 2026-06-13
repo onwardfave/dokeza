@@ -21,7 +21,7 @@ const restrictedKeyFragments = [
   "raw",
   "suggestion",
   "text",
-  "transcript"
+  "transcript",
 ];
 
 function isRestrictedKey(key: string): boolean {
@@ -42,7 +42,7 @@ export function redactTelemetryFields(fields: TelemetryFields): TelemetryFields 
       redacted[key] = value.map((item) =>
         typeof item === "object" && item !== null && !Array.isArray(item)
           ? redactTelemetryFields(item)
-          : item
+          : item,
       ) as TelemetryValue[];
       continue;
     }
@@ -61,6 +61,6 @@ export function redactTelemetryFields(fields: TelemetryFields): TelemetryFields 
 export function createTelemetryEvent(name: string, fields: TelemetryFields): TelemetryEvent {
   return {
     name,
-    fields: redactTelemetryFields(fields)
+    fields: redactTelemetryFields(fields),
   };
 }

@@ -24,13 +24,13 @@ export function createHealthResponse(env: NodeJS.ProcessEnv = process.env): Heal
   return {
     service: "api",
     status: "ok",
-    environment: parsed.config.environment
+    environment: parsed.config.environment,
   };
 }
 
 export function createWorkspaceRequestContext(
   actor: Actor,
-  workspaceId: string
+  workspaceId: string,
 ): WorkspaceRequestContext {
   const authorization = authorizeWorkspace(actor, workspaceId);
   if (!authorization.allowed) {
@@ -44,7 +44,7 @@ export function createWorkspaceRequestContext(
     telemetry: createTelemetryEvent("api.workspace_authorized", {
       workspaceId,
       userId: actor.userId,
-      role: authorization.role ?? "unknown"
-    })
+      role: authorization.role ?? "unknown",
+    }),
   };
 }

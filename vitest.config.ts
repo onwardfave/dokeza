@@ -10,14 +10,14 @@ export default defineConfig({
       "@dokeza/authz": resolve(repoRoot, "packages/authz/src/index.ts"),
       "@dokeza/config": resolve(repoRoot, "packages/config/src/index.ts"),
       "@dokeza/contracts": resolve(repoRoot, "packages/contracts/src/index.ts"),
-      "@dokeza/telemetry": resolve(repoRoot, "packages/telemetry/src/index.ts")
-    }
+      "@dokeza/telemetry": resolve(repoRoot, "packages/telemetry/src/index.ts"),
+    },
   },
   test: {
     coverage: {
-      reporter: ["text", "html"]
+      reporter: ["text", "html"],
     },
     globals: true,
-    include: ["**/*.{test,spec}.ts"]
-  }
+    include: ["**/*.{test,spec}.ts"],
+  },
 });

@@ -29,28 +29,25 @@ const environments = new Set<EnvironmentName>([
   "test",
   "preview",
   "staging",
-  "production"
+  "production",
 ]);
 
-const logLevels = new Set<DokezaConfig["logLevel"]>([
-  "debug",
-  "info",
-  "warn",
-  "error"
-]);
+const logLevels = new Set<DokezaConfig["logLevel"]>(["debug", "info", "warn", "error"]);
 
 function readEnvironment(value: string | undefined): EnvironmentName | undefined {
   if (value === undefined) {
     return "local";
   }
-  return environments.has(value as EnvironmentName) ? value as EnvironmentName : undefined;
+  return environments.has(value as EnvironmentName) ? (value as EnvironmentName) : undefined;
 }
 
 function readLogLevel(value: string | undefined): DokezaConfig["logLevel"] | undefined {
   if (value === undefined) {
     return "info";
   }
-  return logLevels.has(value as DokezaConfig["logLevel"]) ? value as DokezaConfig["logLevel"] : undefined;
+  return logLevels.has(value as DokezaConfig["logLevel"])
+    ? (value as DokezaConfig["logLevel"])
+    : undefined;
 }
 
 function readPort(value: string | undefined): number | undefined {
@@ -80,7 +77,12 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     errors.push("serviceName is required.");
   }
 
-  if (errors.length > 0 || environment === undefined || port === undefined || logLevel === undefined) {
+  if (
+    errors.length > 0 ||
+    environment === undefined ||
+    port === undefined ||
+    logLevel === undefined
+  ) {
     return { ok: false, errors };
   }
 
@@ -94,14 +96,14 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
       providers: {
         stt: "deepgram",
         llm: "openai",
-        embeddings: "openai"
+        embeddings: "openai",
       },
       retentionDefaults: {
         individual: "7_days",
         team: "30_days",
-        enterprise: "30_days"
-      }
+        enterprise: "30_days",
+      },
     },
-    errors: []
+    errors: [],
   };
 }

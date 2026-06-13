@@ -6,7 +6,7 @@ const base = {
   protocol_version: REALTIME_PROTOCOL_VERSION,
   seq: 1,
   session_id: "sess_123",
-  sent_at: "2026-06-13T00:00:00.000Z"
+  sent_at: "2026-06-13T00:00:00.000Z",
 };
 
 const audioMeta = {
@@ -21,8 +21,8 @@ const audioMeta = {
     channels: 1,
     duration_ms: 100,
     timestamp_ms: 0,
-    byte_length: 4
-  }
+    byte_length: 4,
+  },
 };
 
 describe("RealtimeFrameAssembler", () => {
@@ -45,7 +45,7 @@ describe("RealtimeFrameAssembler", () => {
     expect(assembler.handleBinaryFrame(new Uint8Array([1]))).toEqual({
       type: "error",
       code: "unexpected_binary_payload",
-      recoverable: true
+      recoverable: true,
     });
   });
 
@@ -53,18 +53,20 @@ describe("RealtimeFrameAssembler", () => {
     const assembler = new RealtimeFrameAssembler();
 
     assembler.handleJsonMessage(audioMeta);
-    expect(assembler.handleJsonMessage({
-      ...base,
-      seq: 2,
-      type: "session.end",
-      payload: {
-        reason: "user_stopped",
-        last_client_seq: 1
-      }
-    })).toEqual({
+    expect(
+      assembler.handleJsonMessage({
+        ...base,
+        seq: 2,
+        type: "session.end",
+        payload: {
+          reason: "user_stopped",
+          last_client_seq: 1,
+        },
+      }),
+    ).toEqual({
       type: "error",
       code: "missing_binary_payload",
-      recoverable: true
+      recoverable: true,
     });
   });
 
@@ -79,8 +81,8 @@ describe("RealtimeFrameAssembler", () => {
         start_ms: 100,
         end_ms: 200,
         dropped_chunks: 2,
-        reason: "local_buffer_full"
-      }
+        reason: "local_buffer_full",
+      },
     });
 
     expect(event.type).toBe("audio.gap");
@@ -88,7 +90,7 @@ describe("RealtimeFrameAssembler", () => {
       expect(event.telemetry.fields).toEqual({
         stream: "microphone",
         droppedChunks: 2,
-        reason: "local_buffer_full"
+        reason: "local_buffer_full",
       });
     }
   });

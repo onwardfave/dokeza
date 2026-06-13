@@ -2,7 +2,7 @@ import {
   type AudioChunkMetaMessage,
   type AudioGapMessage,
   type RealtimeJsonMessage,
-  validateRealtimeJsonMessage
+  validateRealtimeJsonMessage,
 } from "@dokeza/contracts";
 import { createTelemetryEvent, type TelemetryEvent } from "@dokeza/telemetry";
 
@@ -65,7 +65,7 @@ export class RealtimeFrameAssembler {
       this.pendingAudio = value.payload;
       return {
         type: "audio.chunk_meta_accepted",
-        meta: value.payload
+        meta: value.payload,
       };
     }
 
@@ -76,14 +76,14 @@ export class RealtimeFrameAssembler {
         telemetry: createTelemetryEvent("realtime.audio_gap", {
           stream: value.payload.stream,
           droppedChunks: value.payload.dropped_chunks,
-          reason: value.payload.reason
-        })
+          reason: value.payload.reason,
+        }),
       };
     }
 
     return {
       type: "json",
-      message: value
+      message: value,
     };
   }
 
@@ -109,8 +109,8 @@ export class RealtimeFrameAssembler {
         stream: meta.stream,
         chunkIndex: meta.chunk_index,
         byteLength: bytes.byteLength,
-        durationMs: meta.duration_ms
-      })
+        durationMs: meta.duration_ms,
+      }),
     };
   }
 }

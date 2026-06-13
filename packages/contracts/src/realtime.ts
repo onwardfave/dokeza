@@ -4,26 +4,23 @@ import { Value } from "@sinclair/typebox/value";
 export const REALTIME_PROTOCOL_VERSION = "2026-06-12" as const;
 
 const IsoTimestamp = Type.String({
-  description: "ISO 8601 timestamp"
+  description: "ISO 8601 timestamp",
 });
 
 const MessageEnvelopeFields = {
   protocol_version: Type.Literal(REALTIME_PROTOCOL_VERSION),
   seq: Type.Number({ minimum: 0 }),
   session_id: Type.Optional(Type.String({ minLength: 1 })),
-  sent_at: IsoTimestamp
+  sent_at: IsoTimestamp,
 };
 
 const ProcessingLocation = Type.Union([
   Type.Literal("cloud"),
   Type.Literal("local"),
-  Type.Literal("hybrid")
+  Type.Literal("hybrid"),
 ]);
 
-const AudioStream = Type.Union([
-  Type.Literal("microphone"),
-  Type.Literal("system")
-]);
+const AudioStream = Type.Union([Type.Literal("microphone"), Type.Literal("system")]);
 
 const AudioFormat = Type.Literal("pcm_s16le");
 
@@ -31,7 +28,7 @@ const ClosedReason = Type.Union([
   Type.Literal("user_stopped"),
   Type.Literal("server_closed"),
   Type.Literal("policy_violation"),
-  Type.Literal("unrecoverable_error")
+  Type.Literal("unrecoverable_error"),
 ]);
 
 const ErrorCode = Type.Union([
@@ -43,7 +40,7 @@ const ErrorCode = Type.Union([
   Type.Literal("audio_chunk_out_of_order"),
   Type.Literal("unsupported_audio_format"),
   Type.Literal("stt_provider_timeout"),
-  Type.Literal("session_not_resumable")
+  Type.Literal("session_not_resumable"),
 ]);
 
 const SessionMode = Type.Union([
@@ -52,27 +49,19 @@ const SessionMode = Type.Union([
   Type.Literal("offline"),
   Type.Literal("reconnecting"),
   Type.Literal("degraded_provider"),
-  Type.Literal("degraded_permission")
+  Type.Literal("degraded_permission"),
 ]);
 
 const SuggestionKind = Type.Union([
   Type.Literal("answer_question"),
   Type.Literal("summarize_so_far"),
   Type.Literal("suggest_follow_up"),
-  Type.Literal("objection_response")
+  Type.Literal("objection_response"),
 ]);
 
-const Confidence = Type.Union([
-  Type.Literal("low"),
-  Type.Literal("medium"),
-  Type.Literal("high")
-]);
+const Confidence = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]);
 
-const Speaker = Type.Union([
-  Type.Literal("user"),
-  Type.Literal("remote"),
-  Type.Literal("unknown")
-]);
+const Speaker = Type.Union([Type.Literal("user"), Type.Literal("remote"), Type.Literal("unknown")]);
 
 const RetentionMode = Type.Union([
   Type.Literal("live_only"),
@@ -80,7 +69,7 @@ const RetentionMode = Type.Union([
   Type.Literal("7_days"),
   Type.Literal("30_days"),
   Type.Literal("1_year"),
-  Type.Literal("indefinite")
+  Type.Literal("indefinite"),
 ]);
 
 export const AuthHelloMessageSchema = Type.Object({
@@ -89,12 +78,9 @@ export const AuthHelloMessageSchema = Type.Object({
   payload: Type.Object({
     token: Type.String({ minLength: 1 }),
     client_version: Type.String({ minLength: 1 }),
-    platform: Type.Union([
-      Type.Literal("windows"),
-      Type.Literal("macos")
-    ]),
-    device_id: Type.String({ minLength: 1 })
-  })
+    platform: Type.Union([Type.Literal("windows"), Type.Literal("macos")]),
+    device_id: Type.String({ minLength: 1 }),
+  }),
 });
 
 export const SessionStartMessageSchema = Type.Object({
@@ -107,14 +93,14 @@ export const SessionStartMessageSchema = Type.Object({
     capture: Type.Object({
       microphone: Type.Boolean(),
       system_audio: Type.Boolean(),
-      screen_context: Type.Boolean()
+      screen_context: Type.Boolean(),
     }),
     processing: Type.Object({
       stt: ProcessingLocation,
       llm: ProcessingLocation,
-      retrieval: ProcessingLocation
-    })
-  })
+      retrieval: ProcessingLocation,
+    }),
+  }),
 });
 
 export const AudioChunkMetaMessageSchema = Type.Object({
@@ -130,8 +116,8 @@ export const AudioChunkMetaMessageSchema = Type.Object({
     channels: Type.Literal(1),
     duration_ms: Type.Number({ minimum: 1 }),
     timestamp_ms: Type.Number({ minimum: 0 }),
-    byte_length: Type.Number({ minimum: 1 })
-  })
+    byte_length: Type.Number({ minimum: 1 }),
+  }),
 });
 
 export const AudioGapMessageSchema = Type.Object({
@@ -147,9 +133,9 @@ export const AudioGapMessageSchema = Type.Object({
       Type.Literal("local_buffer_full"),
       Type.Literal("policy_buffer_disabled"),
       Type.Literal("user_paused_capture"),
-      Type.Literal("device_unavailable")
-    ])
-  })
+      Type.Literal("device_unavailable"),
+    ]),
+  }),
 });
 
 export const ContextUpdateMessageSchema = Type.Object({
@@ -160,13 +146,13 @@ export const ContextUpdateMessageSchema = Type.Object({
     source: Type.Union([
       Type.Literal("active_window"),
       Type.Literal("screen_text"),
-      Type.Literal("browser_extension")
+      Type.Literal("browser_extension"),
     ]),
     title: Type.Optional(Type.String()),
     app: Type.Optional(Type.String()),
     text: Type.Optional(Type.String()),
-    captured_at: IsoTimestamp
-  })
+    captured_at: IsoTimestamp,
+  }),
 });
 
 export const SuggestionRequestMessageSchema = Type.Object({
@@ -177,8 +163,8 @@ export const SuggestionRequestMessageSchema = Type.Object({
     request_id: Type.String({ minLength: 1 }),
     kind: SuggestionKind,
     user_prompt: Type.Optional(Type.String()),
-    include_sources: Type.Boolean()
-  })
+    include_sources: Type.Boolean(),
+  }),
 });
 
 export const SessionEndMessageSchema = Type.Object({
@@ -189,10 +175,10 @@ export const SessionEndMessageSchema = Type.Object({
     reason: Type.Union([
       Type.Literal("user_stopped"),
       Type.Literal("app_shutdown"),
-      Type.Literal("policy_stopped")
+      Type.Literal("policy_stopped"),
     ]),
-    last_client_seq: Type.Number({ minimum: 0 })
-  })
+    last_client_seq: Type.Number({ minimum: 0 }),
+  }),
 });
 
 export const ResumeRequestMessageSchema = Type.Object({
@@ -202,8 +188,8 @@ export const ResumeRequestMessageSchema = Type.Object({
   payload: Type.Object({
     previous_connection_id: Type.String({ minLength: 1 }),
     last_client_seq: Type.Number({ minimum: 0 }),
-    last_server_seq: Type.Number({ minimum: 0 })
-  })
+    last_server_seq: Type.Number({ minimum: 0 }),
+  }),
 });
 
 export const AuthAcceptedMessageSchema = Type.Object({
@@ -218,9 +204,9 @@ export const AuthAcceptedMessageSchema = Type.Object({
       cloud_stt_allowed: Type.Boolean(),
       direct_provider_stt_allowed: Type.Literal(false),
       retention_mode: RetentionMode,
-      max_local_audio_buffer_ms: Type.Number({ minimum: 0 })
-    })
-  })
+      max_local_audio_buffer_ms: Type.Number({ minimum: 0 }),
+    }),
+  }),
 });
 
 const TranscriptPayload = Type.Object({
@@ -229,21 +215,21 @@ const TranscriptPayload = Type.Object({
   text: Type.String(),
   start_ms: Type.Number({ minimum: 0 }),
   end_ms: Type.Number({ minimum: 0 }),
-  confidence: Type.Number({ minimum: 0, maximum: 1 })
+  confidence: Type.Number({ minimum: 0, maximum: 1 }),
 });
 
 export const TranscriptPartialMessageSchema = Type.Object({
   ...MessageEnvelopeFields,
   session_id: Type.String({ minLength: 1 }),
   type: Type.Literal("transcript.partial"),
-  payload: TranscriptPayload
+  payload: TranscriptPayload,
 });
 
 export const TranscriptFinalMessageSchema = Type.Object({
   ...MessageEnvelopeFields,
   session_id: Type.String({ minLength: 1 }),
   type: Type.Literal("transcript.final"),
-  payload: TranscriptPayload
+  payload: TranscriptPayload,
 });
 
 export const SuggestionStreamTokenMessageSchema = Type.Object({
@@ -254,8 +240,8 @@ export const SuggestionStreamTokenMessageSchema = Type.Object({
     suggestion_id: Type.String({ minLength: 1 }),
     request_id: Type.String({ minLength: 1 }),
     token: Type.String(),
-    index: Type.Number({ minimum: 0 })
-  })
+    index: Type.Number({ minimum: 0 }),
+  }),
 });
 
 export const SuggestionCompleteMessageSchema = Type.Object({
@@ -267,15 +253,17 @@ export const SuggestionCompleteMessageSchema = Type.Object({
     request_id: Type.String({ minLength: 1 }),
     kind: SuggestionKind,
     content: Type.String(),
-    sources: Type.Array(Type.Object({
-      document_id: Type.String({ minLength: 1 }),
-      title: Type.String(),
-      chunk_id: Type.String({ minLength: 1 })
-    })),
+    sources: Type.Array(
+      Type.Object({
+        document_id: Type.String({ minLength: 1 }),
+        title: Type.String(),
+        chunk_id: Type.String({ minLength: 1 }),
+      }),
+    ),
     confidence: Confidence,
     prompt_version: Type.String({ minLength: 1 }),
-    model: Type.String({ minLength: 1 })
-  })
+    model: Type.String({ minLength: 1 }),
+  }),
 });
 
 export const SessionStatusMessageSchema = Type.Object({
@@ -285,8 +273,8 @@ export const SessionStatusMessageSchema = Type.Object({
   payload: Type.Object({
     mode: SessionMode,
     message: Type.String(),
-    recoverable: Type.Boolean()
-  })
+    recoverable: Type.Boolean(),
+  }),
 });
 
 export const ErrorMessageSchema = Type.Object({
@@ -297,8 +285,8 @@ export const ErrorMessageSchema = Type.Object({
     code: ErrorCode,
     message: Type.String(),
     recoverable: Type.Boolean(),
-    retry_after_ms: Type.Optional(Type.Number({ minimum: 0 }))
-  })
+    retry_after_ms: Type.Optional(Type.Number({ minimum: 0 })),
+  }),
 });
 
 export const FlowControlMessageSchema = Type.Object({
@@ -308,8 +296,8 @@ export const FlowControlMessageSchema = Type.Object({
   payload: Type.Object({
     audio_paused: Type.Boolean(),
     reason: Type.Literal("server_backpressure"),
-    retry_after_ms: Type.Number({ minimum: 0 })
-  })
+    retry_after_ms: Type.Number({ minimum: 0 }),
+  }),
 });
 
 export const SessionClosedMessageSchema = Type.Object({
@@ -318,8 +306,8 @@ export const SessionClosedMessageSchema = Type.Object({
   type: Type.Literal("session.closed"),
   payload: Type.Object({
     reason: ClosedReason,
-    final_server_seq: Type.Number({ minimum: 0 })
-  })
+    final_server_seq: Type.Number({ minimum: 0 }),
+  }),
 });
 
 export const RealtimeJsonMessageSchema = Type.Union([
@@ -339,7 +327,7 @@ export const RealtimeJsonMessageSchema = Type.Union([
   SessionStatusMessageSchema,
   ErrorMessageSchema,
   FlowControlMessageSchema,
-  SessionClosedMessageSchema
+  SessionClosedMessageSchema,
 ]);
 
 export type RealtimeJsonMessage = Static<typeof RealtimeJsonMessageSchema>;
@@ -350,7 +338,7 @@ export const realtimeJsonSchemas = {
   "realtime-message": RealtimeJsonMessageSchema,
   "audio-chunk-meta": AudioChunkMetaMessageSchema,
   "audio-gap": AudioGapMessageSchema,
-  "session-closed": SessionClosedMessageSchema
+  "session-closed": SessionClosedMessageSchema,
 } satisfies Record<string, TSchema>;
 
 export function validateRealtimeJsonMessage(value: unknown): value is RealtimeJsonMessage {

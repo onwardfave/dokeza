@@ -44,4 +44,3 @@ Use the project-local skills in `.codex/skills/` when relevant:
 - Do not change realtime messages without updating `docs/architecture/realtime_protocol.md`.
 - Do not add a failure behavior without updating `docs/architecture/failure_modes.md`.
 - Do not implement evasion-oriented undetectability features.
-

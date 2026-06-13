@@ -6,7 +6,5 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "references": [
-    { "path": "../../packages/telemetry" }
-  ]
+  "references": [{ "path": "../../packages/telemetry" }]
 }

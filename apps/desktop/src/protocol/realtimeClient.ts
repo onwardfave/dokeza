@@ -2,7 +2,7 @@ import {
   REALTIME_PROTOCOL_VERSION,
   type AudioChunkMetaMessage,
   type RealtimeJsonMessage,
-  validateRealtimeJsonMessage
+  validateRealtimeJsonMessage,
 } from "@dokeza/contracts";
 
 export interface DesktopSessionIdentity {
@@ -26,10 +26,7 @@ export function createInitialRealtimeClientState(): RealtimeClientState {
   return { nextSeq: 0 };
 }
 
-function nextEnvelope(
-  state: RealtimeClientState,
-  sessionId: string
-): SessionEnvelope {
+function nextEnvelope(state: RealtimeClientState, sessionId: string): SessionEnvelope {
   const seq = state.nextSeq;
   state.nextSeq += 1;
 
@@ -37,13 +34,13 @@ function nextEnvelope(
     protocol_version: REALTIME_PROTOCOL_VERSION,
     seq,
     session_id: sessionId,
-    sent_at: new Date().toISOString()
+    sent_at: new Date().toISOString(),
   };
 }
 
 export function createSessionStartMessage(
   state: RealtimeClientState,
-  identity: DesktopSessionIdentity
+  identity: DesktopSessionIdentity,
 ): RealtimeJsonMessage {
   const message = {
     ...nextEnvelope(state, identity.sessionId),
@@ -54,14 +51,14 @@ export function createSessionStartMessage(
       capture: {
         microphone: true,
         system_audio: false,
-        screen_context: false
+        screen_context: false,
       },
       processing: {
         stt: "cloud",
         llm: "cloud",
-        retrieval: "cloud"
-      }
-    }
+        retrieval: "cloud",
+      },
+    },
   } satisfies RealtimeJsonMessage;
 
   if (!validateRealtimeJsonMessage(message)) {
@@ -74,12 +71,12 @@ export function createSessionStartMessage(
 export function createAudioChunkMetaMessage(
   state: RealtimeClientState,
   sessionId: string,
-  payload: AudioChunkMetaMessage["payload"]
+  payload: AudioChunkMetaMessage["payload"],
 ): AudioChunkMetaMessage {
   const message = {
     ...nextEnvelope(state, sessionId),
     type: "audio.chunk_meta",
-    payload
+    payload,
   } satisfies AudioChunkMetaMessage;
 
   if (!validateRealtimeJsonMessage(message)) {

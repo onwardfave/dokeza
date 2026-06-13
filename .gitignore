@@ -13,6 +13,7 @@ coverage/
 # Desktop/native build outputs
 target/
 apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
 
 # Logs
 *.log

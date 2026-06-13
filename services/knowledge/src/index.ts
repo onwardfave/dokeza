@@ -13,7 +13,7 @@ export function createRetrievalRequest(
   workspaceId: string,
   query: string,
   topK = 5,
-  allowedDocumentIds?: readonly string[]
+  allowedDocumentIds?: readonly string[],
 ): RetrievalRequest {
   const authorization = authorizeWorkspace(actor, workspaceId);
   if (!authorization.allowed) {
@@ -29,6 +29,6 @@ export function createRetrievalRequest(
     actorUserId: actor.userId,
     query,
     topK,
-    ...(allowedDocumentIds === undefined ? {} : { allowedDocumentIds })
+    ...(allowedDocumentIds === undefined ? {} : { allowedDocumentIds }),
   };
 }

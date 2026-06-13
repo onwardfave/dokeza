@@ -20,16 +20,16 @@ export interface WorkspaceAuthorization {
 const roleRank: Record<WorkspaceRole, number> = {
   member: 1,
   admin: 2,
-  owner: 3
+  owner: 3,
 };
 
 export function authorizeWorkspace(
   actor: Actor,
   workspaceId: string,
-  minimumRole: WorkspaceRole = "member"
+  minimumRole: WorkspaceRole = "member",
 ): WorkspaceAuthorization {
-  const membership = actor.memberships.find((candidate) =>
-    candidate.userId === actor.userId && candidate.workspaceId === workspaceId
+  const membership = actor.memberships.find(
+    (candidate) => candidate.userId === actor.userId && candidate.workspaceId === workspaceId,
   );
 
   if (membership === undefined) {
@@ -40,20 +40,20 @@ export function authorizeWorkspace(
     return {
       allowed: false,
       reason: "role_not_allowed",
-      role: membership.role
+      role: membership.role,
     };
   }
 
   return {
     allowed: true,
-    role: membership.role
+    role: membership.role,
   };
 }
 
 export function requireWorkspace(
   actor: Actor,
   workspaceId: string,
-  minimumRole: WorkspaceRole = "member"
+  minimumRole: WorkspaceRole = "member",
 ): WorkspaceRole {
   const result = authorizeWorkspace(actor, workspaceId, minimumRole);
   if (!result.allowed) {

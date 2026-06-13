@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const migration = readFileSync(
   resolve("migrations/0001_workspace_rls_baseline.sql"),
-  "utf8"
+  "utf8",
 ).toLowerCase();
 
 const highRiskTables = [
@@ -15,7 +15,7 @@ const highRiskTables = [
   "documents",
   "document_chunks",
   "integration_connections",
-  "audit_logs"
+  "audit_logs",
 ];
 
 describe("workspace RLS migration baseline", () => {

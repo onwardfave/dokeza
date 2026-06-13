@@ -4,9 +4,7 @@ import { createRetrievalRequest } from "./index.js";
 describe("knowledge service boundary", () => {
   const actor = {
     userId: "user_1",
-    memberships: [
-      { userId: "user_1", workspaceId: "ws_a", role: "member" as const }
-    ]
+    memberships: [{ userId: "user_1", workspaceId: "ws_a", role: "member" as const }],
   };
 
   it("creates workspace-scoped retrieval requests", () => {
@@ -15,13 +13,13 @@ describe("knowledge service boundary", () => {
       actorUserId: "user_1",
       query: "pricing",
       topK: 3,
-      allowedDocumentIds: ["doc_1"]
+      allowedDocumentIds: ["doc_1"],
     });
   });
 
   it("blocks cross-workspace retrieval", () => {
     expect(() => createRetrievalRequest(actor, "ws_b", "pricing")).toThrow(
-      "workspace_access_denied:no_membership"
+      "workspace_access_denied:no_membership",
     );
   });
 });

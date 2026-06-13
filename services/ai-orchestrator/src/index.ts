@@ -21,7 +21,7 @@ export function routeModelRequest(request: ModelGatewayRequest): ModelGatewayRou
       workspaceId: request.workspaceId,
       task: request.task,
       promptVersion: request.promptVersion,
-      provider: request.provider
-    })
+      provider: request.provider,
+    }),
   };
 }

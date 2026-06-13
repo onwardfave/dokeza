@@ -9,8 +9,5 @@ const outputDir = join(root, "generated", "json-schema");
 await mkdir(outputDir, { recursive: true });
 
 for (const [name, schema] of Object.entries(realtimeJsonSchemas)) {
-  await writeFile(
-    join(outputDir, `${name}.schema.json`),
-    `${JSON.stringify(schema, null, 2)}\n`
-  );
+  await writeFile(join(outputDir, `${name}.schema.json`), `${JSON.stringify(schema, null, 2)}\n`);
 }

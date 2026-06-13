@@ -9,12 +9,12 @@ describe("parseConfig", () => {
     expect(result.config?.providers).toEqual({
       stt: "deepgram",
       llm: "openai",
-      embeddings: "openai"
+      embeddings: "openai",
     });
     expect(result.config?.retentionDefaults).toEqual({
       individual: "7_days",
       team: "30_days",
-      enterprise: "30_days"
+      enterprise: "30_days",
     });
   });
 

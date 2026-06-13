@@ -6,15 +6,28 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r --if-present build",
-    "check": "pnpm typecheck && pnpm test",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "ci": "pnpm check && pnpm --filter @dokeza/desktop build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "generate:schemas": "pnpm --filter @dokeza/contracts generate:schemas",
+    "lint": "eslint . --max-warnings 0",
+    "security:audit": "pnpm audit --audit-level moderate",
+    "security:secrets": "gitleaks detect --source . --no-banner --redact",
+    "security:vulns": "trivy fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 .",
     "test": "pnpm -r --if-present test",
+    "toolchain:verify": "pwsh -NoLogo -NoProfile -File scripts/verify-toolchain.ps1",
     "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.2",
+    "eslint": "^10.5.0",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.4",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "typescript-eslint": "^8.61.0",
+    "vitest": "^4.1.8"
   }
 }

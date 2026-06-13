@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createAudioChunkMetaMessage,
   createInitialRealtimeClientState,
-  createSessionStartMessage
+  createSessionStartMessage,
 } from "./realtimeClient.js";
 
 describe("desktop realtime protocol client", () => {
@@ -11,7 +11,7 @@ describe("desktop realtime protocol client", () => {
     const message = createSessionStartMessage(state, {
       sessionId: "sess_123",
       workspaceId: "ws_123",
-      deviceId: "dev_123"
+      deviceId: "dev_123",
     });
 
     expect(message.type).toBe("session.start");
@@ -20,7 +20,7 @@ describe("desktop realtime protocol client", () => {
       expect(message.payload.processing).toEqual({
         stt: "cloud",
         llm: "cloud",
-        retrieval: "cloud"
+        retrieval: "cloud",
       });
     }
   });
@@ -36,7 +36,7 @@ describe("desktop realtime protocol client", () => {
       channels: 1,
       duration_ms: 100,
       timestamp_ms: 0,
-      byte_length: 3200
+      byte_length: 3200,
     });
 
     expect(message.type).toBe("audio.chunk_meta");
