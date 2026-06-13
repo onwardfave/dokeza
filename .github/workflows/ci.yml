@@ -61,7 +61,7 @@ jobs:
 
   desktop-native:
     name: Desktop native smoke
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 30
 
     defaults:
