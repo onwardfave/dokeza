@@ -11,8 +11,8 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
 | Transparent overlay window | Pending manual QA | `apps/desktop/src-tauri/tauri.conf.json` defines an `overlay` window with `transparent: true`, `decorations: false`, compact dimensions, and `index.html#/overlay`; `pnpm --filter @dokeza/desktop tauri build --debug --no-bundle` passes on Windows. | Verify visual transparency on Windows and macOS against browser, Zoom, Meet, Teams, and native windows. |
 | Always-on-top overlay behavior | Pending manual QA | The overlay window is configured with `alwaysOnTop: true` and `skipTaskbar: true`; Tauri debug build accepts the configuration. | Verify stacking behavior on Windows and macOS, including full-screen spaces and presentation workflows. |
 | Global hotkeys | Pending manual QA | Official Tauri v2 global shortcut plugin is installed and a Rust setup handler registers `ctrl+alt+d` to toggle the overlay window; Rust tests verify the shortcut parses. | Verify registration and conflicts across meeting apps and browsers on Windows and macOS. |
-| Microphone capture | Pending manual QA | Native `cpal 0.16.0` probe added behind Tauri commands to enumerate input devices and capture a short default-input sample in memory; report returns metadata only; native checks and Tauri debug build pass on Windows; main-window diagnostics panel can run the probe in Tauri. | Run `docs/development/windows_audio_diagnostics_manual_qa.md`; verify permission prompts and allowed/denied/device-missing behavior on Windows and macOS. |
-| System audio capture or fallback | Pending manual QA | Output-device enumeration is available and a Windows-only `wasapi 0.23.0` loopback probe is implemented behind a metadata-only Tauri command; native checks and Tauri debug build pass on Windows; main-window diagnostics panel can run the output and loopback probes in Tauri. | Run `docs/development/windows_audio_diagnostics_manual_qa.md`; verify runtime capture with active system audio on Windows; validate macOS authorized capture/fallback separately. |
+| Microphone capture | Pass on Windows, pending macOS | Native `cpal 0.16.0` probe added behind Tauri commands to enumerate input devices and capture a short default-input sample in memory; report returns metadata only; native checks and Tauri debug build pass on Windows; manual QA captured 9,261 frames from `Microphone (DroidCam Audio)`. | Verify permission prompts and allowed/denied/device-missing behavior on macOS; add denied/device-missing Windows cases later. |
+| System audio capture or fallback | Pass on Windows, pending macOS | Output-device enumeration is available and a Windows-only `wasapi 0.23.0` loopback probe is implemented behind a metadata-only Tauri command; manual QA listed 9 output devices and captured 24,480 loopback frames / 195,840 bytes from `Speakers (Realtek High Definition Audio)`. | Validate macOS authorized capture/fallback separately; add unavailable-output and route-switching Windows cases later. |
 | WebSocket streaming using realtime protocol | Pending | Not implemented. | Add native WebSocket proof with synthetic frames. |
 | Local SQLite cache access | Pending | Not implemented. | Add app-data SQLite create/write/read/delete proof. |
 | Auto-update path | Pending | Not implemented. | Prove update deferral and rollback path. |
@@ -118,3 +118,28 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
   - Frontend unit tests for native-runtime detection, command dispatch, and metadata-only result formatting.
   - `pnpm --filter @dokeza/desktop test`
 - Result: manual QA now has a repeatable in-app control surface. Runtime validation on Windows remains pending until the checklist is executed on a machine with active system audio.
+
+### 2026-06-14: Windows Audio Manual QA Pass
+
+- Ran `docs/development/windows_audio_diagnostics_manual_qa.md` on Windows through the Tauri native runtime.
+- Microphone probe result:
+  - device: `Microphone (DroidCam Audio)`
+  - sample rate: `44100 Hz`
+  - channels: `1`
+  - sample format: `F32`
+  - captured frames: `9261`
+  - duration: `250 ms`
+- Output enumeration result:
+  - device count: `9`
+  - included `Speakers (Realtek High Definition Audio)` and several Voicemeeter render devices.
+- Windows WASAPI loopback result after routing active system audio to the default render device:
+  - backend: `wasapi_loopback`
+  - device: `Speakers (Realtek High Definition Audio)`
+  - sample rate: `48000 Hz`
+  - channels: `2`
+  - sample format: `Int`
+  - captured frames: `24480`
+  - captured bytes: `195840`
+  - silent packets: `0`
+  - duration: `500 ms`
+- Result: microphone capture, output-device enumeration, and Windows WASAPI loopback are validated on Windows with metadata-only diagnostics. macOS capture and fallback behavior remain pending.
