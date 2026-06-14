@@ -10,7 +10,7 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
 | --- | --- | --- | --- |
 | Transparent overlay window | Pending manual QA | `apps/desktop/src-tauri/tauri.conf.json` defines an `overlay` window with `transparent: true`, `decorations: false`, compact dimensions, and `index.html#/overlay`; `pnpm --filter @dokeza/desktop tauri build --debug --no-bundle` passes on Windows. | Verify visual transparency on Windows and macOS against browser, Zoom, Meet, Teams, and native windows. |
 | Always-on-top overlay behavior | Pending manual QA | The overlay window is configured with `alwaysOnTop: true` and `skipTaskbar: true`; Tauri debug build accepts the configuration. | Verify stacking behavior on Windows and macOS, including full-screen spaces and presentation workflows. |
-| Global hotkeys | Pending | Not implemented. | Add official Tauri v2 global shortcut plugin and a development-only overlay toggle. |
+| Global hotkeys | Pending manual QA | Official Tauri v2 global shortcut plugin is installed and a Rust setup handler registers `ctrl+alt+d` to toggle the overlay window; Rust tests verify the shortcut parses. | Verify registration and conflicts across meeting apps and browsers on Windows and macOS. |
 | Microphone capture | Pending | Not implemented. | Add native audio probe that reports metadata only. |
 | System audio capture or fallback | Pending | Not implemented. | Validate Windows loopback and macOS authorized capture/fallback. |
 | WebSocket streaming using realtime protocol | Pending | Not implemented. | Add native WebSocket proof with synthetic frames. |
@@ -34,3 +34,16 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
   - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
   - `pnpm --filter @dokeza/desktop tauri build --debug --no-bundle`
 - Result: build viability for the overlay configuration passes on Windows. Runtime transparency and stacking behavior remain pending manual QA on Windows and macOS.
+
+### 2026-06-14: Development Overlay Hotkey
+
+- Added `tauri-plugin-global-shortcut` and `@tauri-apps/plugin-global-shortcut` at `2.3.2`.
+- Registered `ctrl+alt+d` in native Tauri setup as a development shortcut for toggling the overlay window.
+- Kept the overlay hidden at startup so the hotkey can drive manual verification without forcing the overlay into every launch.
+- Verification:
+  - Rust unit test for shortcut parsing.
+  - `cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml -- --check`
+  - `cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings`
+  - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
+  - `pnpm --filter @dokeza/desktop tauri build --debug --no-bundle`
+- Result: build viability for the global shortcut integration passes on Windows. Runtime shortcut registration, conflicts, and overlay toggle behavior remain pending manual QA on Windows and macOS.

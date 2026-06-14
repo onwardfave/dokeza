@@ -11,6 +11,7 @@ type TauriWindowConfig = {
   decorations?: boolean;
   alwaysOnTop?: boolean;
   resizable?: boolean;
+  visible?: boolean;
   width: number;
   height: number;
 };
@@ -54,6 +55,7 @@ describe("tauri desktop windows", () => {
       decorations: false,
       alwaysOnTop: true,
       resizable: true,
+      visible: false,
     });
   });
 });
