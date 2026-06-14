@@ -56,6 +56,9 @@ jobs:
       - name: Desktop frontend build
         run: pnpm --filter @dokeza/desktop build
 
+      - name: Desktop release configuration
+        run: pnpm desktop:release:check
+
       - name: Dependency audit
         run: pnpm security:audit
 

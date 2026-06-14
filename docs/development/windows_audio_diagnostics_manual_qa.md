@@ -46,7 +46,7 @@ Expected result: browser preview is useful for layout inspection only. It is not
    ```
 
 2. Confirm the diagnostics status reads `Native runtime`.
-3. Confirm the `Microphone`, `Outputs`, `Loopback`, `Local cache`, `Crash diagnostics`, and `Realtime WS` buttons are enabled.
+3. Confirm the `Microphone`, `Outputs`, `Loopback`, `Local cache`, `Crash diagnostics`, `Realtime WS`, and `Update policy` buttons are enabled.
 
 Expected result: the panel is available only inside the Tauri runtime.
 
@@ -165,6 +165,24 @@ Pass criteria:
 - `Last client sequence` is `4`.
 - `Sensitive markers found` is `0`.
 - No transcript, prompt, document, suggestion, meeting, screen, or real audio content appears in the UI or terminal output.
+
+## Update Policy Probe
+
+1. Click `Update policy`.
+
+Pass criteria:
+
+- The result message is `update_policy_probe_completed`.
+- `Backend` is `local_update_policy`.
+- `Stable channel` is `stable`.
+- `Beta channel` is `beta`.
+- `Active session deferred` is `Yes`.
+- `Idle install allowed` is `Yes`.
+- `Rollback supported` is `Yes`.
+- `Signing required` is `Yes`.
+- `Updater private key present` is `No`.
+- `Sensitive markers found` is `0`.
+- No signing private key, certificate password, transcript, prompt, document, suggestion, meeting, screen, or audio content appears in the UI or terminal output.
 
 ## Failure Notes
 

@@ -3,6 +3,7 @@ mod cache_probe;
 mod crash_diagnostics;
 mod realtime_probe;
 mod shortcuts;
+mod update_policy;
 
 use audio_probe::{
     list_microphone_devices, list_system_audio_output_devices, probe_default_microphone,
@@ -14,6 +15,7 @@ use realtime_probe::probe_realtime_websocket;
 use shortcuts::{toggle_overlay_window, DEV_OVERLAY_TOGGLE_SHORTCUT};
 use tauri::Manager;
 use tauri_plugin_global_shortcut::ShortcutState;
+use update_policy::probe_update_installation_policy;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -44,6 +46,7 @@ pub fn run() {
             probe_local_sqlite_cache,
             probe_crash_diagnostics,
             probe_realtime_websocket,
+            probe_update_installation_policy,
             probe_default_microphone,
             probe_system_audio_loopback
         ])

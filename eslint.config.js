@@ -33,7 +33,7 @@ export default [
     },
   },
   {
-    files: ["**/*.js"],
+    files: ["**/*.{js,mjs}"],
     languageOptions: {
       globals: globals.node,
     },

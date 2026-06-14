@@ -113,6 +113,13 @@ function DiagnosticsPanel() {
         >
           {activeAction === "realtimeWebSocket" ? "Running..." : "Realtime WS"}
         </button>
+        <button
+          type="button"
+          disabled={isRunning || !nativeRuntimeAvailable}
+          onClick={() => void run("updatePolicy")}
+        >
+          {activeAction === "updatePolicy" ? "Running..." : "Update policy"}
+        </button>
       </div>
       <div className="diagnostics-result" aria-live="polite">
         {outcome === null ? (

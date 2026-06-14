@@ -41,6 +41,7 @@ The property-testing and workload-testing approach is inspired by Antithesis' pu
 - Local cache writes.
 - Redacted local crash diagnostics.
 - Native realtime WebSocket diagnostics with synthetic frames.
+- Update deferral policy and desktop release configuration validation.
 - Realtime reconnect.
 - Update deferral during active meeting.
 - Rollback smoke test.

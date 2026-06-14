@@ -7,6 +7,7 @@ import {
   type LocalSqliteCacheProbeReport,
   type RealtimeWebSocketProbeReport,
   type SystemAudioLoopbackProbeReport,
+  type UpdateInstallationPolicyProbeReport,
 } from "./desktopDiagnostics.js";
 
 describe("desktop diagnostics", () => {
@@ -136,6 +137,34 @@ describe("desktop diagnostics", () => {
     });
   });
 
+  it("runs the update policy probe through the registered Tauri command", async () => {
+    const report: UpdateInstallationPolicyProbeReport = {
+      backend: "local_update_policy",
+      current_version: "0.0.0",
+      stable_channel: "stable",
+      beta_channel: "beta",
+      active_session_deferred: true,
+      idle_session_install_allowed: true,
+      rollback_supported: true,
+      signing_required: true,
+      updater_private_key_present: false,
+      sensitive_markers_found: 0,
+    };
+    const invoke = vi.fn().mockResolvedValue(report);
+
+    const outcome = await runDesktopDiagnostic("updatePolicy", invoke, {
+      __TAURI_INTERNALS__: {},
+    });
+
+    expect(invoke).toHaveBeenCalledWith("probe_update_installation_policy");
+    expect(outcome).toEqual({
+      action: "updatePolicy",
+      status: "passed",
+      message: "update_policy_probe_completed",
+      details: report,
+    });
+  });
+
   it("formats loopback probe output as metadata-only rows", () => {
     const rows = formatDiagnosticDetails({
       backend: "wasapi_loopback",
@@ -243,6 +272,34 @@ describe("desktop diagnostics", () => {
       ["Last client sequence", "4"],
       ["Sensitive markers found", "0"],
       ["Duration", "10 ms"],
+    ]);
+  });
+
+  it("formats update policy output without signing secrets", () => {
+    const rows = formatDiagnosticDetails({
+      backend: "local_update_policy",
+      current_version: "0.0.0",
+      stable_channel: "stable",
+      beta_channel: "beta",
+      active_session_deferred: true,
+      idle_session_install_allowed: true,
+      rollback_supported: true,
+      signing_required: true,
+      updater_private_key_present: false,
+      sensitive_markers_found: 0,
+    });
+
+    expect(rows).toEqual([
+      ["Backend", "local_update_policy"],
+      ["Current version", "0.0.0"],
+      ["Stable channel", "stable"],
+      ["Beta channel", "beta"],
+      ["Active session deferred", "Yes"],
+      ["Idle install allowed", "Yes"],
+      ["Rollback supported", "Yes"],
+      ["Signing required", "Yes"],
+      ["Updater private key present", "No"],
+      ["Sensitive markers found", "0"],
     ]);
   });
 });

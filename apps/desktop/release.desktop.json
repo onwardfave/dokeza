@@ -1,0 +1,32 @@
+{
+  "$schema": "./release.desktop.schema.json",
+  "channels": {
+    "stable": {
+      "identifier": "com.dokeza.desktop",
+      "updaterEndpoint": "https://releases.dokeza.com/desktop/stable/{{target}}/{{arch}}/{{current_version}}",
+      "rollbackMode": "previous_known_good"
+    },
+    "beta": {
+      "identifier": "com.dokeza.desktop.beta",
+      "updaterEndpoint": "https://releases.dokeza.com/desktop/beta/{{target}}/{{arch}}/{{current_version}}",
+      "rollbackMode": "previous_known_good"
+    }
+  },
+  "requiredEnvironment": {
+    "updater": ["TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"],
+    "windows": ["WINDOWS_CERTIFICATE_PATH", "WINDOWS_CERTIFICATE_PASSWORD"],
+    "macos": [
+      "APPLE_ID",
+      "APPLE_ID_PASSWORD",
+      "APPLE_TEAM_ID",
+      "APPLE_SIGNING_IDENTITY",
+      "APPLE_NOTARIZATION_KEYCHAIN_PROFILE"
+    ]
+  },
+  "policy": {
+    "deferInstallDuringActiveSession": true,
+    "requireSignedUpdaterArtifacts": true,
+    "requireSignedInstallers": true,
+    "privateKeyMaterialCommitted": false
+  }
+}

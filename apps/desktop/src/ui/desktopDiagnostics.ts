@@ -64,13 +64,27 @@ export type RealtimeWebSocketProbeReport = {
   duration_ms: number;
 };
 
+export type UpdateInstallationPolicyProbeReport = {
+  backend: "local_update_policy";
+  current_version: string;
+  stable_channel: string;
+  beta_channel: string;
+  active_session_deferred: boolean;
+  idle_session_install_allowed: boolean;
+  rollback_supported: boolean;
+  signing_required: boolean;
+  updater_private_key_present: boolean;
+  sensitive_markers_found: number;
+};
+
 export type DiagnosticAction =
   | "microphone"
   | "outputDevices"
   | "systemLoopback"
   | "localCache"
   | "crashDiagnostics"
-  | "realtimeWebSocket";
+  | "realtimeWebSocket"
+  | "updatePolicy";
 
 export type DiagnosticStatus = "idle" | "running" | "passed" | "failed" | "unavailable";
 
@@ -80,7 +94,8 @@ export type DiagnosticDetails =
   | SystemAudioLoopbackProbeReport
   | LocalSqliteCacheProbeReport
   | CrashDiagnosticsProbeReport
-  | RealtimeWebSocketProbeReport;
+  | RealtimeWebSocketProbeReport
+  | UpdateInstallationPolicyProbeReport;
 
 export type DiagnosticOutcome = {
   action: DiagnosticAction;
@@ -174,6 +189,18 @@ export async function runDesktopDiagnostic(
           details,
         };
       }
+      case "updatePolicy": {
+        const details = await invoke<UpdateInstallationPolicyProbeReport>(
+          "probe_update_installation_policy",
+        );
+
+        return {
+          action,
+          status: "passed",
+          message: "update_policy_probe_completed",
+          details,
+        };
+      }
     }
   } catch (error) {
     return {
@@ -238,6 +265,21 @@ export function formatDiagnosticDetails(details: DiagnosticDetails): [string, st
         ["Last client sequence", details.last_client_seq.toString()],
         ["Sensitive markers found", details.sensitive_markers_found.toString()],
         ["Duration", `${details.duration_ms} ms`],
+      ];
+    }
+
+    if (details.backend === "local_update_policy") {
+      return [
+        ["Backend", details.backend],
+        ["Current version", details.current_version],
+        ["Stable channel", details.stable_channel],
+        ["Beta channel", details.beta_channel],
+        ["Active session deferred", details.active_session_deferred ? "Yes" : "No"],
+        ["Idle install allowed", details.idle_session_install_allowed ? "Yes" : "No"],
+        ["Rollback supported", details.rollback_supported ? "Yes" : "No"],
+        ["Signing required", details.signing_required ? "Yes" : "No"],
+        ["Updater private key present", details.updater_private_key_present ? "Yes" : "No"],
+        ["Sensitive markers found", details.sensitive_markers_found.toString()],
       ];
     }
 

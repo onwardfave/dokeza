@@ -15,8 +15,8 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
 | System audio capture or fallback | Pass on Windows, pending macOS | Output-device enumeration is available and a Windows-only `wasapi 0.23.0` loopback probe is implemented behind a metadata-only Tauri command; manual QA listed 9 output devices and captured 24,480 loopback frames / 195,840 bytes from `Speakers (Realtek High Definition Audio)`. | Validate macOS authorized capture/fallback separately; add unavailable-output and route-switching Windows cases later. |
 | WebSocket streaming using realtime protocol | Build viability pass | Native `tungstenite 0.28.0` proof opens a local loopback WebSocket, sends existing protocol control messages plus a synthetic binary PCM frame, validates strict `audio.chunk_meta` then binary ordering, and returns metadata-only diagnostics. | Run the diagnostics `Realtime WS` action manually on Windows and macOS; later promote the proof into a production client abstraction with auth, reconnect, backpressure, and buffering. |
 | Local SQLite cache access | Build viability pass | `rusqlite 0.40.1` with bundled SQLite is wired behind a metadata-only Tauri command; native unit tests verify create/write/read/delete of a synthetic row; the diagnostics panel can run the local cache probe in Tauri. | Run the diagnostics `Local cache` action manually on Windows and macOS; later replace the synthetic table with production session/cache schema. |
-| Auto-update path | Pending | Not implemented. | Prove update deferral and rollback path. |
-| Signed installer path | Pending | Not implemented. | Prove signing/notarization pipeline path without storing credentials. |
+| Auto-update path | Pipeline design pass | Native update policy proof verifies active-session deferral and idle-session install allowance; non-secret release metadata defines stable/beta updater endpoint templates and previous-known-good rollback mode; CI validates release config with `pnpm desktop:release:check`. | Wire policy to production meeting session state and Tauri updater install flow once real update hosting and signing keys exist. |
+| Signed installer path | Pipeline design pass | `apps/desktop/release.desktop.json` names required updater, Windows signing, and macOS signing/notarization environment variables; CI validates that release metadata requires signed artifacts and does not contain private key or password markers. | Provision real Windows/macOS signing credentials outside the repo and add signed release workflow. |
 | Basic crash diagnostics | Build viability pass | A local panic hook writes redacted JSON crash metadata under the Tauri app-data directory; diagnostics panel exposes a synthetic `Crash diagnostics` probe; Rust tests verify no synthetic sensitive markers are serialized and command output returns file-name-only metadata. | Run the diagnostics action manually on Windows and macOS; decide later whether to add external crash reporting, retention cleanup, and user-facing export/delete controls. |
 
 ## Evidence Log
@@ -225,3 +225,30 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
   - `pnpm --filter @dokeza/desktop test`
   - `pnpm --filter @dokeza/desktop typecheck`
 - Result: build viability for native WebSocket protocol streaming passes. Production reconnect, authenticated backend transport, backpressure handling, and local buffering remain future implementation work.
+
+### 2026-06-14: Desktop Release Operations Proof
+
+- Added native update installation policy logic.
+- Added `probe_update_installation_policy` as a Tauri diagnostics command.
+- The command verifies:
+  - active meeting sessions defer update installation
+  - idle sessions allow update installation
+  - stable and beta channels are represented
+  - rollback support is required
+  - signing is required
+  - updater private key material is absent from the diagnostic result
+- Added a non-secret release metadata file at `apps/desktop/release.desktop.json`.
+- Added `scripts/desktop-release/validate-release-config.mjs`.
+- Added root script `pnpm desktop:release:check`.
+- Added the release configuration validator to CI.
+- Added `docs/devops/desktop_release_operations.md`.
+- Verification:
+  - Rust tests for active-session deferral, idle install allowance, supported channels, and metadata-only diagnostics.
+  - Frontend tests for Tauri command dispatch and metadata-only formatting.
+  - Release metadata validation for stable/beta channels, HTTPS endpoint templates, required signing environment variable names, rollback mode, and absence of known secret markers.
+  - `pnpm desktop:release:check`
+  - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
+  - `cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings`
+  - `pnpm --filter @dokeza/desktop test`
+  - `pnpm --filter @dokeza/desktop typecheck`
+- Result: pipeline design viability for auto-update deferral and signed installer path passes without committing release credentials. Production signed artifacts and live updater hosting remain future release workflow work.

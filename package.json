@@ -8,6 +8,7 @@
     "build": "pnpm -r --if-present build",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
     "ci": "pnpm check && pnpm --filter @dokeza/desktop build",
+    "desktop:release:check": "node scripts/desktop-release/validate-release-config.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "generate:schemas": "pnpm --filter @dokeza/contracts generate:schemas",
