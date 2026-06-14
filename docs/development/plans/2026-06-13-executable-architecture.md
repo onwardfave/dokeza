@@ -70,5 +70,5 @@ Create the first executable architecture slice for Dokeza: a TypeScript monorepo
 
 ## Open Questions
 
-- Rust/Cargo are not installed in the current environment, so native Tauri build verification is blocked locally.
-- Final Tauri spike acceptance requires Windows and macOS manual/native verification beyond this scaffold.
+- Rust/Cargo are installed and native Tauri build verification now passes locally and in CI through the desktop native smoke gate.
+- Final Tauri capability acceptance still requires Windows and macOS overlay, hotkey, audio, cache, updater, signing, and diagnostics verification beyond this scaffold.
