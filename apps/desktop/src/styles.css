@@ -16,6 +16,13 @@ body {
   margin: 0;
 }
 
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
 .shell {
   min-height: 100vh;
   display: grid;
@@ -65,4 +72,52 @@ dt {
 
 dd {
   margin: 0;
+}
+
+.overlay-shell {
+  min-height: 100vh;
+  display: grid;
+  align-items: start;
+  padding: 10px;
+  background: transparent;
+}
+
+.overlay-panel {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  width: min(100%, 340px);
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(12px);
+}
+
+.overlay-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #168a5b;
+}
+
+.overlay-eyebrow,
+.overlay-title {
+  margin: 0;
+}
+
+.overlay-eyebrow {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.overlay-title {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
 }

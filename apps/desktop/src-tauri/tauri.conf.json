@@ -12,11 +12,26 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Dokeza",
         "width": 900,
         "height": 680,
         "minWidth": 720,
         "minHeight": 520
+      },
+      {
+        "label": "overlay",
+        "title": "Dokeza Overlay",
+        "url": "index.html#/overlay",
+        "width": 360,
+        "height": 120,
+        "minWidth": 280,
+        "minHeight": 96,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "resizable": true,
+        "skipTaskbar": true
       }
     ],
     "security": {
