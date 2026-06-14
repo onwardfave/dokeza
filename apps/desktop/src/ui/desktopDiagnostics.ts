@@ -36,7 +36,23 @@ export type LocalSqliteCacheProbeReport = {
   remaining_probe_rows: number;
 };
 
-export type DiagnosticAction = "microphone" | "outputDevices" | "systemLoopback" | "localCache";
+export type CrashDiagnosticsProbeReport = {
+  backend: "local_redacted_crash_report";
+  report_file_name: string;
+  schema_version: string;
+  panic_message_redacted: boolean;
+  full_path_returned: boolean;
+  written_bytes: number;
+  sensitive_markers_found: number;
+  redacted_field_count: number;
+};
+
+export type DiagnosticAction =
+  | "microphone"
+  | "outputDevices"
+  | "systemLoopback"
+  | "localCache"
+  | "crashDiagnostics";
 
 export type DiagnosticStatus = "idle" | "running" | "passed" | "failed" | "unavailable";
 
@@ -44,7 +60,8 @@ export type DiagnosticDetails =
   | AudioProbeReport
   | AudioDeviceSummary[]
   | SystemAudioLoopbackProbeReport
-  | LocalSqliteCacheProbeReport;
+  | LocalSqliteCacheProbeReport
+  | CrashDiagnosticsProbeReport;
 
 export type DiagnosticOutcome = {
   action: DiagnosticAction;
@@ -118,6 +135,16 @@ export async function runDesktopDiagnostic(
           details,
         };
       }
+      case "crashDiagnostics": {
+        const details = await invoke<CrashDiagnosticsProbeReport>("probe_crash_diagnostics");
+
+        return {
+          action,
+          status: "passed",
+          message: "crash_diagnostics_probe_completed",
+          details,
+        };
+      }
     }
   } catch (error) {
     return {
@@ -150,6 +177,19 @@ export function formatDiagnosticDetails(details: DiagnosticDetails): [string, st
         ["Read rows", details.read_rows.toString()],
         ["Deleted rows", details.deleted_rows.toString()],
         ["Remaining probe rows", details.remaining_probe_rows.toString()],
+      ];
+    }
+
+    if (details.backend === "local_redacted_crash_report") {
+      return [
+        ["Backend", details.backend],
+        ["Report file", details.report_file_name],
+        ["Schema version", details.schema_version],
+        ["Panic message redacted", details.panic_message_redacted ? "Yes" : "No"],
+        ["Full path returned", details.full_path_returned ? "Yes" : "No"],
+        ["Written bytes", details.written_bytes.toString()],
+        ["Sensitive markers found", details.sensitive_markers_found.toString()],
+        ["Redacted fields", details.redacted_field_count.toString()],
       ];
     }
 

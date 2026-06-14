@@ -39,6 +39,7 @@ The property-testing and workload-testing approach is inspired by Antithesis' pu
 - Native audio diagnostics for microphone, output-device enumeration, and Windows loopback probes.
 - Device disconnect recovery.
 - Local cache writes.
+- Redacted local crash diagnostics.
 - Realtime reconnect.
 - Update deferral during active meeting.
 - Rollback smoke test.

@@ -3,6 +3,7 @@ import {
   formatDiagnosticDetails,
   isTauriRuntime,
   runDesktopDiagnostic,
+  type CrashDiagnosticsProbeReport,
   type LocalSqliteCacheProbeReport,
   type SystemAudioLoopbackProbeReport,
 } from "./desktopDiagnostics.js";
@@ -76,6 +77,32 @@ describe("desktop diagnostics", () => {
     });
   });
 
+  it("runs the crash diagnostics probe through the registered Tauri command", async () => {
+    const report: CrashDiagnosticsProbeReport = {
+      backend: "local_redacted_crash_report",
+      report_file_name: "dokeza-crash-report-1-2.json",
+      schema_version: "local_crash_report.v1",
+      panic_message_redacted: true,
+      full_path_returned: false,
+      written_bytes: 320,
+      sensitive_markers_found: 0,
+      redacted_field_count: 1,
+    };
+    const invoke = vi.fn().mockResolvedValue(report);
+
+    const outcome = await runDesktopDiagnostic("crashDiagnostics", invoke, {
+      __TAURI_INTERNALS__: {},
+    });
+
+    expect(invoke).toHaveBeenCalledWith("probe_crash_diagnostics");
+    expect(outcome).toEqual({
+      action: "crashDiagnostics",
+      status: "passed",
+      message: "crash_diagnostics_probe_completed",
+      details: report,
+    });
+  });
+
   it("formats loopback probe output as metadata-only rows", () => {
     const rows = formatDiagnosticDetails({
       backend: "wasapi_loopback",
@@ -123,6 +150,30 @@ describe("desktop diagnostics", () => {
       ["Read rows", "1"],
       ["Deleted rows", "1"],
       ["Remaining probe rows", "0"],
+    ]);
+  });
+
+  it("formats crash diagnostics output without full paths or content", () => {
+    const rows = formatDiagnosticDetails({
+      backend: "local_redacted_crash_report",
+      report_file_name: "dokeza-crash-report-1-2.json",
+      schema_version: "local_crash_report.v1",
+      panic_message_redacted: true,
+      full_path_returned: false,
+      written_bytes: 320,
+      sensitive_markers_found: 0,
+      redacted_field_count: 1,
+    });
+
+    expect(rows).toEqual([
+      ["Backend", "local_redacted_crash_report"],
+      ["Report file", "dokeza-crash-report-1-2.json"],
+      ["Schema version", "local_crash_report.v1"],
+      ["Panic message redacted", "Yes"],
+      ["Full path returned", "No"],
+      ["Written bytes", "320"],
+      ["Sensitive markers found", "0"],
+      ["Redacted fields", "1"],
     ]);
   });
 });

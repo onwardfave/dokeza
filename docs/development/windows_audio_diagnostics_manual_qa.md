@@ -46,7 +46,7 @@ Expected result: browser preview is useful for layout inspection only. It is not
    ```
 
 2. Confirm the diagnostics status reads `Native runtime`.
-3. Confirm the `Microphone`, `Outputs`, and `Loopback` buttons are enabled.
+3. Confirm the `Microphone`, `Outputs`, `Loopback`, `Local cache`, and `Crash diagnostics` buttons are enabled.
 
 Expected result: the panel is available only inside the Tauri runtime.
 
@@ -126,6 +126,23 @@ Pass criteria:
 - `Remaining probe rows` is `0`.
 - The result does not show the full local filesystem path.
 - The result does not show transcript, prompt, document, suggestion, meeting, or raw audio content.
+
+## Crash Diagnostics Probe
+
+1. Click `Crash diagnostics`.
+
+Pass criteria:
+
+- The result message is `crash_diagnostics_probe_completed`.
+- `Backend` is `local_redacted_crash_report`.
+- `Report file` is a JSON file name only, not an absolute local filesystem path.
+- `Schema version` is `local_crash_report.v1`.
+- `Panic message redacted` is `Yes`.
+- `Full path returned` is `No`.
+- `Written bytes` is greater than `0`.
+- `Sensitive markers found` is `0`.
+- `Redacted fields` is greater than `0`.
+- The result does not show transcript, prompt, document, suggestion, meeting, screen, or raw audio content.
 
 ## Failure Notes
 

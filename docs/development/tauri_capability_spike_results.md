@@ -17,7 +17,7 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
 | Local SQLite cache access | Build viability pass | `rusqlite 0.40.1` with bundled SQLite is wired behind a metadata-only Tauri command; native unit tests verify create/write/read/delete of a synthetic row; the diagnostics panel can run the local cache probe in Tauri. | Run the diagnostics `Local cache` action manually on Windows and macOS; later replace the synthetic table with production session/cache schema. |
 | Auto-update path | Pending | Not implemented. | Prove update deferral and rollback path. |
 | Signed installer path | Pending | Not implemented. | Prove signing/notarization pipeline path without storing credentials. |
-| Basic crash diagnostics | Pending | Not implemented. | Add local redacted panic/minidump proof before external telemetry. |
+| Basic crash diagnostics | Build viability pass | A local panic hook writes redacted JSON crash metadata under the Tauri app-data directory; diagnostics panel exposes a synthetic `Crash diagnostics` probe; Rust tests verify no synthetic sensitive markers are serialized and command output returns file-name-only metadata. | Run the diagnostics action manually on Windows and macOS; decide later whether to add external crash reporting, retention cleanup, and user-facing export/delete controls. |
 
 ## Evidence Log
 
@@ -166,3 +166,28 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
   - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
   - `pnpm --filter @dokeza/desktop test`
 - Result: build viability for local SQLite cache access passes. Manual runtime validation through the diagnostics panel remains pending on Windows and macOS.
+
+### 2026-06-14: Local Redacted Crash Diagnostics Proof
+
+- Added a local panic hook in the Tauri native layer.
+- The hook writes JSON crash report metadata under the Tauri app-data directory in `crash-reports`.
+- Report schema version: `local_crash_report.v1`.
+- The report records operational metadata only:
+  - app version
+  - platform
+  - timestamp
+  - process id
+  - panic payload kind
+  - source file name, line, and column when available
+  - redaction status
+- The report does not persist the panic message text and does not include transcript, prompt, document, suggestion, screen, or audio content.
+- Added `probe_crash_diagnostics` as a Tauri command for manual QA without crashing the app.
+- Added a `Crash diagnostics` action to the diagnostics panel.
+- Verification:
+  - Rust unit tests for redacted report serialization and file-name-only command output.
+  - Frontend unit tests for Tauri command dispatch and metadata-only formatting.
+  - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
+  - `cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings`
+  - `pnpm --filter @dokeza/desktop test`
+  - `pnpm --filter @dokeza/desktop typecheck`
+- Result: build viability for local redacted crash diagnostics passes. Runtime validation through the diagnostics panel remains pending on Windows and macOS.

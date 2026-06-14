@@ -99,6 +99,13 @@ function DiagnosticsPanel() {
         >
           {activeAction === "localCache" ? "Running..." : "Local cache"}
         </button>
+        <button
+          type="button"
+          disabled={isRunning || !nativeRuntimeAvailable}
+          onClick={() => void run("crashDiagnostics")}
+        >
+          {activeAction === "crashDiagnostics" ? "Running..." : "Crash diagnostics"}
+        </button>
       </div>
       <div className="diagnostics-result" aria-live="polite">
         {outcome === null ? (

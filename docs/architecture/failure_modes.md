@@ -49,6 +49,7 @@ FULL
 | Screen capture | Permission revoked | OS permission event | No screen context | Continue without screen context; hide screen-dependent suggestions | Screen context unavailable |
 | Browser extension | Disconnected | Extension heartbeat missing | No structured browser context | Fall back to active window or OCR if allowed | Browser context unavailable |
 | Local cache | Disk full | Write error | Cannot persist local state | Warn user; continue in memory where possible | Possible local state loss |
+| Crash diagnostics | Local report write fails | Filesystem write error in panic hook or diagnostics probe | Local crash report may be unavailable | Do not panic recursively; continue default panic handling; return a safe diagnostics error for manual probes | Diagnostic metadata missing |
 | Backend DB | Write failure | DB error | Session persistence delayed | Queue writes if possible; show degraded service | Possible loss if queue unavailable |
 | Integration | OAuth expired | API 401 | Writeback fails | Prompt reconnect; keep draft | No generated content loss |
 | Integration | Rate limited | API 429 | Writeback delayed | Retry according to provider policy | No generated content loss |
@@ -96,4 +97,5 @@ Each release candidate should run failure injection tests for:
 - Screen permission revocation.
 - OAuth expiration.
 - Local disk write failure.
+- Local crash report write failure.
 - Backend restart during active session.
