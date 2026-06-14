@@ -3,6 +3,7 @@ mod shortcuts;
 
 use audio_probe::{
     list_microphone_devices, list_system_audio_output_devices, probe_default_microphone,
+    probe_system_audio_loopback,
 };
 use shortcuts::{toggle_overlay_window, DEV_OVERLAY_TOGGLE_SHORTCUT};
 use tauri_plugin_global_shortcut::ShortcutState;
@@ -27,7 +28,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_microphone_devices,
             list_system_audio_output_devices,
-            probe_default_microphone
+            probe_default_microphone,
+            probe_system_audio_loopback
         ])
         .run(tauri::generate_context!())
         .expect("error while running Dokeza desktop shell");

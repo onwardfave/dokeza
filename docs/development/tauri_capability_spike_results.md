@@ -12,7 +12,7 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
 | Always-on-top overlay behavior | Pending manual QA | The overlay window is configured with `alwaysOnTop: true` and `skipTaskbar: true`; Tauri debug build accepts the configuration. | Verify stacking behavior on Windows and macOS, including full-screen spaces and presentation workflows. |
 | Global hotkeys | Pending manual QA | Official Tauri v2 global shortcut plugin is installed and a Rust setup handler registers `ctrl+alt+d` to toggle the overlay window; Rust tests verify the shortcut parses. | Verify registration and conflicts across meeting apps and browsers on Windows and macOS. |
 | Microphone capture | Pending manual QA | Native `cpal 0.16.0` probe added behind Tauri commands to enumerate input devices and capture a short default-input sample in memory; report returns metadata only; native checks and Tauri debug build pass on Windows. | Verify permission prompts and allowed/denied/device-missing behavior on Windows and macOS. |
-| System audio capture or fallback | Pending | Output-device enumeration is available through a metadata-only Tauri command; actual loopback capture is not implemented. | Validate Windows WASAPI loopback and macOS authorized capture/fallback. |
+| System audio capture or fallback | Pending manual QA | Output-device enumeration is available and a Windows-only `wasapi 0.23.0` loopback probe is implemented behind a metadata-only Tauri command; native checks and Tauri debug build pass on Windows. | Verify runtime capture with active system audio on Windows; validate macOS authorized capture/fallback separately. |
 | WebSocket streaming using realtime protocol | Pending | Not implemented. | Add native WebSocket proof with synthetic frames. |
 | Local SQLite cache access | Pending | Not implemented. | Add app-data SQLite create/write/read/delete proof. |
 | Auto-update path | Pending | Not implemented. | Prove update deferral and rollback path. |
@@ -78,3 +78,29 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
   - `pnpm format:check`
   - `pnpm --filter @dokeza/desktop tauri build --debug --no-bundle`
 - Result: build viability for output-device enumeration passes on Windows. Windows WASAPI loopback and macOS authorized capture/fallback remain separate spike items.
+
+### 2026-06-14: Windows WASAPI Loopback Probe
+
+- Added `wasapi 0.23.0` as a Windows-only dependency.
+- Added `probe_system_audio_loopback` as a Tauri command.
+- The command starts a bounded loopback capture on the default Windows render device and returns metadata only:
+  - backend name
+  - output device name
+  - sample rate
+  - channel count
+  - sample format
+  - captured frame count
+  - captured byte count
+  - silent packet count
+  - probe duration
+- The command does not return, log, write, or persist raw system audio bytes.
+- Verification:
+  - Rust unit test for metadata-only loopback report shape.
+  - `cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml -- --check`
+  - `cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings`
+  - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
+  - `pnpm format:check`
+  - `pnpm --filter @dokeza/desktop test`
+  - `pnpm --filter @dokeza/desktop build`
+  - `pnpm --filter @dokeza/desktop tauri build --debug --no-bundle`
+- Result: build viability for Windows WASAPI loopback passes. Runtime validation with active system audio, permission behavior, and silence/no-output behavior remain pending manual QA on Windows. macOS system audio remains unresolved and must be validated through a separate ScreenCaptureKit or fallback slice.
