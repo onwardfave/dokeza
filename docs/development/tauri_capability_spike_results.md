@@ -11,7 +11,7 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
 | Transparent overlay window | Pending manual QA | `apps/desktop/src-tauri/tauri.conf.json` defines an `overlay` window with `transparent: true`, `decorations: false`, compact dimensions, and `index.html#/overlay`; `pnpm --filter @dokeza/desktop tauri build --debug --no-bundle` passes on Windows. | Verify visual transparency on Windows and macOS against browser, Zoom, Meet, Teams, and native windows. |
 | Always-on-top overlay behavior | Pending manual QA | The overlay window is configured with `alwaysOnTop: true` and `skipTaskbar: true`; Tauri debug build accepts the configuration. | Verify stacking behavior on Windows and macOS, including full-screen spaces and presentation workflows. |
 | Global hotkeys | Pending manual QA | Official Tauri v2 global shortcut plugin is installed and a Rust setup handler registers `ctrl+alt+d` to toggle the overlay window; Rust tests verify the shortcut parses. | Verify registration and conflicts across meeting apps and browsers on Windows and macOS. |
-| Microphone capture | Pending | Not implemented. | Add native audio probe that reports metadata only. |
+| Microphone capture | Pending manual QA | Native `cpal 0.16.0` probe added behind Tauri commands to enumerate input devices and capture a short default-input sample in memory; report returns metadata only; native checks and Tauri debug build pass on Windows. | Verify permission prompts and allowed/denied/device-missing behavior on Windows and macOS. |
 | System audio capture or fallback | Pending | Not implemented. | Validate Windows loopback and macOS authorized capture/fallback. |
 | WebSocket streaming using realtime protocol | Pending | Not implemented. | Add native WebSocket proof with synthetic frames. |
 | Local SQLite cache access | Pending | Not implemented. | Add app-data SQLite create/write/read/delete proof. |
@@ -47,3 +47,21 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
   - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
   - `pnpm --filter @dokeza/desktop tauri build --debug --no-bundle`
 - Result: build viability for the global shortcut integration passes on Windows. Runtime shortcut registration, conflicts, and overlay toggle behavior remain pending manual QA on Windows and macOS.
+
+### 2026-06-14: Metadata-Only Microphone Probe
+
+- Added `cpal 0.16.0` for native input-device access.
+- Tried `cpal 0.18.1` first, but it failed to compile on Windows because its broad `windows-core` dependency range resolved incompatibly with its `windows 0.61.x` dependency. The spike uses `cpal 0.16.0` because it pins `windows 0.54.0` and passes the native build.
+- Added Tauri commands:
+  - `list_microphone_devices`
+  - `probe_default_microphone`
+- The probe counts frames from a short in-memory input stream and returns metadata only: device name, sample rate, channels, sample format, captured frame count, and probe duration.
+- Verification:
+  - Rust unit tests for metadata-only result structs.
+  - `cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml -- --check`
+  - `cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings`
+  - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
+  - `pnpm --filter @dokeza/desktop test`
+  - `pnpm --filter @dokeza/desktop build`
+  - `pnpm --filter @dokeza/desktop tauri build --debug --no-bundle`
+- Result: build viability for the metadata-only microphone probe passes on Windows. Runtime permission prompts and real device behavior remain pending manual QA on Windows and macOS.
