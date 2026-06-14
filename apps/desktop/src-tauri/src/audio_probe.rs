@@ -30,12 +30,28 @@ pub struct AudioInputDeviceSummary {
     pub name: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AudioOutputDeviceSummary {
+    pub name: Option<String>,
+}
+
 pub fn list_input_devices() -> Result<Vec<AudioInputDeviceSummary>, String> {
     let host = cpal::default_host();
     let devices = host.input_devices().map_err(|error| error.to_string())?;
 
     Ok(devices
         .map(|device| AudioInputDeviceSummary {
+            name: device.name().ok(),
+        })
+        .collect())
+}
+
+pub fn list_output_devices() -> Result<Vec<AudioOutputDeviceSummary>, String> {
+    let host = cpal::default_host();
+    let devices = host.output_devices().map_err(|error| error.to_string())?;
+
+    Ok(devices
+        .map(|device| AudioOutputDeviceSummary {
             name: device.name().ok(),
         })
         .collect())
@@ -49,6 +65,11 @@ pub fn probe_default_microphone() -> Result<AudioProbeReport, String> {
 #[tauri::command]
 pub fn list_microphone_devices() -> Result<Vec<AudioInputDeviceSummary>, String> {
     list_input_devices()
+}
+
+#[tauri::command]
+pub fn list_system_audio_output_devices() -> Result<Vec<AudioOutputDeviceSummary>, String> {
+    list_output_devices()
 }
 
 pub fn probe_default_microphone_for(duration: Duration) -> Result<AudioProbeReport, String> {
@@ -140,5 +161,14 @@ mod tests {
         };
 
         assert_eq!(summary.name.as_deref(), Some("Synthetic microphone"));
+    }
+
+    #[test]
+    fn output_device_summary_keeps_only_device_name() {
+        let summary = AudioOutputDeviceSummary {
+            name: Some("Synthetic speaker".to_string()),
+        };
+
+        assert_eq!(summary.name.as_deref(), Some("Synthetic speaker"));
     }
 }
