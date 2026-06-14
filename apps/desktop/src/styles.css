@@ -31,7 +31,7 @@ select {
 }
 
 .panel {
-  width: min(520px, 100%);
+  width: min(680px, 100%);
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   background: #ffffff;
@@ -72,6 +72,122 @@ dt {
 
 dd {
   margin: 0;
+}
+
+.diagnostics {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+  border-top: 1px solid #d8dee8;
+  padding-top: 22px;
+}
+
+.diagnostics-header {
+  display: flex;
+  gap: 16px;
+  align-items: start;
+  justify-content: space-between;
+}
+
+h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.status-pill {
+  flex: 0 0 auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.status-pill.ok {
+  border-color: #8dc7a7;
+  color: #0f6b43;
+  background: #edf8f2;
+}
+
+.status-pill.muted {
+  color: #5b6472;
+  background: #f1f5f9;
+}
+
+.diagnostics-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.diagnostics-actions button {
+  min-height: 40px;
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  color: #17202a;
+  background: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.diagnostics-actions button:hover:not(:disabled) {
+  border-color: #2563eb;
+  color: #174ea6;
+  background: #eff6ff;
+}
+
+.diagnostics-actions button:disabled {
+  color: #7b8492;
+  background: #edf1f6;
+  cursor: not-allowed;
+}
+
+.diagnostics-result {
+  min-height: 112px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.diagnostics-placeholder,
+.diagnostics-message {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.diagnostics-placeholder {
+  color: #5b6472;
+}
+
+.diagnostics-message.passed {
+  color: #0f6b43;
+}
+
+.diagnostics-message.failed {
+  color: #9f1239;
+}
+
+.diagnostics-message.unavailable {
+  color: #5b6472;
+}
+
+.diagnostics-details {
+  margin-top: 12px;
+}
+
+.diagnostics-details > div {
+  grid-template-columns: 150px minmax(0, 1fr);
+  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
+}
+
+.diagnostics-details dd {
+  overflow-wrap: anywhere;
 }
 
 .overlay-shell {
@@ -120,4 +236,28 @@ dd {
   font-size: 14px;
   font-weight: 700;
   line-height: 1.35;
+}
+
+@media (max-width: 560px) {
+  .shell {
+    padding: 18px;
+  }
+
+  .panel {
+    padding: 18px;
+  }
+
+  .diagnostics-header {
+    display: grid;
+  }
+
+  .diagnostics-actions {
+    grid-template-columns: 1fr;
+  }
+
+  dl > div,
+  .diagnostics-details > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
 }

@@ -36,6 +36,7 @@ The property-testing and workload-testing approach is inspired by Antithesis' pu
 - Overlay behavior.
 - Global hotkeys.
 - Audio device selection.
+- Native audio diagnostics for microphone, output-device enumeration, and Windows loopback probes.
 - Device disconnect recovery.
 - Local cache writes.
 - Realtime reconnect.
@@ -166,4 +167,3 @@ Before paid production:
 - Billing reconciliation test passes.
 - Retention and deletion tests pass.
 - Security review gates pass.
-

@@ -11,8 +11,8 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
 | Transparent overlay window | Pending manual QA | `apps/desktop/src-tauri/tauri.conf.json` defines an `overlay` window with `transparent: true`, `decorations: false`, compact dimensions, and `index.html#/overlay`; `pnpm --filter @dokeza/desktop tauri build --debug --no-bundle` passes on Windows. | Verify visual transparency on Windows and macOS against browser, Zoom, Meet, Teams, and native windows. |
 | Always-on-top overlay behavior | Pending manual QA | The overlay window is configured with `alwaysOnTop: true` and `skipTaskbar: true`; Tauri debug build accepts the configuration. | Verify stacking behavior on Windows and macOS, including full-screen spaces and presentation workflows. |
 | Global hotkeys | Pending manual QA | Official Tauri v2 global shortcut plugin is installed and a Rust setup handler registers `ctrl+alt+d` to toggle the overlay window; Rust tests verify the shortcut parses. | Verify registration and conflicts across meeting apps and browsers on Windows and macOS. |
-| Microphone capture | Pending manual QA | Native `cpal 0.16.0` probe added behind Tauri commands to enumerate input devices and capture a short default-input sample in memory; report returns metadata only; native checks and Tauri debug build pass on Windows. | Verify permission prompts and allowed/denied/device-missing behavior on Windows and macOS. |
-| System audio capture or fallback | Pending manual QA | Output-device enumeration is available and a Windows-only `wasapi 0.23.0` loopback probe is implemented behind a metadata-only Tauri command; native checks and Tauri debug build pass on Windows. | Verify runtime capture with active system audio on Windows; validate macOS authorized capture/fallback separately. |
+| Microphone capture | Pending manual QA | Native `cpal 0.16.0` probe added behind Tauri commands to enumerate input devices and capture a short default-input sample in memory; report returns metadata only; native checks and Tauri debug build pass on Windows; main-window diagnostics panel can run the probe in Tauri. | Run `docs/development/windows_audio_diagnostics_manual_qa.md`; verify permission prompts and allowed/denied/device-missing behavior on Windows and macOS. |
+| System audio capture or fallback | Pending manual QA | Output-device enumeration is available and a Windows-only `wasapi 0.23.0` loopback probe is implemented behind a metadata-only Tauri command; native checks and Tauri debug build pass on Windows; main-window diagnostics panel can run the output and loopback probes in Tauri. | Run `docs/development/windows_audio_diagnostics_manual_qa.md`; verify runtime capture with active system audio on Windows; validate macOS authorized capture/fallback separately. |
 | WebSocket streaming using realtime protocol | Pending | Not implemented. | Add native WebSocket proof with synthetic frames. |
 | Local SQLite cache access | Pending | Not implemented. | Add app-data SQLite create/write/read/delete proof. |
 | Auto-update path | Pending | Not implemented. | Prove update deferral and rollback path. |
@@ -104,3 +104,17 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
   - `pnpm --filter @dokeza/desktop build`
   - `pnpm --filter @dokeza/desktop tauri build --debug --no-bundle`
 - Result: build viability for Windows WASAPI loopback passes. Runtime validation with active system audio, permission behavior, and silence/no-output behavior remain pending manual QA on Windows. macOS system audio remains unresolved and must be validated through a separate ScreenCaptureKit or fallback slice.
+
+### 2026-06-14: Audio Diagnostics Panel
+
+- Added a main-window `Audio QA` diagnostics panel for local manual testing.
+- The panel calls the existing metadata-only Tauri commands:
+  - `probe_default_microphone`
+  - `list_system_audio_output_devices`
+  - `probe_system_audio_loopback`
+- Browser preview renders the panel but disables native probes because normal browser tabs cannot call Tauri commands or Windows WASAPI.
+- Added `docs/development/windows_audio_diagnostics_manual_qa.md` with Windows manual QA steps and pass criteria.
+- Verification:
+  - Frontend unit tests for native-runtime detection, command dispatch, and metadata-only result formatting.
+  - `pnpm --filter @dokeza/desktop test`
+- Result: manual QA now has a repeatable in-app control surface. Runtime validation on Windows remains pending until the checklist is executed on a machine with active system audio.

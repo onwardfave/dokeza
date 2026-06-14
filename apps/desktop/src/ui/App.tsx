@@ -1,4 +1,12 @@
 import { REALTIME_PROTOCOL_VERSION } from "@dokeza/contracts";
+import { useMemo, useState } from "react";
+import {
+  formatDiagnosticDetails,
+  isTauriRuntime,
+  runDesktopDiagnostic,
+  type DiagnosticAction,
+  type DiagnosticOutcome,
+} from "./desktopDiagnostics.js";
 import { selectDesktopSurface } from "./surfaces.js";
 
 export function App() {
@@ -27,8 +35,86 @@ export function App() {
             <dd>Backend adapter</dd>
           </div>
         </dl>
+        <DiagnosticsPanel />
       </section>
     </main>
+  );
+}
+
+function DiagnosticsPanel() {
+  const [activeAction, setActiveAction] = useState<DiagnosticAction | null>(null);
+  const [outcome, setOutcome] = useState<DiagnosticOutcome | null>(null);
+  const nativeRuntimeAvailable = useMemo(() => isTauriRuntime(), []);
+  const isRunning = activeAction !== null;
+  const rows = outcome?.details === undefined ? [] : formatDiagnosticDetails(outcome.details);
+
+  async function run(action: DiagnosticAction) {
+    setActiveAction(action);
+    setOutcome(null);
+
+    try {
+      setOutcome(await runDesktopDiagnostic(action));
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  return (
+    <section className="diagnostics" aria-labelledby="diagnostics-title">
+      <div className="diagnostics-header">
+        <div>
+          <p className="eyebrow">Diagnostics</p>
+          <h2 id="diagnostics-title">Audio QA</h2>
+        </div>
+        <span className={nativeRuntimeAvailable ? "status-pill ok" : "status-pill muted"}>
+          {nativeRuntimeAvailable ? "Native runtime" : "Browser preview"}
+        </span>
+      </div>
+      <div className="diagnostics-actions">
+        <button
+          type="button"
+          disabled={isRunning || !nativeRuntimeAvailable}
+          onClick={() => void run("microphone")}
+        >
+          {activeAction === "microphone" ? "Running..." : "Microphone"}
+        </button>
+        <button
+          type="button"
+          disabled={isRunning || !nativeRuntimeAvailable}
+          onClick={() => void run("outputDevices")}
+        >
+          {activeAction === "outputDevices" ? "Running..." : "Outputs"}
+        </button>
+        <button
+          type="button"
+          disabled={isRunning || !nativeRuntimeAvailable}
+          onClick={() => void run("systemLoopback")}
+        >
+          {activeAction === "systemLoopback" ? "Running..." : "Loopback"}
+        </button>
+      </div>
+      <div className="diagnostics-result" aria-live="polite">
+        {outcome === null ? (
+          <p className="diagnostics-placeholder">
+            {nativeRuntimeAvailable ? "No probe run yet." : "Open the Tauri app for native probes."}
+          </p>
+        ) : (
+          <>
+            <p className={`diagnostics-message ${outcome.status}`}>{outcome.message}</p>
+            {rows.length > 0 ? (
+              <dl className="diagnostics-details">
+                {rows.map(([label, value]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
