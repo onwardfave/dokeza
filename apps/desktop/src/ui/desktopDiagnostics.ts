@@ -14,7 +14,7 @@ export type AudioDeviceSummary = {
 };
 
 export type SystemAudioLoopbackProbeReport = {
-  backend: string;
+  backend: "wasapi_loopback";
   device_name: string | null;
   sample_rate_hz: number;
   channels: number;
@@ -25,14 +25,26 @@ export type SystemAudioLoopbackProbeReport = {
   duration_ms: number;
 };
 
-export type DiagnosticAction = "microphone" | "outputDevices" | "systemLoopback";
+export type LocalSqliteCacheProbeReport = {
+  backend: "sqlite";
+  database_file_name: string;
+  schema_version: number;
+  created_parent_directory: boolean;
+  inserted_rows: number;
+  read_rows: number;
+  deleted_rows: number;
+  remaining_probe_rows: number;
+};
+
+export type DiagnosticAction = "microphone" | "outputDevices" | "systemLoopback" | "localCache";
 
 export type DiagnosticStatus = "idle" | "running" | "passed" | "failed" | "unavailable";
 
 export type DiagnosticDetails =
   | AudioProbeReport
   | AudioDeviceSummary[]
-  | SystemAudioLoopbackProbeReport;
+  | SystemAudioLoopbackProbeReport
+  | LocalSqliteCacheProbeReport;
 
 export type DiagnosticOutcome = {
   action: DiagnosticAction;
@@ -96,6 +108,16 @@ export async function runDesktopDiagnostic(
           details,
         };
       }
+      case "localCache": {
+        const details = await invoke<LocalSqliteCacheProbeReport>("probe_local_sqlite_cache");
+
+        return {
+          action,
+          status: "passed",
+          message: "local_sqlite_cache_probe_completed",
+          details,
+        };
+      }
     }
   } catch (error) {
     return {
@@ -118,6 +140,19 @@ export function formatDiagnosticDetails(details: DiagnosticDetails): [string, st
   }
 
   if ("backend" in details) {
+    if (details.backend === "sqlite") {
+      return [
+        ["Backend", details.backend],
+        ["Database file", details.database_file_name],
+        ["Schema version", details.schema_version.toString()],
+        ["Created parent directory", details.created_parent_directory ? "Yes" : "No"],
+        ["Inserted rows", details.inserted_rows.toString()],
+        ["Read rows", details.read_rows.toString()],
+        ["Deleted rows", details.deleted_rows.toString()],
+        ["Remaining probe rows", details.remaining_probe_rows.toString()],
+      ];
+    }
+
     return [
       ["Backend", details.backend],
       ["Device", details.device_name ?? "Default render device"],

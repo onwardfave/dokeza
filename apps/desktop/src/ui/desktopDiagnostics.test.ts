@@ -3,6 +3,7 @@ import {
   formatDiagnosticDetails,
   isTauriRuntime,
   runDesktopDiagnostic,
+  type LocalSqliteCacheProbeReport,
   type SystemAudioLoopbackProbeReport,
 } from "./desktopDiagnostics.js";
 
@@ -49,6 +50,32 @@ describe("desktop diagnostics", () => {
     });
   });
 
+  it("runs the local SQLite cache probe through the registered Tauri command", async () => {
+    const report: LocalSqliteCacheProbeReport = {
+      backend: "sqlite",
+      database_file_name: "capability-probe.sqlite3",
+      schema_version: 1,
+      created_parent_directory: false,
+      inserted_rows: 1,
+      read_rows: 1,
+      deleted_rows: 1,
+      remaining_probe_rows: 0,
+    };
+    const invoke = vi.fn().mockResolvedValue(report);
+
+    const outcome = await runDesktopDiagnostic("localCache", invoke, {
+      __TAURI_INTERNALS__: {},
+    });
+
+    expect(invoke).toHaveBeenCalledWith("probe_local_sqlite_cache");
+    expect(outcome).toEqual({
+      action: "localCache",
+      status: "passed",
+      message: "local_sqlite_cache_probe_completed",
+      details: report,
+    });
+  });
+
   it("formats loopback probe output as metadata-only rows", () => {
     const rows = formatDiagnosticDetails({
       backend: "wasapi_loopback",
@@ -72,6 +99,30 @@ describe("desktop diagnostics", () => {
       ["Captured bytes", "192000"],
       ["Silent packets", "1"],
       ["Duration", "500 ms"],
+    ]);
+  });
+
+  it("formats local SQLite cache output without full paths or row content", () => {
+    const rows = formatDiagnosticDetails({
+      backend: "sqlite",
+      database_file_name: "capability-probe.sqlite3",
+      schema_version: 1,
+      created_parent_directory: false,
+      inserted_rows: 1,
+      read_rows: 1,
+      deleted_rows: 1,
+      remaining_probe_rows: 0,
+    });
+
+    expect(rows).toEqual([
+      ["Backend", "sqlite"],
+      ["Database file", "capability-probe.sqlite3"],
+      ["Schema version", "1"],
+      ["Created parent directory", "No"],
+      ["Inserted rows", "1"],
+      ["Read rows", "1"],
+      ["Deleted rows", "1"],
+      ["Remaining probe rows", "0"],
     ]);
   });
 });

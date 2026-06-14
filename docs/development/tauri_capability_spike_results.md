@@ -14,7 +14,7 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
 | Microphone capture | Pass on Windows, pending macOS | Native `cpal 0.16.0` probe added behind Tauri commands to enumerate input devices and capture a short default-input sample in memory; report returns metadata only; native checks and Tauri debug build pass on Windows; manual QA captured 9,261 frames from `Microphone (DroidCam Audio)`. | Verify permission prompts and allowed/denied/device-missing behavior on macOS; add denied/device-missing Windows cases later. |
 | System audio capture or fallback | Pass on Windows, pending macOS | Output-device enumeration is available and a Windows-only `wasapi 0.23.0` loopback probe is implemented behind a metadata-only Tauri command; manual QA listed 9 output devices and captured 24,480 loopback frames / 195,840 bytes from `Speakers (Realtek High Definition Audio)`. | Validate macOS authorized capture/fallback separately; add unavailable-output and route-switching Windows cases later. |
 | WebSocket streaming using realtime protocol | Pending | Not implemented. | Add native WebSocket proof with synthetic frames. |
-| Local SQLite cache access | Pending | Not implemented. | Add app-data SQLite create/write/read/delete proof. |
+| Local SQLite cache access | Build viability pass | `rusqlite 0.40.1` with bundled SQLite is wired behind a metadata-only Tauri command; native unit tests verify create/write/read/delete of a synthetic row; the diagnostics panel can run the local cache probe in Tauri. | Run the diagnostics `Local cache` action manually on Windows and macOS; later replace the synthetic table with production session/cache schema. |
 | Auto-update path | Pending | Not implemented. | Prove update deferral and rollback path. |
 | Signed installer path | Pending | Not implemented. | Prove signing/notarization pipeline path without storing credentials. |
 | Basic crash diagnostics | Pending | Not implemented. | Add local redacted panic/minidump proof before external telemetry. |
@@ -107,7 +107,7 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
 
 ### 2026-06-14: Audio Diagnostics Panel
 
-- Added a main-window `Audio QA` diagnostics panel for local manual testing.
+- Added a main-window `Capability QA` diagnostics panel for local manual testing.
 - The panel calls the existing metadata-only Tauri commands:
   - `probe_default_microphone`
   - `list_system_audio_output_devices`
@@ -143,3 +143,26 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
   - silent packets: `0`
   - duration: `500 ms`
 - Result: microphone capture, output-device enumeration, and Windows WASAPI loopback are validated on Windows with metadata-only diagnostics. macOS capture and fallback behavior remain pending.
+
+### 2026-06-14: Local SQLite Cache Proof
+
+- Added `rusqlite 0.40.1` with bundled SQLite so the desktop native layer can use SQLite without requiring a system SQLite install.
+- Added `probe_local_sqlite_cache` as a Tauri command.
+- The command resolves the Tauri app-data directory, opens `capability-probe.sqlite3`, creates a synthetic `capability_probe` table, writes one synthetic row, reads it back, deletes it, and reports operation counts.
+- The command returns metadata only:
+  - backend name
+  - database file name
+  - schema version
+  - whether the parent directory had to be created
+  - inserted row count
+  - read row count
+  - deleted row count
+  - remaining synthetic probe rows
+- The command does not return the full local path and does not persist transcript, prompt, document, suggestion, raw audio, or meeting content.
+- Added a `Local cache` action to the diagnostics panel.
+- Verification:
+  - Rust unit tests for create/write/read/delete behavior and metadata-only report shape.
+  - Frontend unit tests for Tauri command dispatch and metadata-only formatting.
+  - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
+  - `pnpm --filter @dokeza/desktop test`
+- Result: build viability for local SQLite cache access passes. Manual runtime validation through the diagnostics panel remains pending on Windows and macOS.

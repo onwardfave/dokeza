@@ -64,7 +64,7 @@ function DiagnosticsPanel() {
       <div className="diagnostics-header">
         <div>
           <p className="eyebrow">Diagnostics</p>
-          <h2 id="diagnostics-title">Audio QA</h2>
+          <h2 id="diagnostics-title">Capability QA</h2>
         </div>
         <span className={nativeRuntimeAvailable ? "status-pill ok" : "status-pill muted"}>
           {nativeRuntimeAvailable ? "Native runtime" : "Browser preview"}
@@ -91,6 +91,13 @@ function DiagnosticsPanel() {
           onClick={() => void run("systemLoopback")}
         >
           {activeAction === "systemLoopback" ? "Running..." : "Loopback"}
+        </button>
+        <button
+          type="button"
+          disabled={isRunning || !nativeRuntimeAvailable}
+          onClick={() => void run("localCache")}
+        >
+          {activeAction === "localCache" ? "Running..." : "Local cache"}
         </button>
       </div>
       <div className="diagnostics-result" aria-live="polite">

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Use this checklist to validate the Tauri desktop audio diagnostics panel on Windows. The panel is a local capability-spike surface for Milestone 1 audio work. It returns metadata only and must not log, save, display, or transmit raw microphone audio, system audio, transcripts, prompts, documents, or suggestions.
+Use this checklist to validate the Tauri desktop capability diagnostics panel on Windows. The panel is a local capability-spike surface for Milestone 1 desktop work. It returns metadata only and must not log, save, display, or transmit raw microphone audio, system audio, transcripts, prompts, documents, or suggestions.
 
 ## Prerequisites
 
@@ -21,7 +21,7 @@ pnpm install
 pnpm --filter @dokeza/desktop tauri dev
 ```
 
-The desktop main window should show the `Audio QA` diagnostics panel. Browser preview can render the UI, but it cannot run native probes because normal browser tabs cannot call Tauri commands or Windows WASAPI.
+The desktop main window should show the `Capability QA` diagnostics panel. Browser preview can render the UI, but it cannot run native probes because normal browser tabs cannot call Tauri commands or Windows WASAPI.
 
 ## Browser Preview Check
 
@@ -109,6 +109,23 @@ Pass criteria:
 - Loopback may report silent packets or low captured activity during silence.
 - Output enumeration reflects the available devices.
 - The loopback device name follows the new default render device where Windows exposes it.
+
+## Local SQLite Cache Probe
+
+1. Click `Local cache`.
+
+Pass criteria:
+
+- The result message is `local_sqlite_cache_probe_completed`.
+- `Backend` is `sqlite`.
+- `Database file` is `capability-probe.sqlite3`.
+- `Schema version` is `1`.
+- `Inserted rows` is `1`.
+- `Read rows` is `1`.
+- `Deleted rows` is `1`.
+- `Remaining probe rows` is `0`.
+- The result does not show the full local filesystem path.
+- The result does not show transcript, prompt, document, suggestion, meeting, or raw audio content.
 
 ## Failure Notes
 
