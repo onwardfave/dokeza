@@ -5,6 +5,7 @@ import {
   runDesktopDiagnostic,
   type CrashDiagnosticsProbeReport,
   type LocalSqliteCacheProbeReport,
+  type RealtimeWebSocketProbeReport,
   type SystemAudioLoopbackProbeReport,
 } from "./desktopDiagnostics.js";
 
@@ -103,6 +104,38 @@ describe("desktop diagnostics", () => {
     });
   });
 
+  it("runs the realtime WebSocket probe through the registered Tauri command", async () => {
+    const report: RealtimeWebSocketProbeReport = {
+      backend: "local_realtime_websocket",
+      protocol_version: "2026-06-12",
+      transport: "websocket",
+      endpoint: "loopback",
+      outbound_json_messages: 5,
+      outbound_binary_frames: 1,
+      inbound_json_messages: 2,
+      server_observed_json_messages: 5,
+      server_observed_binary_frames: 1,
+      audio_chunk_bytes_sent: 4,
+      audio_gap_sent: true,
+      last_client_seq: 4,
+      sensitive_markers_found: 0,
+      duration_ms: 10,
+    };
+    const invoke = vi.fn().mockResolvedValue(report);
+
+    const outcome = await runDesktopDiagnostic("realtimeWebSocket", invoke, {
+      __TAURI_INTERNALS__: {},
+    });
+
+    expect(invoke).toHaveBeenCalledWith("probe_realtime_websocket");
+    expect(outcome).toEqual({
+      action: "realtimeWebSocket",
+      status: "passed",
+      message: "realtime_websocket_probe_completed",
+      details: report,
+    });
+  });
+
   it("formats loopback probe output as metadata-only rows", () => {
     const rows = formatDiagnosticDetails({
       backend: "wasapi_loopback",
@@ -174,6 +207,42 @@ describe("desktop diagnostics", () => {
       ["Written bytes", "320"],
       ["Sensitive markers found", "0"],
       ["Redacted fields", "1"],
+    ]);
+  });
+
+  it("formats realtime WebSocket output without payload content", () => {
+    const rows = formatDiagnosticDetails({
+      backend: "local_realtime_websocket",
+      protocol_version: "2026-06-12",
+      transport: "websocket",
+      endpoint: "loopback",
+      outbound_json_messages: 5,
+      outbound_binary_frames: 1,
+      inbound_json_messages: 2,
+      server_observed_json_messages: 5,
+      server_observed_binary_frames: 1,
+      audio_chunk_bytes_sent: 4,
+      audio_gap_sent: true,
+      last_client_seq: 4,
+      sensitive_markers_found: 0,
+      duration_ms: 10,
+    });
+
+    expect(rows).toEqual([
+      ["Backend", "local_realtime_websocket"],
+      ["Protocol version", "2026-06-12"],
+      ["Transport", "websocket"],
+      ["Endpoint", "loopback"],
+      ["Outbound JSON messages", "5"],
+      ["Outbound binary frames", "1"],
+      ["Inbound JSON messages", "2"],
+      ["Server JSON messages", "5"],
+      ["Server binary frames", "1"],
+      ["Audio chunk bytes sent", "4"],
+      ["Audio gap sent", "Yes"],
+      ["Last client sequence", "4"],
+      ["Sensitive markers found", "0"],
+      ["Duration", "10 ms"],
     ]);
   });
 });

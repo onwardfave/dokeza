@@ -13,7 +13,7 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
 | Global hotkeys | Pending manual QA | Official Tauri v2 global shortcut plugin is installed and a Rust setup handler registers `ctrl+alt+d` to toggle the overlay window; Rust tests verify the shortcut parses. | Verify registration and conflicts across meeting apps and browsers on Windows and macOS. |
 | Microphone capture | Pass on Windows, pending macOS | Native `cpal 0.16.0` probe added behind Tauri commands to enumerate input devices and capture a short default-input sample in memory; report returns metadata only; native checks and Tauri debug build pass on Windows; manual QA captured 9,261 frames from `Microphone (DroidCam Audio)`. | Verify permission prompts and allowed/denied/device-missing behavior on macOS; add denied/device-missing Windows cases later. |
 | System audio capture or fallback | Pass on Windows, pending macOS | Output-device enumeration is available and a Windows-only `wasapi 0.23.0` loopback probe is implemented behind a metadata-only Tauri command; manual QA listed 9 output devices and captured 24,480 loopback frames / 195,840 bytes from `Speakers (Realtek High Definition Audio)`. | Validate macOS authorized capture/fallback separately; add unavailable-output and route-switching Windows cases later. |
-| WebSocket streaming using realtime protocol | Pending | Not implemented. | Add native WebSocket proof with synthetic frames. |
+| WebSocket streaming using realtime protocol | Build viability pass | Native `tungstenite 0.28.0` proof opens a local loopback WebSocket, sends existing protocol control messages plus a synthetic binary PCM frame, validates strict `audio.chunk_meta` then binary ordering, and returns metadata-only diagnostics. | Run the diagnostics `Realtime WS` action manually on Windows and macOS; later promote the proof into a production client abstraction with auth, reconnect, backpressure, and buffering. |
 | Local SQLite cache access | Build viability pass | `rusqlite 0.40.1` with bundled SQLite is wired behind a metadata-only Tauri command; native unit tests verify create/write/read/delete of a synthetic row; the diagnostics panel can run the local cache probe in Tauri. | Run the diagnostics `Local cache` action manually on Windows and macOS; later replace the synthetic table with production session/cache schema. |
 | Auto-update path | Pending | Not implemented. | Prove update deferral and rollback path. |
 | Signed installer path | Pending | Not implemented. | Prove signing/notarization pipeline path without storing credentials. |
@@ -191,3 +191,37 @@ This document records evidence for the ADR 0001 Tauri capability spike. Each cap
   - `pnpm --filter @dokeza/desktop test`
   - `pnpm --filter @dokeza/desktop typecheck`
 - Result: build viability for local redacted crash diagnostics passes. Runtime validation through the diagnostics panel remains pending on Windows and macOS.
+
+### 2026-06-14: Native Realtime WebSocket Protocol Proof
+
+- Added `tungstenite 0.28.0` for native Rust WebSocket capability validation.
+- Added `probe_realtime_websocket` as a Tauri diagnostics command.
+- The command starts a local loopback WebSocket endpoint for the duration of the probe, then the native client sends:
+  - `auth.hello`
+  - `session.start`
+  - `audio.chunk_meta`
+  - one synthetic binary PCM payload frame
+  - `audio.gap`
+  - `session.end`
+- The local endpoint responds with `auth.accepted` and `session.closed`.
+- The endpoint validates that the binary frame immediately follows `audio.chunk_meta` and that its byte length matches `payload.byte_length`.
+- The command returns metadata only:
+  - protocol version
+  - transport and endpoint class
+  - outbound and inbound JSON counts
+  - outbound and observed binary frame counts
+  - synthetic audio byte count
+  - audio gap flag
+  - last client sequence number
+  - synthetic sensitive marker count
+  - probe duration
+- The probe uses synthetic silence-like PCM bytes and does not capture, return, log, or persist real audio, transcripts, prompts, documents, suggestions, or screen content.
+- Added a `Realtime WS` action to the diagnostics panel.
+- Verification:
+  - Rust tests for message ordering, monotonic sequences, byte-length matching, marker exclusion, and local loopback completion.
+  - Frontend tests for Tauri command dispatch and metadata-only formatting.
+  - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
+  - `cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings`
+  - `pnpm --filter @dokeza/desktop test`
+  - `pnpm --filter @dokeza/desktop typecheck`
+- Result: build viability for native WebSocket protocol streaming passes. Production reconnect, authenticated backend transport, backpressure handling, and local buffering remain future implementation work.

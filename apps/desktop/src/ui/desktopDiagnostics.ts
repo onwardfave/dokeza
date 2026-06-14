@@ -47,12 +47,30 @@ export type CrashDiagnosticsProbeReport = {
   redacted_field_count: number;
 };
 
+export type RealtimeWebSocketProbeReport = {
+  backend: "local_realtime_websocket";
+  protocol_version: string;
+  transport: string;
+  endpoint: string;
+  outbound_json_messages: number;
+  outbound_binary_frames: number;
+  inbound_json_messages: number;
+  server_observed_json_messages: number;
+  server_observed_binary_frames: number;
+  audio_chunk_bytes_sent: number;
+  audio_gap_sent: boolean;
+  last_client_seq: number;
+  sensitive_markers_found: number;
+  duration_ms: number;
+};
+
 export type DiagnosticAction =
   | "microphone"
   | "outputDevices"
   | "systemLoopback"
   | "localCache"
-  | "crashDiagnostics";
+  | "crashDiagnostics"
+  | "realtimeWebSocket";
 
 export type DiagnosticStatus = "idle" | "running" | "passed" | "failed" | "unavailable";
 
@@ -61,7 +79,8 @@ export type DiagnosticDetails =
   | AudioDeviceSummary[]
   | SystemAudioLoopbackProbeReport
   | LocalSqliteCacheProbeReport
-  | CrashDiagnosticsProbeReport;
+  | CrashDiagnosticsProbeReport
+  | RealtimeWebSocketProbeReport;
 
 export type DiagnosticOutcome = {
   action: DiagnosticAction;
@@ -145,6 +164,16 @@ export async function runDesktopDiagnostic(
           details,
         };
       }
+      case "realtimeWebSocket": {
+        const details = await invoke<RealtimeWebSocketProbeReport>("probe_realtime_websocket");
+
+        return {
+          action,
+          status: "passed",
+          message: "realtime_websocket_probe_completed",
+          details,
+        };
+      }
     }
   } catch (error) {
     return {
@@ -190,6 +219,25 @@ export function formatDiagnosticDetails(details: DiagnosticDetails): [string, st
         ["Written bytes", details.written_bytes.toString()],
         ["Sensitive markers found", details.sensitive_markers_found.toString()],
         ["Redacted fields", details.redacted_field_count.toString()],
+      ];
+    }
+
+    if (details.backend === "local_realtime_websocket") {
+      return [
+        ["Backend", details.backend],
+        ["Protocol version", details.protocol_version],
+        ["Transport", details.transport],
+        ["Endpoint", details.endpoint],
+        ["Outbound JSON messages", details.outbound_json_messages.toString()],
+        ["Outbound binary frames", details.outbound_binary_frames.toString()],
+        ["Inbound JSON messages", details.inbound_json_messages.toString()],
+        ["Server JSON messages", details.server_observed_json_messages.toString()],
+        ["Server binary frames", details.server_observed_binary_frames.toString()],
+        ["Audio chunk bytes sent", details.audio_chunk_bytes_sent.toString()],
+        ["Audio gap sent", details.audio_gap_sent ? "Yes" : "No"],
+        ["Last client sequence", details.last_client_seq.toString()],
+        ["Sensitive markers found", details.sensitive_markers_found.toString()],
+        ["Duration", `${details.duration_ms} ms`],
       ];
     }
 

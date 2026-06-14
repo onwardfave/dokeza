@@ -1,6 +1,7 @@
 mod audio_probe;
 mod cache_probe;
 mod crash_diagnostics;
+mod realtime_probe;
 mod shortcuts;
 
 use audio_probe::{
@@ -9,6 +10,7 @@ use audio_probe::{
 };
 use cache_probe::probe_local_sqlite_cache;
 use crash_diagnostics::{install_panic_hook, probe_crash_diagnostics};
+use realtime_probe::probe_realtime_websocket;
 use shortcuts::{toggle_overlay_window, DEV_OVERLAY_TOGGLE_SHORTCUT};
 use tauri::Manager;
 use tauri_plugin_global_shortcut::ShortcutState;
@@ -41,6 +43,7 @@ pub fn run() {
             list_system_audio_output_devices,
             probe_local_sqlite_cache,
             probe_crash_diagnostics,
+            probe_realtime_websocket,
             probe_default_microphone,
             probe_system_audio_loopback
         ])

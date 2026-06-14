@@ -46,7 +46,7 @@ Expected result: browser preview is useful for layout inspection only. It is not
    ```
 
 2. Confirm the diagnostics status reads `Native runtime`.
-3. Confirm the `Microphone`, `Outputs`, `Loopback`, `Local cache`, and `Crash diagnostics` buttons are enabled.
+3. Confirm the `Microphone`, `Outputs`, `Loopback`, `Local cache`, `Crash diagnostics`, and `Realtime WS` buttons are enabled.
 
 Expected result: the panel is available only inside the Tauri runtime.
 
@@ -143,6 +143,28 @@ Pass criteria:
 - `Sensitive markers found` is `0`.
 - `Redacted fields` is greater than `0`.
 - The result does not show transcript, prompt, document, suggestion, meeting, screen, or raw audio content.
+
+## Realtime WebSocket Probe
+
+1. Click `Realtime WS`.
+
+Pass criteria:
+
+- The result message is `realtime_websocket_probe_completed`.
+- `Backend` is `local_realtime_websocket`.
+- `Protocol version` is `2026-06-12`.
+- `Transport` is `websocket`.
+- `Endpoint` is `loopback`.
+- `Outbound JSON messages` is `5`.
+- `Outbound binary frames` is `1`.
+- `Inbound JSON messages` is `2`.
+- `Server JSON messages` is `5`.
+- `Server binary frames` is `1`.
+- `Audio chunk bytes sent` is greater than `0`.
+- `Audio gap sent` is `Yes`.
+- `Last client sequence` is `4`.
+- `Sensitive markers found` is `0`.
+- No transcript, prompt, document, suggestion, meeting, screen, or real audio content appears in the UI or terminal output.
 
 ## Failure Notes
 

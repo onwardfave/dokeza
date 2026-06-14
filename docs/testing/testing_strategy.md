@@ -40,6 +40,7 @@ The property-testing and workload-testing approach is inspired by Antithesis' pu
 - Device disconnect recovery.
 - Local cache writes.
 - Redacted local crash diagnostics.
+- Native realtime WebSocket diagnostics with synthetic frames.
 - Realtime reconnect.
 - Update deferral during active meeting.
 - Rollback smoke test.
