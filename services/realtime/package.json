@@ -11,7 +11,14 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@dokeza/authz": "workspace:*",
+    "@dokeza/config": "workspace:*",
     "@dokeza/contracts": "workspace:*",
-    "@dokeza/telemetry": "workspace:*"
+    "@dokeza/telemetry": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@dokeza/test-fixtures": "workspace:*",
+    "@types/ws": "^8.5.14"
   }
 }
