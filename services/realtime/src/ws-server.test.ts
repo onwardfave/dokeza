@@ -38,9 +38,24 @@ function connectClient(port: number): Promise<WebSocket> {
 function sendAndReceive(
   ws: WebSocket,
   message: Record<string, unknown>,
+  timeoutMs = 3000,
 ): Promise<Record<string, unknown>> {
+  ws.send(JSON.stringify(message));
+  return receiveJson(ws, timeoutMs);
+}
+
+function sendRawAndReceive(
+  ws: WebSocket,
+  data: string | Buffer,
+  options?: { binary?: boolean; timeoutMs?: number },
+): Promise<Record<string, unknown>> {
+  ws.send(data, { binary: options?.binary ?? Buffer.isBuffer(data) });
+  return receiveJson(ws, options?.timeoutMs ?? 3000);
+}
+
+function receiveJson(ws: WebSocket, timeoutMs = 3000): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Timeout waiting for response")), 3000);
+    const timeout = setTimeout(() => reject(new Error("Timeout waiting for response")), timeoutMs);
     ws.once("message", (data) => {
       clearTimeout(timeout);
       try {
@@ -49,7 +64,6 @@ function sendAndReceive(
         reject(err);
       }
     });
-    ws.send(JSON.stringify(message));
   });
 }
 
@@ -184,21 +198,199 @@ describe("createRealtimeServer", () => {
     expect(authResponse.type).toBe("auth.accepted");
     const sessionId = authResponse.session_id as string;
 
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "session.start",
+        seq: 2,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          workspace_id: "ws_test_1",
+          meeting_source: "test",
+          capture: { microphone: true, system_audio: false, screen_context: false },
+          processing: { stt: "cloud", llm: "cloud", retrieval: "cloud" },
+        },
+      }),
+    );
+
     // End session
     const closedResponse = await sendAndReceive(ws, {
       protocol_version: REALTIME_PROTOCOL_VERSION,
       type: "session.end",
-      seq: 2,
+      seq: 3,
       session_id: sessionId,
       sent_at: new Date().toISOString(),
       payload: {
         reason: "user_stopped",
-        last_client_seq: 2,
+        last_client_seq: 3,
       },
     });
 
     expect(closedResponse.type).toBe("session.closed");
     expect((closedResponse.payload as Record<string, unknown>).reason).toBe("user_stopped");
+  });
+
+  it("rejects post-auth messages whose session_id does not match the connection session", async () => {
+    const { port } = await startServer();
+    const ws = await connect(port);
+
+    await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+
+    const response = await sendAndReceive(
+      ws,
+      {
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "session.start",
+        seq: 2,
+        session_id: "sess_other",
+        sent_at: new Date().toISOString(),
+        payload: {
+          workspace_id: "ws_test_1",
+          meeting_source: "test",
+          capture: { microphone: true, system_audio: false, screen_context: false },
+          processing: { stt: "cloud", llm: "cloud", retrieval: "cloud" },
+        },
+      },
+      500,
+    );
+
+    expect(response.type).toBe("error");
+    expect((response.payload as Record<string, unknown>).code).toBe("invalid_message");
+  });
+
+  it("rejects session.start for a workspace outside the authenticated session", async () => {
+    const { port } = await startServer();
+    const ws = await connect(port);
+
+    const authResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+    const closePromise = waitForClose(ws);
+
+    const response = await sendAndReceive(
+      ws,
+      {
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "session.start",
+        seq: 2,
+        session_id: authResponse.session_id,
+        sent_at: new Date().toISOString(),
+        payload: {
+          workspace_id: "ws_other",
+          meeting_source: "test",
+          capture: { microphone: true, system_audio: false, screen_context: false },
+          processing: { stt: "cloud", llm: "cloud", retrieval: "cloud" },
+        },
+      },
+      500,
+    );
+
+    expect(response.type).toBe("error");
+    expect((response.payload as Record<string, unknown>).code).toBe("auth_failed");
+    await expect(closePromise).resolves.toBe(1008);
+  });
+
+  it("rejects duplicate or stale client sequence numbers before processing messages", async () => {
+    const { port } = await startServer();
+    const ws = await connect(port);
+
+    const authResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+
+    const response = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.end",
+      seq: 1,
+      session_id: authResponse.session_id,
+      sent_at: new Date().toISOString(),
+      payload: {
+        reason: "user_stopped",
+        last_client_seq: 1,
+      },
+    });
+
+    expect(response.type).toBe("error");
+    expect((response.payload as Record<string, unknown>).code).toBe("invalid_message");
+    expect(handle!.sessionManager.activeSessionCount).toBe(1);
+  });
+
+  it("routes binary frames using WebSocket frame metadata instead of JSON parsing", async () => {
+    const { port } = await startServer();
+    const ws = await connect(port);
+
+    const authResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+    const sessionId = authResponse.session_id as string;
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "audio.chunk_meta",
+        seq: 2,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          chunk_id: "aud_json_like",
+          chunk_index: 0,
+          stream: "microphone",
+          format: "pcm_s16le",
+          sample_rate_hz: 16000,
+          channels: 1,
+          duration_ms: 100,
+          timestamp_ms: 0,
+          byte_length: 3,
+        },
+      }),
+    );
+
+    const response = await sendRawAndReceive(ws, Buffer.from("{}"), {
+      binary: true,
+      timeoutMs: 500,
+    });
+
+    expect(response.type).toBe("error");
+    expect((response.payload as Record<string, unknown>).code).toBe("audio_byte_length_mismatch");
   });
 
   it("tracks active sessions in the session manager", async () => {

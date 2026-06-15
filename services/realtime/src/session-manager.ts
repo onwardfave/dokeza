@@ -31,6 +31,7 @@ export class SessionManager {
     connectionId: string,
     actor: Actor,
     workspaceId: string,
+    initialClientSeq = 0,
   ): { session: RealtimeSession; telemetry: TelemetryEvent } | { error: string } {
     const authorization = authorizeWorkspace(actor, workspaceId);
     if (!authorization.allowed) {
@@ -49,7 +50,7 @@ export class SessionManager {
       workspaceId,
       actor,
       state: "active",
-      clientSeq: 0,
+      clientSeq: initialClientSeq,
       serverSeq: 0,
       startedAt: new Date().toISOString(),
     };

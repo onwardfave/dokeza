@@ -1,6 +1,6 @@
 import { createServer, type Server as HttpServer } from "node:http";
-import { WebSocketServer, WebSocket } from "ws";
-import { REALTIME_PROTOCOL_VERSION } from "@dokeza/contracts";
+import { WebSocketServer, WebSocket, type RawData } from "ws";
+import { REALTIME_PROTOCOL_VERSION, validateRealtimeJsonMessage } from "@dokeza/contracts";
 import type { Actor } from "@dokeza/authz";
 import { RealtimeFrameAssembler } from "./frame-assembler.js";
 import { SessionManager } from "./session-manager.js";
@@ -20,6 +20,12 @@ export interface RealtimeServerHandle {
   wss: WebSocketServer;
   sessionManager: SessionManager;
   close(): Promise<void>;
+}
+
+function rawDataToBuffer(data: RawData): Buffer {
+  if (Buffer.isBuffer(data)) return data;
+  if (data instanceof ArrayBuffer) return Buffer.from(data);
+  return Buffer.concat(data);
 }
 
 export function createRealtimeServer(options: RealtimeServerOptions): RealtimeServerHandle {
@@ -59,12 +65,17 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       });
     };
 
-    ws.on("message", async (data: Buffer | ArrayBuffer | Buffer[]) => {
-      // Binary frame: audio data
-      if (!Buffer.isBuffer(data) && !(data instanceof ArrayBuffer)) {
-        // Binary frame from concatenated buffers
-        const combined = Buffer.concat(data as Buffer[]);
-        const result = assembler.handleBinaryFrame(new Uint8Array(combined));
+    ws.on("message", async (data: RawData, isBinary: boolean) => {
+      const buf = rawDataToBuffer(data);
+
+      if (isBinary) {
+        if (!authenticated) {
+          sendError("auth_failed", "Must authenticate first", false);
+          ws.close(1008, "auth_failed");
+          return;
+        }
+
+        const result = assembler.handleBinaryFrame(new Uint8Array(buf));
         if (result.type === "error") {
           const session = sessionManager.getSessionByConnection(connectionId);
           sendError(result.code, result.code, result.recoverable, session?.sessionId);
@@ -72,20 +83,12 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         return;
       }
 
-      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-
-      // Try to parse as JSON text first
       let parsed: unknown;
       try {
         parsed = JSON.parse(buf.toString("utf-8"));
       } catch {
-        // Not valid JSON — treat as binary audio frame
-        const bytes = new Uint8Array(buf);
-        const result = assembler.handleBinaryFrame(bytes);
-        if (result.type === "error") {
-          const session = sessionManager.getSessionByConnection(connectionId);
-          sendError(result.code, result.code, result.recoverable, session?.sessionId);
-        }
+        const session = sessionManager.getSessionByConnection(connectionId);
+        sendError("invalid_message", "Invalid JSON message", true, session?.sessionId);
         return;
       }
 
@@ -96,17 +99,13 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         parsed !== null &&
         (parsed as Record<string, unknown>).type === "auth.hello"
       ) {
-        const payload = (parsed as Record<string, unknown>).payload as
-          | Record<string, unknown>
-          | undefined;
-        const token = payload?.token;
-        if (typeof token !== "string") {
-          sendError("auth_failed", "Missing or invalid token", false);
+        if (!validateRealtimeJsonMessage(parsed) || parsed.type !== "auth.hello") {
+          sendError("invalid_message", "Invalid auth.hello message", false);
           ws.close(1008, "auth_failed");
           return;
         }
 
-        const actor = await options.tokenValidator.validate(token);
+        const actor = await options.tokenValidator.validate(parsed.payload.token);
         if (actor === undefined) {
           sendError("auth_failed", "Invalid token", false);
           ws.close(1008, "auth_failed");
@@ -121,7 +120,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           return;
         }
 
-        const authResult = sessionManager.authenticate(connectionId, actor, workspaceId);
+        const authResult = sessionManager.authenticate(connectionId, actor, workspaceId, parsed.seq);
         if ("error" in authResult) {
           sendError("auth_failed", authResult.error, false);
           ws.close(1008, "auth_failed");
@@ -158,20 +157,40 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       // Dispatch through frame assembler
-      const frameResult = assembler.handleJsonMessage(parsed);
-      const session = sessionManager.getSessionByConnection(connectionId);
-
-      if (frameResult.type === "error") {
-        sendError(frameResult.code, frameResult.code, frameResult.recoverable, session?.sessionId);
+      if (!validateRealtimeJsonMessage(parsed)) {
+        const session = sessionManager.getSessionByConnection(connectionId);
+        sendError("invalid_message", "Invalid realtime message", true, session?.sessionId);
         return;
       }
 
-      // Advance client sequence
-      if (session !== undefined && typeof parsed === "object" && parsed !== null) {
-        const seq = (parsed as Record<string, unknown>).seq;
-        if (typeof seq === "number") {
-          sessionManager.advanceClientSeq(session.sessionId, seq);
-        }
+      const session = sessionManager.getSessionByConnection(connectionId);
+      if (session === undefined) {
+        sendError("auth_failed", "Session not found", false);
+        ws.close(1008, "auth_failed");
+        return;
+      }
+
+      if (parsed.session_id !== session.sessionId) {
+        sendError("invalid_message", "Session ID does not match connection", false, session.sessionId);
+        return;
+      }
+
+      if (!sessionManager.advanceClientSeq(session.sessionId, parsed.seq)) {
+        sendError("invalid_message", "Client sequence is not monotonic", true, session.sessionId);
+        return;
+      }
+
+      if (parsed.type === "session.start" && parsed.payload.workspace_id !== session.workspaceId) {
+        sendError("auth_failed", "Workspace does not match authenticated session", false, session.sessionId);
+        ws.close(1008, "auth_failed");
+        return;
+      }
+
+      const frameResult = assembler.handleJsonMessage(parsed);
+
+      if (frameResult.type === "error") {
+        sendError(frameResult.code, frameResult.code, frameResult.recoverable, session.sessionId);
+        return;
       }
 
       // Handle session.end
