@@ -26,6 +26,8 @@ Use the project-local skills in `.codex/skills/` when relevant:
 - `dokeza-implementation-planning` for non-trivial implementation planning.
 - `dokeza-tdd-execution` for feature implementation.
 - `dokeza-reliability-testing` for property, fault, and reliability testing.
+- `dokeza-systematic-debugging` for root-cause investigation before fixing bugs.
+- `dokeza-verification-before-completion` for evidence-based completion claims.
 
 ## Current Technology Decisions
 

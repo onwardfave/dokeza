@@ -37,6 +37,8 @@ The repo includes project-local skills under `.codex/skills/`:
 - `dokeza-implementation-planning`: use before implementing non-trivial features.
 - `dokeza-tdd-execution`: use while implementing planned features.
 - `dokeza-reliability-testing`: use when designing or implementing reliability, fault, property, or chaos-style tests.
+- `dokeza-systematic-debugging`: use when encountering any bug, test failure, or unexpected behavior before proposing fixes.
+- `dokeza-verification-before-completion`: use before claiming work is complete; requires running verification commands and confirming output with evidence.
 
 These skills are intentionally Dokeza-specific. They reference this repo's SRS, architecture, security, testing, and DevOps docs.
 
