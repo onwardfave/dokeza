@@ -10,9 +10,7 @@ export interface TokenValidator {
 }
 
 export interface RealtimeServerOptions {
-  port?: number;
   tokenValidator: TokenValidator;
-  env?: NodeJS.ProcessEnv;
 }
 
 export interface RealtimeServerHandle {
@@ -120,7 +118,12 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           return;
         }
 
-        const authResult = sessionManager.authenticate(connectionId, actor, workspaceId, parsed.seq);
+        const authResult = sessionManager.authenticate(
+          connectionId,
+          actor,
+          workspaceId,
+          parsed.seq,
+        );
         if ("error" in authResult) {
           sendError("auth_failed", authResult.error, false);
           ws.close(1008, "auth_failed");
@@ -171,7 +174,12 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       if (parsed.session_id !== session.sessionId) {
-        sendError("invalid_message", "Session ID does not match connection", false, session.sessionId);
+        sendError(
+          "invalid_message",
+          "Session ID does not match connection",
+          false,
+          session.sessionId,
+        );
         return;
       }
 
@@ -181,7 +189,12 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       if (parsed.type === "session.start" && parsed.payload.workspace_id !== session.workspaceId) {
-        sendError("auth_failed", "Workspace does not match authenticated session", false, session.sessionId);
+        sendError(
+          "auth_failed",
+          "Workspace does not match authenticated session",
+          false,
+          session.sessionId,
+        );
         ws.close(1008, "auth_failed");
         return;
       }

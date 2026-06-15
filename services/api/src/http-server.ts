@@ -2,7 +2,6 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { createHealthResponse } from "./index.js";
 
 export interface HttpServerOptions {
-  port?: number;
   env?: NodeJS.ProcessEnv;
 }
 

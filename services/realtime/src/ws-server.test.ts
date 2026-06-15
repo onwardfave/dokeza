@@ -8,8 +8,6 @@ import {
   type TokenValidator,
 } from "./ws-server.js";
 
-const TEST_PORT = 0; // OS-assigned port
-
 function createTestTokenValidator(): TokenValidator {
   return {
     async validate(token: string) {
@@ -92,7 +90,6 @@ describe("createRealtimeServer", () => {
 
   async function startServer(): Promise<{ port: number }> {
     handle = createRealtimeServer({
-      port: TEST_PORT,
       tokenValidator: createTestTokenValidator(),
     });
     await new Promise<void>((resolve) => {

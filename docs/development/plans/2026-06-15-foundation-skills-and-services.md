@@ -33,12 +33,12 @@ Close Milestone 0 and Milestone 1 foundation gaps by:
 - **REST API**: New `/health` endpoint. No schema change needed — uses existing `HealthResponse`.
 - **Data model**: No database changes.
 - **AI structured output**: None.
-- **Telemetry events**: `realtime.connection_opened`, `realtime.connection_closed`, `realtime.auth_accepted`, `realtime.auth_rejected` added via `@dokeza/telemetry`.
+- **Telemetry events**: `realtime.auth_accepted`, `realtime.session_ended`, `realtime.audio_chunk_received`, and `realtime.audio_gap` are created via `@dokeza/telemetry`; connection open/close and auth rejection emission remain future work.
 
 ## Security and Privacy
 
 - WebSocket server validates auth.hello token before accepting sessions.
-- Workspace isolation enforced via `@dokeza/authz` on session.start.
+- Workspace isolation enforced via `@dokeza/authz` for the authenticated workspace and rechecked against `session.start.payload.workspace_id`.
 - No new external data flows — all local TypeScript services.
 - No content logging in telemetry events.
 
@@ -72,9 +72,8 @@ Close Milestone 0 and Milestone 1 foundation gaps by:
 
 ### Part 4: API HTTP Server
 
-18. Add `@dokeza/contracts` dependency to `services/api/package.json`.
-19. Create `services/api/src/http-server.ts` — lightweight HTTP server with health endpoint.
-20. Create `services/api/src/http-server.test.ts`.
+18. Create `services/api/src/http-server.ts` — lightweight HTTP server with health endpoint.
+19. Create `services/api/src/http-server.test.ts`.
 
 ## Tests and Verification
 
