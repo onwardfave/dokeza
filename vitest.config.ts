@@ -11,6 +11,7 @@ export default defineConfig({
       "@dokeza/config": resolve(repoRoot, "packages/config/src/index.ts"),
       "@dokeza/contracts": resolve(repoRoot, "packages/contracts/src/index.ts"),
       "@dokeza/telemetry": resolve(repoRoot, "packages/telemetry/src/index.ts"),
+      "@dokeza/test-fixtures": resolve(repoRoot, "packages/test-fixtures/src/index.ts"),
     },
   },
   test: {
