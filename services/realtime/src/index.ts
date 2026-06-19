@@ -19,3 +19,12 @@ export type {
   SttChunkInput,
   SttTranscriptEvent,
 } from "./stt-adapter.js";
+
+export { TranscriptProcessor } from "./transcript-processor.js";
+export type {
+  TranscriptProcessorOptions,
+  TranscriptProcessorResult,
+  TranscriptSegmentSnapshot,
+  TranscriptSegmentState,
+  TranscriptSuppressionReason,
+} from "./transcript-processor.js";

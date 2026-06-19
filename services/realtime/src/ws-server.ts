@@ -9,6 +9,7 @@ import {
   type SttAdapter,
   type SttTranscriptEvent,
 } from "./stt-adapter.js";
+import { TranscriptProcessor } from "./transcript-processor.js";
 
 export interface TokenValidator {
   validate(token: string): Promise<Actor | undefined>;
@@ -45,6 +46,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   wss.on("connection", (ws: WebSocket) => {
     const connectionId = `conn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const assembler = new RealtimeFrameAssembler();
+    let transcriptProcessor: TranscriptProcessor | undefined;
     let authenticated = false;
 
     const sendJson = (message: Record<string, unknown>) => {
@@ -133,7 +135,10 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
             }
 
             for (const event of sttResult.events) {
-              sendTranscript(session.sessionId, event);
+              const processed = transcriptProcessor?.process(event);
+              if (processed?.action === "emit") {
+                sendTranscript(session.sessionId, processed.event);
+              }
             }
           } catch {
             sendError(
@@ -198,6 +203,10 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         }
 
         authenticated = true;
+        transcriptProcessor = new TranscriptProcessor({
+          sessionId: authResult.session.sessionId,
+          workspaceId: authResult.session.workspaceId,
+        });
         const seq = sessionManager.nextServerSeq(authResult.session.sessionId);
         sendJson({
           protocol_version: REALTIME_PROTOCOL_VERSION,
@@ -279,6 +288,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         frameResult.message.type === "session.end" &&
         session !== undefined
       ) {
+        transcriptProcessor?.close();
         sessionManager.endSession(session.sessionId, frameResult.message.payload.reason);
         const serverSeq = sessionManager.nextServerSeq(session.sessionId);
         sendJson({
