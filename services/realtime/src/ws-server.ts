@@ -4,6 +4,11 @@ import { REALTIME_PROTOCOL_VERSION, validateRealtimeJsonMessage } from "@dokeza/
 import type { Actor } from "@dokeza/authz";
 import { RealtimeFrameAssembler } from "./frame-assembler.js";
 import { SessionManager } from "./session-manager.js";
+import {
+  DeterministicSttAdapter,
+  type SttAdapter,
+  type SttTranscriptEvent,
+} from "./stt-adapter.js";
 
 export interface TokenValidator {
   validate(token: string): Promise<Actor | undefined>;
@@ -11,6 +16,7 @@ export interface TokenValidator {
 
 export interface RealtimeServerOptions {
   tokenValidator: TokenValidator;
+  sttAdapter?: SttAdapter;
 }
 
 export interface RealtimeServerHandle {
@@ -28,6 +34,7 @@ function rawDataToBuffer(data: RawData): Buffer {
 
 export function createRealtimeServer(options: RealtimeServerOptions): RealtimeServerHandle {
   const sessionManager = new SessionManager();
+  const sttAdapter = options.sttAdapter ?? new DeterministicSttAdapter();
   const httpServer = createServer((_req, res) => {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not_found" }));
@@ -51,15 +58,33 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       errorMessage: string,
       recoverable: boolean,
       sessionId?: string,
+      retryAfterMs?: number,
     ) => {
       const seq = sessionId !== undefined ? sessionManager.nextServerSeq(sessionId) : 0;
+      const payload: Record<string, unknown> = { code, message: errorMessage, recoverable };
+      if (retryAfterMs !== undefined) {
+        payload.retry_after_ms = retryAfterMs;
+      }
+
       sendJson({
         protocol_version: REALTIME_PROTOCOL_VERSION,
         type: "error",
         seq: seq ?? 0,
         session_id: sessionId,
         sent_at: new Date().toISOString(),
-        payload: { code, message: errorMessage, recoverable },
+        payload,
+      });
+    };
+
+    const sendTranscript = (sessionId: string, event: SttTranscriptEvent) => {
+      const seq = sessionManager.nextServerSeq(sessionId);
+      sendJson({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: event.type,
+        seq: seq ?? 0,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: event.payload,
       });
     };
 
@@ -77,6 +102,48 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         if (result.type === "error") {
           const session = sessionManager.getSessionByConnection(connectionId);
           sendError(result.code, result.code, result.recoverable, session?.sessionId);
+          return;
+        }
+
+        if (result.type === "audio.chunk") {
+          const session = sessionManager.getSessionByConnection(connectionId);
+          if (session === undefined) {
+            sendError("auth_failed", "Session not found", false);
+            ws.close(1008, "auth_failed");
+            return;
+          }
+
+          try {
+            const sttResult = await sttAdapter.transcribeChunk({
+              sessionId: session.sessionId,
+              workspaceId: session.workspaceId,
+              meta: result.meta,
+              bytes: result.bytes,
+            });
+
+            if ("error" in sttResult) {
+              sendError(
+                sttResult.error.code,
+                sttResult.error.message,
+                sttResult.error.recoverable,
+                session.sessionId,
+                sttResult.error.retry_after_ms,
+              );
+              return;
+            }
+
+            for (const event of sttResult.events) {
+              sendTranscript(session.sessionId, event);
+            }
+          } catch {
+            sendError(
+              "stt_provider_timeout",
+              "Transcription provider timed out.",
+              true,
+              session.sessionId,
+              2000,
+            );
+          }
         }
         return;
       }

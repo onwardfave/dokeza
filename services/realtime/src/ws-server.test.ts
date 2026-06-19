@@ -1,12 +1,14 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { WebSocket } from "ws";
+import { WebSocket, type RawData } from "ws";
 import { REALTIME_PROTOCOL_VERSION } from "@dokeza/contracts";
 import { createTestActor } from "@dokeza/test-fixtures";
 import {
   createRealtimeServer,
   type RealtimeServerHandle,
+  type RealtimeServerOptions,
   type TokenValidator,
 } from "./ws-server.js";
+import type { SttAdapter } from "./stt-adapter.js";
 
 function createTestTokenValidator(): TokenValidator {
   return {
@@ -38,8 +40,9 @@ function sendAndReceive(
   message: Record<string, unknown>,
   timeoutMs = 3000,
 ): Promise<Record<string, unknown>> {
+  const response = receiveJson(ws, timeoutMs);
   ws.send(JSON.stringify(message));
-  return receiveJson(ws, timeoutMs);
+  return response;
 }
 
 function sendRawAndReceive(
@@ -47,8 +50,9 @@ function sendRawAndReceive(
   data: string | Buffer,
   options?: { binary?: boolean; timeoutMs?: number },
 ): Promise<Record<string, unknown>> {
+  const response = receiveJson(ws, options?.timeoutMs ?? 3000);
   ws.send(data, { binary: options?.binary ?? Buffer.isBuffer(data) });
-  return receiveJson(ws, options?.timeoutMs ?? 3000);
+  return response;
 }
 
 function receiveJson(ws: WebSocket, timeoutMs = 3000): Promise<Record<string, unknown>> {
@@ -62,6 +66,39 @@ function receiveJson(ws: WebSocket, timeoutMs = 3000): Promise<Record<string, un
         reject(err);
       }
     });
+  });
+}
+
+function receiveJsonMessages(
+  ws: WebSocket,
+  count: number,
+  timeoutMs = 3000,
+): Promise<Record<string, unknown>[]> {
+  return new Promise((resolve, reject) => {
+    const messages: Record<string, unknown>[] = [];
+    const timeout = setTimeout(() => {
+      ws.off("message", onMessage);
+      reject(new Error("Timeout waiting for responses"));
+    }, timeoutMs);
+
+    const onMessage = (data: RawData) => {
+      try {
+        messages.push(JSON.parse(data.toString()));
+      } catch (err) {
+        clearTimeout(timeout);
+        ws.off("message", onMessage);
+        reject(err);
+        return;
+      }
+
+      if (messages.length === count) {
+        clearTimeout(timeout);
+        ws.off("message", onMessage);
+        resolve(messages);
+      }
+    };
+
+    ws.on("message", onMessage);
   });
 }
 
@@ -88,10 +125,15 @@ describe("createRealtimeServer", () => {
     }
   });
 
-  async function startServer(): Promise<{ port: number }> {
-    handle = createRealtimeServer({
+  async function startServer(options: { sttAdapter?: SttAdapter } = {}): Promise<{ port: number }> {
+    const serverOptions: RealtimeServerOptions = {
       tokenValidator: createTestTokenValidator(),
-    });
+    };
+    if (options.sttAdapter !== undefined) {
+      serverOptions.sttAdapter = options.sttAdapter;
+    }
+
+    handle = createRealtimeServer(serverOptions);
     await new Promise<void>((resolve) => {
       handle!.httpServer.listen(0, "127.0.0.1", () => resolve());
     });
@@ -388,6 +430,206 @@ describe("createRealtimeServer", () => {
 
     expect(response.type).toBe("error");
     expect((response.payload as Record<string, unknown>).code).toBe("audio_byte_length_mismatch");
+  });
+
+  it("emits transcript events after a valid audio frame pair", async () => {
+    const sttAdapter: SttAdapter = {
+      async transcribeChunk(input) {
+        return {
+          events: [
+            {
+              type: "transcript.partial",
+              payload: {
+                segment_id: `seg_${input.meta.chunk_id}_partial`,
+                speaker: "user",
+                text: "hello from adapter",
+                start_ms: input.meta.timestamp_ms,
+                end_ms: input.meta.timestamp_ms + input.meta.duration_ms,
+                confidence: 0.72,
+              },
+            },
+            {
+              type: "transcript.final",
+              payload: {
+                segment_id: `seg_${input.meta.chunk_id}`,
+                speaker: "user",
+                text: "hello from adapter",
+                start_ms: input.meta.timestamp_ms,
+                end_ms: input.meta.timestamp_ms + input.meta.duration_ms,
+                confidence: 0.91,
+              },
+            },
+          ],
+          telemetry: [],
+        };
+      },
+    };
+
+    const { port } = await startServer({ sttAdapter });
+    const ws = await connect(port);
+
+    const authResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+    const sessionId = authResponse.session_id as string;
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "session.start",
+        seq: 2,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          workspace_id: "ws_test_1",
+          meeting_source: "test",
+          capture: { microphone: true, system_audio: false, screen_context: false },
+          processing: { stt: "cloud", llm: "cloud", retrieval: "cloud" },
+        },
+      }),
+    );
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "audio.chunk_meta",
+        seq: 3,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          chunk_id: "aud_transcript_1",
+          chunk_index: 0,
+          stream: "microphone",
+          format: "pcm_s16le",
+          sample_rate_hz: 16000,
+          channels: 1,
+          duration_ms: 100,
+          timestamp_ms: 250,
+          byte_length: 4,
+        },
+      }),
+    );
+
+    const transcriptMessages = receiveJsonMessages(ws, 2, 500);
+    ws.send(Buffer.from([1, 2, 3, 4]), { binary: true });
+    const [partial, final] = await transcriptMessages;
+    if (partial === undefined || final === undefined) {
+      throw new Error("Expected partial and final transcript messages");
+    }
+
+    expect(partial.type).toBe("transcript.partial");
+    expect(partial.seq).toBe(2);
+    expect(partial.session_id).toBe(sessionId);
+    expect((partial.payload as Record<string, unknown>).text).toBe("hello from adapter");
+
+    expect(final.type).toBe("transcript.final");
+    expect(final.seq).toBe(3);
+    expect(final.session_id).toBe(sessionId);
+    expect((final.payload as Record<string, unknown>).confidence).toBe(0.91);
+
+    const closedResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.end",
+      seq: 4,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        reason: "user_stopped",
+        last_client_seq: 4,
+      },
+    });
+
+    expect(closedResponse.type).toBe("session.closed");
+    expect(closedResponse.seq).toBe(4);
+    expect((closedResponse.payload as Record<string, unknown>).final_server_seq).toBe(4);
+  });
+
+  it("keeps the session open and emits a recoverable error when STT fails", async () => {
+    const sttAdapter: SttAdapter = {
+      async transcribeChunk() {
+        return {
+          error: {
+            code: "stt_provider_timeout",
+            message: "Transcription provider timed out.",
+            recoverable: true,
+            retry_after_ms: 2000,
+          },
+          telemetry: [],
+        };
+      },
+    };
+
+    const { port } = await startServer({ sttAdapter });
+    const ws = await connect(port);
+
+    const authResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+    const sessionId = authResponse.session_id as string;
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "audio.chunk_meta",
+        seq: 2,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          chunk_id: "aud_timeout",
+          chunk_index: 0,
+          stream: "microphone",
+          format: "pcm_s16le",
+          sample_rate_hz: 16000,
+          channels: 1,
+          duration_ms: 100,
+          timestamp_ms: 0,
+          byte_length: 2,
+        },
+      }),
+    );
+
+    const response = await sendRawAndReceive(ws, Buffer.from([1, 2]), {
+      binary: true,
+      timeoutMs: 500,
+    });
+
+    expect(response.type).toBe("error");
+    const payload = response.payload as Record<string, unknown>;
+    expect(payload.code).toBe("stt_provider_timeout");
+    expect(payload.recoverable).toBe(true);
+    expect(payload.retry_after_ms).toBe(2000);
+
+    const closedResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.end",
+      seq: 3,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        reason: "user_stopped",
+        last_client_seq: 3,
+      },
+    });
+
+    expect(closedResponse.type).toBe("session.closed");
   });
 
   it("tracks active sessions in the session manager", async () => {

@@ -10,3 +10,12 @@ export type { RealtimeSession, SessionState, SessionManagerOptions } from "./ses
 
 export { createRealtimeServer } from "./ws-server.js";
 export type { RealtimeServerOptions, RealtimeServerHandle, TokenValidator } from "./ws-server.js";
+
+export { DeterministicSttAdapter } from "./stt-adapter.js";
+export type {
+  SttAdapter,
+  SttAdapterError,
+  SttAdapterResult,
+  SttChunkInput,
+  SttTranscriptEvent,
+} from "./stt-adapter.js";
