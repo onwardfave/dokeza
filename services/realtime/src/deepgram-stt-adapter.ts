@@ -1,7 +1,12 @@
 import type { DeepgramSttConfig } from "@dokeza/config";
 import { createTelemetryEvent, type TelemetryEvent } from "@dokeza/telemetry";
 import WebSocket, { type RawData } from "ws";
-import type { SttAdapter, SttAdapterResult, SttChunkInput, SttTranscriptEvent } from "./stt-adapter.js";
+import type {
+  SttAdapter,
+  SttAdapterResult,
+  SttChunkInput,
+  SttTranscriptEvent,
+} from "./stt-adapter.js";
 
 export interface DeepgramAlternative {
   transcript?: string;
@@ -57,7 +62,9 @@ interface ResolvedDeepgramSttAdapterOptions {
   transport: DeepgramSttTransport;
 }
 
-function isDeepgramResultsMessage(message: DeepgramSttProviderMessage): message is DeepgramResultsMessage {
+function isDeepgramResultsMessage(
+  message: DeepgramSttProviderMessage,
+): message is DeepgramResultsMessage {
   return message.type === "Results";
 }
 

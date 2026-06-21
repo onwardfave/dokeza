@@ -26,7 +26,9 @@ function createChunkInput(): SttChunkInput {
   };
 }
 
-function resultMessage(overrides: Partial<DeepgramSttProviderMessage> = {}): DeepgramSttProviderMessage {
+function resultMessage(
+  overrides: Partial<DeepgramSttProviderMessage> = {},
+): DeepgramSttProviderMessage {
   return {
     type: "Results",
     is_final: false,

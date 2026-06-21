@@ -231,7 +231,10 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   if (environment === "production" && contentLoggingAllowed === true) {
     errors.push("DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED cannot be true in production.");
   }
-  if (environment === "production" && (deepgramApiKey === undefined || deepgramApiKey.length === 0)) {
+  if (
+    environment === "production" &&
+    (deepgramApiKey === undefined || deepgramApiKey.length === 0)
+  ) {
     errors.push("DEEPGRAM_API_KEY is required in production.");
   }
   if (deepgramEndpoint === undefined) {
