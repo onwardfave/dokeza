@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dokeza Provider Integration"
+  short_description: "Implement Dokeza external provider adapters safely."
+  default_prompt: "Use this when adding or changing a Dokeza provider adapter."

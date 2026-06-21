@@ -28,6 +28,7 @@ Use the project-local skills in `.codex/skills/` when relevant:
 - `dokeza-reliability-testing` for property, fault, and reliability testing.
 - `dokeza-systematic-debugging` for root-cause investigation before fixing bugs.
 - `dokeza-verification-before-completion` for evidence-based completion claims.
+- `dokeza-provider-integration` for external provider adapters, credentials, telemetry, retries, and data-flow updates.
 
 ## Current Technology Decisions
 

@@ -39,6 +39,7 @@ The repo includes project-local skills under `.codex/skills/`:
 - `dokeza-reliability-testing`: use when designing or implementing reliability, fault, property, or chaos-style tests.
 - `dokeza-systematic-debugging`: use when encountering any bug, test failure, or unexpected behavior before proposing fixes.
 - `dokeza-verification-before-completion`: use before claiming work is complete; requires running verification commands and confirming output with evidence.
+- `dokeza-provider-integration`: use when adding or modifying external provider adapters, provider config, credentials, telemetry, retry behavior, or data-flow documentation.
 
 These skills are intentionally Dokeza-specific. They reference this repo's SRS, architecture, security, testing, and DevOps docs.
 
