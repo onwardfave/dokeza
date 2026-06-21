@@ -20,6 +20,16 @@ export type {
   SttTranscriptEvent,
 } from "./stt-adapter.js";
 
+export { DeepgramSttAdapter, DeepgramWebSocketTransport } from "./deepgram-stt-adapter.js";
+export type {
+  DeepgramAlternative,
+  DeepgramResultsMessage,
+  DeepgramSttAdapterOptions,
+  DeepgramSttProviderMessage,
+  DeepgramSttTransport,
+  DeepgramSttTransportInput,
+} from "./deepgram-stt-adapter.js";
+
 export { TranscriptProcessor } from "./transcript-processor.js";
 export type {
   TranscriptProcessorOptions,

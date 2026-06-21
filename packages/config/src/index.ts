@@ -1,5 +1,20 @@
 export type EnvironmentName = "local" | "test" | "preview" | "staging" | "production";
 export type RetentionDefault = "7_days" | "30_days" | "1_year";
+export type DeepgramEncoding = "linear16";
+
+export interface DeepgramSttConfig {
+  apiKey?: string;
+  endpoint: string;
+  model: string;
+  language: string;
+  interimResults: boolean;
+  punctuate: boolean;
+  smartFormat: boolean;
+  encoding: DeepgramEncoding;
+  sampleRateHz: number;
+  channels: number;
+  timeoutMs: number;
+}
 
 export interface DokezaConfig {
   environment: EnvironmentName;
@@ -13,7 +28,10 @@ export interface DokezaConfig {
     contentLoggingAllowed: boolean;
   };
   providers: {
-    stt: "deepgram";
+    stt: {
+      provider: "deepgram";
+      deepgram: DeepgramSttConfig;
+    };
     llm: "openai";
     embeddings: "openai";
   };
@@ -102,6 +120,72 @@ function readOtlpEndpoint(value: string | undefined): string | undefined {
   }
 }
 
+function readWebSocketEndpoint(value: string | undefined): string | undefined {
+  const endpoint = value ?? "wss://api.deepgram.com/v1/listen";
+
+  try {
+    const parsed = new URL(endpoint);
+    return parsed.protocol === "ws:" || parsed.protocol === "wss:" ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readRequiredString(value: string | undefined, defaultValue: string): string | undefined {
+  const resolved = value ?? defaultValue;
+  return resolved.trim().length > 0 ? resolved : undefined;
+}
+
+function readDeepgramEncoding(value: string | undefined): DeepgramEncoding | undefined {
+  if (value === undefined || value === "linear16") {
+    return "linear16";
+  }
+
+  return undefined;
+}
+
+function readPositiveInteger(value: string | undefined, defaultValue: number): number | undefined {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function createDeepgramConfig(input: {
+  apiKey: string | undefined;
+  endpoint: string;
+  model: string;
+  language: string;
+  interimResults: boolean;
+  punctuate: boolean;
+  smartFormat: boolean;
+  encoding: DeepgramEncoding;
+  sampleRateHz: number;
+  channels: number;
+  timeoutMs: number;
+}): DeepgramSttConfig {
+  const config: DeepgramSttConfig = {
+    endpoint: input.endpoint,
+    model: input.model,
+    language: input.language,
+    interimResults: input.interimResults,
+    punctuate: input.punctuate,
+    smartFormat: input.smartFormat,
+    encoding: input.encoding,
+    sampleRateHz: input.sampleRateHz,
+    channels: input.channels,
+    timeoutMs: input.timeoutMs,
+  };
+
+  if (input.apiKey !== undefined) {
+    config.apiKey = input.apiKey;
+  }
+
+  return config;
+}
+
 export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): ConfigParseResult {
   const errors: string[] = [];
   const environment = readEnvironment(env.DOKEZA_ENV);
@@ -111,6 +195,17 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   const tracesSampleRate = readSampleRate(env.OTEL_TRACES_SAMPLER_ARG);
   const otlpEndpoint = readOtlpEndpoint(env.OTEL_EXPORTER_OTLP_ENDPOINT);
   const contentLoggingAllowed = readBoolean(env.DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED, false);
+  const deepgramApiKey = env.DEEPGRAM_API_KEY?.trim();
+  const deepgramEndpoint = readWebSocketEndpoint(env.DEEPGRAM_ENDPOINT);
+  const deepgramModel = readRequiredString(env.DEEPGRAM_MODEL, "nova-3");
+  const deepgramLanguage = readRequiredString(env.DEEPGRAM_LANGUAGE, "en");
+  const deepgramInterimResults = readBoolean(env.DEEPGRAM_INTERIM_RESULTS, true);
+  const deepgramPunctuate = readBoolean(env.DEEPGRAM_PUNCTUATE, true);
+  const deepgramSmartFormat = readBoolean(env.DEEPGRAM_SMART_FORMAT, true);
+  const deepgramEncoding = readDeepgramEncoding(env.DEEPGRAM_ENCODING);
+  const deepgramSampleRateHz = readPositiveInteger(env.DEEPGRAM_SAMPLE_RATE_HZ, 16000);
+  const deepgramChannels = readPositiveInteger(env.DEEPGRAM_CHANNELS, 1);
+  const deepgramTimeoutMs = readPositiveInteger(env.DEEPGRAM_TIMEOUT_MS, 5000);
 
   if (environment === undefined) {
     errors.push("DOKEZA_ENV must be local, test, preview, staging, or production.");
@@ -136,6 +231,45 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   if (environment === "production" && contentLoggingAllowed === true) {
     errors.push("DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED cannot be true in production.");
   }
+  if (environment === "production" && (deepgramApiKey === undefined || deepgramApiKey.length === 0)) {
+    errors.push("DEEPGRAM_API_KEY is required in production.");
+  }
+  if (deepgramEndpoint === undefined) {
+    errors.push("DEEPGRAM_ENDPOINT must be an absolute ws or wss URL.");
+  }
+  if (environment === "production" && deepgramEndpoint !== undefined) {
+    const parsedDeepgramEndpoint = new URL(deepgramEndpoint);
+    if (parsedDeepgramEndpoint.protocol !== "wss:") {
+      errors.push("DEEPGRAM_ENDPOINT must use wss in production.");
+    }
+  }
+  if (deepgramModel === undefined) {
+    errors.push("DEEPGRAM_MODEL is required.");
+  }
+  if (deepgramLanguage === undefined) {
+    errors.push("DEEPGRAM_LANGUAGE is required.");
+  }
+  if (deepgramInterimResults === undefined) {
+    errors.push("DEEPGRAM_INTERIM_RESULTS must be true or false.");
+  }
+  if (deepgramPunctuate === undefined) {
+    errors.push("DEEPGRAM_PUNCTUATE must be true or false.");
+  }
+  if (deepgramSmartFormat === undefined) {
+    errors.push("DEEPGRAM_SMART_FORMAT must be true or false.");
+  }
+  if (deepgramEncoding === undefined) {
+    errors.push("DEEPGRAM_ENCODING must be linear16.");
+  }
+  if (deepgramSampleRateHz === undefined) {
+    errors.push("DEEPGRAM_SAMPLE_RATE_HZ must be a positive integer.");
+  }
+  if (deepgramChannels === undefined) {
+    errors.push("DEEPGRAM_CHANNELS must be a positive integer.");
+  }
+  if (deepgramTimeoutMs === undefined) {
+    errors.push("DEEPGRAM_TIMEOUT_MS must be a positive integer.");
+  }
   if (serviceName.trim().length === 0) {
     errors.push("serviceName is required.");
   }
@@ -148,7 +282,17 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     telemetryEnabled === undefined ||
     tracesSampleRate === undefined ||
     otlpEndpoint === undefined ||
-    contentLoggingAllowed === undefined
+    contentLoggingAllowed === undefined ||
+    deepgramEndpoint === undefined ||
+    deepgramModel === undefined ||
+    deepgramLanguage === undefined ||
+    deepgramInterimResults === undefined ||
+    deepgramPunctuate === undefined ||
+    deepgramSmartFormat === undefined ||
+    deepgramEncoding === undefined ||
+    deepgramSampleRateHz === undefined ||
+    deepgramChannels === undefined ||
+    deepgramTimeoutMs === undefined
   ) {
     return { ok: false, errors };
   }
@@ -167,7 +311,25 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
         contentLoggingAllowed,
       },
       providers: {
-        stt: "deepgram",
+        stt: {
+          provider: "deepgram",
+          deepgram: createDeepgramConfig({
+            apiKey:
+              deepgramApiKey !== undefined && deepgramApiKey.length > 0
+                ? deepgramApiKey
+                : undefined,
+            endpoint: deepgramEndpoint,
+            model: deepgramModel,
+            language: deepgramLanguage,
+            interimResults: deepgramInterimResults,
+            punctuate: deepgramPunctuate,
+            smartFormat: deepgramSmartFormat,
+            encoding: deepgramEncoding,
+            sampleRateHz: deepgramSampleRateHz,
+            channels: deepgramChannels,
+            timeoutMs: deepgramTimeoutMs,
+          }),
+        },
         llm: "openai",
         embeddings: "openai",
       },

@@ -13,7 +13,21 @@ describe("parseConfig", () => {
       contentLoggingAllowed: false,
     });
     expect(result.config?.providers).toEqual({
-      stt: "deepgram",
+      stt: {
+        provider: "deepgram",
+        deepgram: {
+          endpoint: "wss://api.deepgram.com/v1/listen",
+          model: "nova-3",
+          language: "en",
+          interimResults: true,
+          punctuate: true,
+          smartFormat: true,
+          encoding: "linear16",
+          sampleRateHz: 16000,
+          channels: 1,
+          timeoutMs: 5000,
+        },
+      },
       llm: "openai",
       embeddings: "openai",
     });
@@ -48,6 +62,75 @@ describe("parseConfig", () => {
       tracesSampleRate: 0.25,
       contentLoggingAllowed: false,
     });
+  });
+
+  it("accepts explicit Deepgram STT settings", () => {
+    const result = parseConfig(
+      {
+        DEEPGRAM_API_KEY: "dg_test_secret",
+        DEEPGRAM_ENDPOINT: "wss://stt.example.com/v1/listen",
+        DEEPGRAM_MODEL: "nova-2-meeting",
+        DEEPGRAM_LANGUAGE: "en-US",
+        DEEPGRAM_INTERIM_RESULTS: "false",
+        DEEPGRAM_PUNCTUATE: "false",
+        DEEPGRAM_SMART_FORMAT: "false",
+        DEEPGRAM_ENCODING: "linear16",
+        DEEPGRAM_SAMPLE_RATE_HZ: "48000",
+        DEEPGRAM_CHANNELS: "2",
+        DEEPGRAM_TIMEOUT_MS: "10000",
+      },
+      "realtime",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.config?.providers.stt.deepgram).toEqual({
+      apiKey: "dg_test_secret",
+      endpoint: "wss://stt.example.com/v1/listen",
+      model: "nova-2-meeting",
+      language: "en-US",
+      interimResults: false,
+      punctuate: false,
+      smartFormat: false,
+      encoding: "linear16",
+      sampleRateHz: 48000,
+      channels: 2,
+      timeoutMs: 10000,
+    });
+  });
+
+  it("requires a Deepgram API key in production without echoing the key", () => {
+    const missingKey = parseConfig({ DOKEZA_ENV: "production" }, "realtime");
+
+    expect(missingKey.ok).toBe(false);
+    expect(missingKey.errors).toContain("DEEPGRAM_API_KEY is required in production.");
+
+    const invalidEndpoint = parseConfig(
+      {
+        DOKEZA_ENV: "production",
+        DEEPGRAM_API_KEY: "dg_real_secret",
+        DEEPGRAM_ENDPOINT: "not-a-url",
+      },
+      "realtime",
+    );
+
+    expect(invalidEndpoint.ok).toBe(false);
+    expect(invalidEndpoint.errors.join(" ")).not.toContain("dg_real_secret");
+    expect(invalidEndpoint.errors.join(" ")).not.toContain("not-a-url");
+  });
+
+  it("requires Deepgram WebSocket TLS in production", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_ENV: "production",
+        DEEPGRAM_API_KEY: "dg_real_secret",
+        DEEPGRAM_ENDPOINT: "ws://stt.example.com/v1/listen",
+      },
+      "realtime",
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("DEEPGRAM_ENDPOINT must use wss in production.");
+    expect(result.errors.join(" ")).not.toContain("dg_real_secret");
   });
 
   it("rejects unsafe telemetry configuration without echoing values", () => {

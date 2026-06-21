@@ -73,6 +73,15 @@ flowchart LR
 
 For the initial implementation, the desktop does not stream audio directly to STT providers and does not call LLM or embedding providers directly. Cloud AI provider access is mediated by Dokeza backend services so workspace policy, credential isolation, telemetry, and retention controls remain enforceable server-side.
 
+Initial cloud STT implementation:
+
+- The realtime service uses a Deepgram STT adapter for cloud speech-to-text.
+- Deepgram credentials are read from server-side configuration only and are never sent to desktop or browser clients.
+- The adapter sends raw audio chunks or streams from the realtime service to Deepgram over WebSocket TLS.
+- Raw audio is transient in process memory for provider submission and is not written to logs, telemetry, or durable storage by this adapter.
+- Adapter telemetry includes provider metadata, chunk timing, stream name, event counts, and failure categories only. It must not include transcript text, raw audio bytes, prompts, documents, suggestions, or API keys.
+- Automated tests use a fake provider transport and must not call the live Deepgram service.
+
 ## 4. Data Flow Table
 
 | Flow | Data | Sensitive Content | Protection | Opt-Out / Policy |
