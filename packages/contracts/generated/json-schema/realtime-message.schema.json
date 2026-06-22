@@ -1250,6 +1250,10 @@
                 {
                   "const": "session_not_resumable",
                   "type": "string"
+                },
+                {
+                  "const": "feature_unavailable",
+                  "type": "string"
                 }
               ]
             },

@@ -14,18 +14,9 @@ export interface RealtimeSession {
   startedAt: string;
 }
 
-export interface SessionManagerOptions {
-  maxSessionsPerConnection?: number;
-}
-
 export class SessionManager {
   private readonly sessions = new Map<string, RealtimeSession>();
   private readonly connectionToSession = new Map<string, string>();
-  private readonly maxSessionsPerConnection: number;
-
-  constructor(options: SessionManagerOptions = {}) {
-    this.maxSessionsPerConnection = options.maxSessionsPerConnection ?? 1;
-  }
 
   authenticate(
     connectionId: string,

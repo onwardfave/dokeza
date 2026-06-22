@@ -199,6 +199,24 @@ describe("createRealtimeServer", () => {
     return ws;
   }
 
+  async function authenticate(ws: WebSocket): Promise<string> {
+    const authResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+
+    expect(authResponse.type).toBe("auth.accepted");
+    return authResponse.session_id as string;
+  }
+
   it("accepts a valid auth.hello and returns auth.accepted", async () => {
     const { port } = await startServer();
     const ws = await connect(port);
@@ -347,6 +365,125 @@ describe("createRealtimeServer", () => {
 
     expect(closedResponse.type).toBe("session.closed");
     expect((closedResponse.payload as Record<string, unknown>).reason).toBe("user_stopped");
+  });
+
+  it.each([
+    { endReason: "app_shutdown", closedReason: "user_stopped" },
+    { endReason: "policy_stopped", closedReason: "policy_violation" },
+  ])("maps $endReason session.end to $closedReason session.closed", async (testCase) => {
+    const { port } = await startServer();
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const closedResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.end",
+      seq: 2,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        reason: testCase.endReason,
+        last_client_seq: 2,
+      },
+    });
+
+    expect(closedResponse.type).toBe("session.closed");
+    expect((closedResponse.payload as Record<string, unknown>).reason).toBe(testCase.closedReason);
+  });
+
+  it("returns an explicit error for unsupported resume requests", async () => {
+    const { port } = await startServer();
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const response = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "resume.request",
+      seq: 2,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        previous_connection_id: "conn_previous",
+        last_client_seq: 1,
+        last_server_seq: 1,
+      },
+    });
+
+    expect(response.type).toBe("error");
+    expect(response.payload).toMatchObject({
+      code: "session_not_resumable",
+      recoverable: false,
+    });
+  });
+
+  it("returns an explicit error for unavailable suggestion requests", async () => {
+    const { port } = await startServer();
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const response = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "suggestion.request",
+      seq: 2,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        request_id: "sreq_test",
+        kind: "answer_question",
+        user_prompt: "content must not appear in telemetry",
+        include_sources: true,
+      },
+    });
+
+    expect(response.type).toBe("error");
+    expect(response.payload).toMatchObject({
+      code: "feature_unavailable",
+      recoverable: true,
+    });
+    expect(JSON.stringify(response)).not.toContain("content must not appear in telemetry");
+
+    const closedResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.end",
+      seq: 3,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        reason: "user_stopped",
+        last_client_seq: 3,
+      },
+    });
+
+    expect(closedResponse.type).toBe("session.closed");
+  });
+
+  it("returns an explicit error for unprocessed context updates", async () => {
+    const { port } = await startServer();
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const response = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "context.update",
+      seq: 2,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        source: "active_window",
+        title: "Sensitive Window Title",
+        app: "Chrome",
+        text: "sensitive context text",
+        captured_at: new Date().toISOString(),
+      },
+    });
+
+    expect(response.type).toBe("error");
+    expect(response.payload).toMatchObject({
+      code: "feature_unavailable",
+      recoverable: true,
+    });
+    expect(JSON.stringify(response)).not.toContain("Sensitive Window Title");
+    expect(JSON.stringify(response)).not.toContain("sensitive context text");
   });
 
   it("rejects post-auth messages whose session_id does not match the connection session", async () => {

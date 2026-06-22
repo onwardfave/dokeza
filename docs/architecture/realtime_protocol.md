@@ -144,6 +144,8 @@ The backend must persist the gap in the session timeline so downstream transcrip
 
 ### 5.5 `context.update`
 
+Context updates are accepted by the protocol for forward compatibility. Until screen context processing is enabled, the server returns a recoverable `feature_unavailable` error and must not log the context title or text.
+
 ```json
 {
   "type": "context.update",
@@ -158,6 +160,8 @@ The backend must persist the gap in the session timeline so downstream transcrip
 ```
 
 ### 5.6 `suggestion.request`
+
+Suggestion requests are accepted by the protocol for forward compatibility. Until Milestone 2 suggestion routing is available, the server returns a recoverable `feature_unavailable` error instead of emitting placeholder suggestion content.
 
 ```json
 {
@@ -182,6 +186,18 @@ The backend must persist the gap in the session timeline so downstream transcrip
   }
 }
 ```
+
+Valid client end reasons:
+
+- `user_stopped`: the user manually stopped the session.
+- `app_shutdown`: the desktop app is shutting down gracefully.
+- `policy_stopped`: workspace or admin policy stopped the session.
+
+The server maps these client reasons to `session.closed` reasons:
+
+- `user_stopped` -> `user_stopped`
+- `app_shutdown` -> `user_stopped`
+- `policy_stopped` -> `policy_violation`
 
 ## 6. Server-to-Client Messages
 
@@ -313,6 +329,7 @@ Initial server error codes include:
 - `stt_provider_timeout`
 - `transcript_persistence_failed`
 - `session_not_resumable`
+- `feature_unavailable`
 
 ### 6.8 `session.closed`
 
@@ -325,6 +342,13 @@ Initial server error codes include:
   }
 }
 ```
+
+Valid closed reasons:
+
+- `user_stopped`
+- `server_closed`
+- `policy_violation`
+- `unrecoverable_error`
 
 ## 7. Reconnection
 
@@ -352,7 +376,7 @@ The server shall:
 - Validate the session token and workspace access.
 - Resume the existing session if still active.
 - Replay missed non-audio server messages where available.
-- Return a clear unrecoverable error if the session cannot be resumed.
+- Return a clear unrecoverable `session_not_resumable` error if the session cannot be resumed or resume support is not enabled in the current milestone.
 
 ## 8. Backpressure
 

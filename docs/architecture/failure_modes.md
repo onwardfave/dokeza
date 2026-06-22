@@ -46,6 +46,7 @@ FULL
 | LLM provider | Invalid structured output | Schema validation failure | Missing output | Retry with repair prompt; log validation error | No data loss |
 | Retrieval | Timeout | Service timeout | Generic answer or no grounded answer | Fall back to transcript-only; label as not source-grounded | No data loss |
 | Retrieval | Authz failure | Permission check failure | No source answer | Block retrieval; show safe error | No data loss |
+| Milestone-gated realtime feature | Feature unavailable | `feature_unavailable` realtime error | Context or suggestions unavailable | Keep session active; return explicit recoverable error without placeholder content | No data loss |
 | Screen capture | Permission revoked | OS permission event | No screen context | Continue without screen context; hide screen-dependent suggestions | Screen context unavailable |
 | Browser extension | Disconnected | Extension heartbeat missing | No structured browser context | Fall back to active window or OCR if allowed | Browser context unavailable |
 | Local cache | Disk full | Write error | Cannot persist local state | Warn user; continue in memory where possible | Possible local state loss |

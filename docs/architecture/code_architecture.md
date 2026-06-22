@@ -8,18 +8,16 @@ This document defines the intended source-code architecture for Dokeza. It compl
 
 Use a monorepo during early development to keep contracts, shared types, desktop, backend, and tests aligned.
 
-Recommended top-level layout:
+Current implemented top-level layout:
 
 ```text
 apps/
   desktop/              # Tauri desktop app
-  web/                  # Web workspace and admin console
 services/
   api/                  # REST API gateway and core backend
   realtime/             # WebSocket session service
   ai-orchestrator/      # Prompt routing, model gateway, response validation
   knowledge/            # Ingestion, chunking, embeddings, retrieval
-  workflow/             # Post-call jobs and integration writeback
 packages/
   contracts/            # Shared API and realtime schemas
   authz/                # Workspace authorization helpers
@@ -28,16 +26,28 @@ packages/
   test-fixtures/        # Shared fixtures for transcripts, docs, sessions
 infra/
   terraform/            # Cloud infrastructure
-  docker/               # Local and CI images
-  k8s/                  # Production manifests or Helm charts if adopted
-tests/
-  e2e/                  # End-to-end tests
-  reliability/          # Fault, property, and workload tests
+  db/                   # Database migrations and RLS tests
+  observability/        # Local observability stack
 docs/
   architecture/
   devops/
   security/
   srs/
+```
+
+Planned layout additions:
+
+```text
+apps/
+  web/                  # Web workspace and admin console, Milestone 3+
+services/
+  workflow/             # Post-call jobs and integration writeback, Milestone 4+
+infra/
+  docker/               # Local and CI images when service packaging needs dedicated images
+  k8s/                  # Production manifests or Helm charts if adopted
+tests/
+  e2e/                  # Cross-service end-to-end tests
+  reliability/          # Fault, property, and workload tests
 ```
 
 ## 3. Language and Runtime Baseline

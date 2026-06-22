@@ -83,6 +83,20 @@ describe("realtime contracts", () => {
     ).toBe(true);
   });
 
+  it("accepts recoverable feature unavailable errors", () => {
+    expect(
+      validateRealtimeJsonMessage({
+        ...base,
+        type: "error",
+        payload: {
+          code: "feature_unavailable",
+          message: "Feature is not available in this milestone.",
+          recoverable: true,
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("reports schema errors without exposing message payload content", () => {
     const errors = realtimeJsonMessageErrors({
       ...base,

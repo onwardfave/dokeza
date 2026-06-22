@@ -1,6 +1,10 @@
 import { createServer, type Server as HttpServer } from "node:http";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
-import { REALTIME_PROTOCOL_VERSION, validateRealtimeJsonMessage } from "@dokeza/contracts";
+import {
+  REALTIME_PROTOCOL_VERSION,
+  validateRealtimeJsonMessage,
+  type RealtimeJsonMessage,
+} from "@dokeza/contracts";
 import type { Actor } from "@dokeza/authz";
 import { RealtimeFrameAssembler } from "./frame-assembler.js";
 import { SessionManager } from "./session-manager.js";
@@ -45,6 +49,20 @@ function rawDataToBuffer(data: RawData): Buffer {
   if (Buffer.isBuffer(data)) return data;
   if (data instanceof ArrayBuffer) return Buffer.from(data);
   return Buffer.concat(data);
+}
+
+type SessionEndReason = Extract<RealtimeJsonMessage, { type: "session.end" }>["payload"]["reason"];
+type SessionClosedReason = Extract<
+  RealtimeJsonMessage,
+  { type: "session.closed" }
+>["payload"]["reason"];
+
+function mapEndReasonToClosedReason(reason: SessionEndReason): SessionClosedReason {
+  if (reason === "policy_stopped") {
+    return "policy_violation";
+  }
+
+  return "user_stopped";
 }
 
 export function createRealtimeServer(options: RealtimeServerOptions): RealtimeServerHandle {
@@ -427,6 +445,36 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         }
       }
 
+      if (frameResult.type === "json" && frameResult.message.type === "resume.request") {
+        sendError(
+          "session_not_resumable",
+          "Session resume is not available for this session.",
+          false,
+          session.sessionId,
+        );
+        return;
+      }
+
+      if (frameResult.type === "json" && frameResult.message.type === "suggestion.request") {
+        sendError(
+          "feature_unavailable",
+          "Live suggestions are not available in this milestone.",
+          true,
+          session.sessionId,
+        );
+        return;
+      }
+
+      if (frameResult.type === "json" && frameResult.message.type === "context.update") {
+        sendError(
+          "feature_unavailable",
+          "Screen context updates are not processed in this milestone.",
+          true,
+          session.sessionId,
+        );
+        return;
+      }
+
       // Handle session.end
       if (
         frameResult.type === "json" &&
@@ -437,6 +485,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         await closeSttSession("session.end").catch(() => undefined);
         sessionManager.endSession(session.sessionId, frameResult.message.payload.reason);
         const serverSeq = sessionManager.nextServerSeq(session.sessionId);
+        const closedReason = mapEndReasonToClosedReason(frameResult.message.payload.reason);
         sendJson({
           protocol_version: REALTIME_PROTOCOL_VERSION,
           type: "session.closed",
@@ -444,7 +493,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           session_id: session.sessionId,
           sent_at: new Date().toISOString(),
           payload: {
-            reason: frameResult.message.payload.reason,
+            reason: closedReason,
             final_server_seq: serverSeq ?? 0,
           },
         });
