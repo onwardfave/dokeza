@@ -12,17 +12,17 @@
   },
   "dependencies": {
     "@dokeza/contracts": "workspace:*",
-    "@tauri-apps/api": "^2.2.0",
+    "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-global-shortcut": "2.3.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.2.0",
+    "@tauri-apps/cli": "^2.11.3",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "@vitejs/plugin-react": "^6.0.2",
     "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   }
 }
