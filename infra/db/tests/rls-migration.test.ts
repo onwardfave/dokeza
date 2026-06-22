@@ -11,6 +11,7 @@ const highRiskTables = [
   "workspace_policies",
   "meeting_sessions",
   "transcript_segments",
+  "transcript_gaps",
   "suggestions",
   "documents",
   "document_chunks",

@@ -13,6 +13,10 @@ import {
   type SttSessionCloseReason,
   type SttTranscriptEvent,
 } from "./stt-adapter.js";
+import {
+  InMemoryTranscriptTimelineSink,
+  type TranscriptTimelineSink,
+} from "./transcript-timeline.js";
 import { TranscriptProcessor } from "./transcript-processor.js";
 
 export interface TokenValidator {
@@ -22,6 +26,7 @@ export interface TokenValidator {
 export interface RealtimeServerOptions {
   tokenValidator: TokenValidator;
   sttAdapter?: SttAdapter;
+  transcriptTimelineSink?: TranscriptTimelineSink;
 }
 
 export interface RealtimeServerHandle {
@@ -40,6 +45,8 @@ function rawDataToBuffer(data: RawData): Buffer {
 export function createRealtimeServer(options: RealtimeServerOptions): RealtimeServerHandle {
   const sessionManager = new SessionManager();
   const sttAdapter = options.sttAdapter ?? new DeterministicSttAdapter();
+  const transcriptTimelineSink =
+    options.transcriptTimelineSink ?? new InMemoryTranscriptTimelineSink();
   const httpServer = createServer((_req, res) => {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not_found" }));
@@ -96,7 +103,39 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       });
     };
 
-    const emitTranscriptEvents = (sessionId: string, events: SttTranscriptEvent[]) => {
+    const sendTranscriptPersistenceError = (sessionId: string) => {
+      const session = sessionManager.getSession(sessionId);
+      if (session === undefined || session.state !== "active") {
+        return;
+      }
+
+      sendError("transcript_persistence_failed", "Transcript persistence failed.", true, sessionId);
+    };
+
+    const persistTranscriptEvent = async (
+      sessionId: string,
+      workspaceId: string,
+      event: SttTranscriptEvent,
+    ): Promise<void> => {
+      if (event.type !== "transcript.final") {
+        return;
+      }
+
+      try {
+        await transcriptTimelineSink.recordTranscriptEvent({
+          workspaceId,
+          sessionId,
+          event,
+        });
+      } catch {
+        sendTranscriptPersistenceError(sessionId);
+      }
+    };
+
+    const emitTranscriptEvents = async (
+      sessionId: string,
+      events: SttTranscriptEvent[],
+    ): Promise<void> => {
       const session = sessionManager.getSession(sessionId);
       if (session === undefined || session.state !== "active") {
         return;
@@ -106,6 +145,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         const processed = transcriptProcessor?.process(event);
         if (processed?.action === "emit") {
           sendTranscript(sessionId, processed.event);
+          await persistTranscriptEvent(sessionId, session.workspaceId, processed.event);
         }
       }
     };
@@ -123,7 +163,9 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         ? sttAdapter.startSession({
             sessionId,
             workspaceId,
-            emitTranscriptEvents: (events) => emitTranscriptEvents(sessionId, events),
+            emitTranscriptEvents: (events) => {
+              void emitTranscriptEvents(sessionId, events);
+            },
             emitError: (error) => {
               const session = sessionManager.getSession(sessionId);
               if (session === undefined || session.state !== "active") {
@@ -200,7 +242,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
               return;
             }
 
-            emitTranscriptEvents(session.sessionId, sttResult.events);
+            await emitTranscriptEvents(session.sessionId, sttResult.events);
           } catch {
             sendError(
               "stt_provider_timeout",
@@ -341,6 +383,22 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       if (frameResult.type === "error") {
         sendError(frameResult.code, frameResult.code, frameResult.recoverable, session.sessionId);
         return;
+      }
+
+      if (frameResult.type === "audio.gap") {
+        try {
+          await transcriptTimelineSink.recordGap({
+            workspaceId: session.workspaceId,
+            sessionId: session.sessionId,
+            stream: frameResult.gap.stream,
+            startMs: frameResult.gap.start_ms,
+            endMs: frameResult.gap.end_ms,
+            droppedChunks: frameResult.gap.dropped_chunks,
+            reason: frameResult.gap.reason,
+          });
+        } catch {
+          sendTranscriptPersistenceError(session.sessionId);
+        }
       }
 
       // Handle session.end

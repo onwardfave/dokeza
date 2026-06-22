@@ -301,6 +301,19 @@ The backend must persist the gap in the session timeline so downstream transcrip
 }
 ```
 
+Initial server error codes include:
+
+- `auth_failed`
+- `invalid_message`
+- `missing_binary_payload`
+- `unexpected_binary_payload`
+- `audio_byte_length_mismatch`
+- `audio_chunk_out_of_order`
+- `unsupported_audio_format`
+- `stt_provider_timeout`
+- `transcript_persistence_failed`
+- `session_not_resumable`
+
 ### 6.8 `session.closed`
 
 ```json

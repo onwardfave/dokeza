@@ -69,6 +69,20 @@ describe("realtime contracts", () => {
     ).toBe(true);
   });
 
+  it("accepts recoverable transcript persistence failures", () => {
+    expect(
+      validateRealtimeJsonMessage({
+        ...base,
+        type: "error",
+        payload: {
+          code: "transcript_persistence_failed",
+          message: "Transcript persistence failed.",
+          recoverable: true,
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("reports schema errors without exposing message payload content", () => {
     const errors = realtimeJsonMessageErrors({
       ...base,

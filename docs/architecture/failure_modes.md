@@ -51,6 +51,7 @@ FULL
 | Local cache | Disk full | Write error | Cannot persist local state | Warn user; continue in memory where possible | Possible local state loss |
 | Crash diagnostics | Local report write fails | Filesystem write error in panic hook or diagnostics probe | Local crash report may be unavailable | Do not panic recursively; continue default panic handling; return a safe diagnostics error for manual probes | Diagnostic metadata missing |
 | Backend DB | Write failure | DB error | Session persistence delayed | Queue writes if possible; show degraded service | Possible loss if queue unavailable |
+| Transcript timeline | Segment or gap write failure | Transcript sink error or `transcript_persistence_failed` realtime error | Live transcript continues, meeting memory may be incomplete | Keep realtime session open, emit recoverable error, retry or reconcile through durable storage path when available | Possible loss of persisted transcript/gap record |
 | Integration | OAuth expired | API 401 | Writeback fails | Prompt reconnect; keep draft | No generated content loss |
 | Integration | Rate limited | API 429 | Writeback delayed | Retry according to provider policy | No generated content loss |
 | Update manager | Update fails | Installer error | App remains old version | Keep previous version; report diagnostic | No data loss |

@@ -52,3 +52,15 @@ export type {
   TranscriptSegmentState,
   TranscriptSuppressionReason,
 } from "./transcript-processor.js";
+
+export { InMemoryTranscriptTimelineSink } from "./transcript-timeline.js";
+export type {
+  TranscriptGapRecord,
+  TranscriptGapRecordInput,
+  TranscriptSegmentRecord,
+  TranscriptTimelineSink,
+  TranscriptTimelineSnapshot,
+  TranscriptTimelineWriteResult,
+  TranscriptTimelineWriteStatus,
+  TranscriptWriteInput,
+} from "./transcript-timeline.js";

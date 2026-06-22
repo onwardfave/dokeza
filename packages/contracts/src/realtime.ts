@@ -40,6 +40,7 @@ const ErrorCode = Type.Union([
   Type.Literal("audio_chunk_out_of_order"),
   Type.Literal("unsupported_audio_format"),
   Type.Literal("stt_provider_timeout"),
+  Type.Literal("transcript_persistence_failed"),
   Type.Literal("session_not_resumable"),
 ]);
 
