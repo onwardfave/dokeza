@@ -20,6 +20,7 @@ import type {
   TranscriptTimelineSink,
   TranscriptWriteInput,
 } from "./transcript-timeline.js";
+import type { TranscriptRetentionMode } from "./transcript-retention-policy.js";
 
 function createTestTokenValidator(): TokenValidator {
   return {
@@ -137,7 +138,11 @@ describe("createRealtimeServer", () => {
   });
 
   async function startServer(
-    options: { sttAdapter?: SttAdapter; transcriptTimelineSink?: TranscriptTimelineSink } = {},
+    options: {
+      sttAdapter?: SttAdapter;
+      transcriptTimelineSink?: TranscriptTimelineSink;
+      transcriptRetentionMode?: TranscriptRetentionMode;
+    } = {},
   ): Promise<{ port: number }> {
     const serverOptions: RealtimeServerOptions = {
       tokenValidator: createTestTokenValidator(),
@@ -147,6 +152,9 @@ describe("createRealtimeServer", () => {
     }
     if (options.transcriptTimelineSink !== undefined) {
       serverOptions.transcriptTimelineSink = options.transcriptTimelineSink;
+    }
+    if (options.transcriptRetentionMode !== undefined) {
+      serverOptions.transcriptRetentionMode = options.transcriptRetentionMode;
     }
 
     handle = createRealtimeServer(serverOptions);
@@ -211,6 +219,32 @@ describe("createRealtimeServer", () => {
     expect(response.type).toBe("auth.accepted");
     expect(response.protocol_version).toBe(REALTIME_PROTOCOL_VERSION);
     expect((response.payload as Record<string, unknown>).workspace_id).toBe("ws_test_1");
+    expect((response.payload as { policy: { retention_mode: string } }).policy.retention_mode).toBe(
+      "7_days",
+    );
+  });
+
+  it("advertises the configured transcript retention mode", async () => {
+    const { port } = await startServer({ transcriptRetentionMode: "live_only" });
+    const ws = await connect(port);
+
+    const response = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+
+    expect(response.type).toBe("auth.accepted");
+    expect((response.payload as { policy: { retention_mode: string } }).policy.retention_mode).toBe(
+      "live_only",
+    );
   });
 
   it("rejects an invalid token and closes the connection", async () => {
@@ -681,6 +715,81 @@ describe("createRealtimeServer", () => {
     expect(transcriptTimelineSink.transcriptWrites[0]?.event.payload.text).toBe("durable final");
   });
 
+  it.each<TranscriptRetentionMode>(["live_only", "local_only"])(
+    "streams final transcript events without cloud timeline persistence for %s",
+    async (transcriptRetentionMode) => {
+      const transcriptTimelineSink = createRecordingTranscriptSink();
+      const sttAdapter: SttAdapter = {
+        async transcribeChunk(input) {
+          return {
+            events: [
+              {
+                type: "transcript.final",
+                payload: {
+                  segment_id: "seg_no_storage",
+                  speaker: "user",
+                  text: "live final only",
+                  start_ms: input.meta.timestamp_ms,
+                  end_ms: input.meta.timestamp_ms + input.meta.duration_ms,
+                  confidence: 0.91,
+                },
+              },
+            ],
+            telemetry: [],
+          };
+        },
+      };
+
+      const { port } = await startServer({
+        sttAdapter,
+        transcriptTimelineSink,
+        transcriptRetentionMode,
+      });
+      const ws = await connect(port);
+
+      const authResponse = await sendAndReceive(ws, {
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "auth.hello",
+        seq: 1,
+        sent_at: new Date().toISOString(),
+        payload: {
+          token: "valid_token",
+          client_version: "0.1.0",
+          platform: "windows",
+          device_id: "dev_test_1",
+        },
+      });
+      const sessionId = authResponse.session_id as string;
+
+      ws.send(
+        JSON.stringify({
+          protocol_version: REALTIME_PROTOCOL_VERSION,
+          type: "audio.chunk_meta",
+          seq: 2,
+          session_id: sessionId,
+          sent_at: new Date().toISOString(),
+          payload: {
+            chunk_id: "aud_no_storage",
+            chunk_index: 0,
+            stream: "microphone",
+            format: "pcm_s16le",
+            sample_rate_hz: 16000,
+            channels: 1,
+            duration_ms: 100,
+            timestamp_ms: 250,
+            byte_length: 2,
+          },
+        }),
+      );
+
+      const transcript = receiveJson(ws, 500);
+      ws.send(Buffer.from([1, 2]), { binary: true });
+
+      expect((await transcript).type).toBe("transcript.final");
+      expect(transcriptTimelineSink.transcriptWrites).toEqual([]);
+    },
+  );
+
   it("does not persist partial transcript events", async () => {
     const transcriptTimelineSink = createRecordingTranscriptSink();
     const sttAdapter: SttAdapter = {
@@ -997,6 +1106,52 @@ describe("createRealtimeServer", () => {
       },
     ]);
   });
+
+  it.each<TranscriptRetentionMode>(["live_only", "local_only"])(
+    "skips audio gap persistence for %s retention",
+    async (transcriptRetentionMode) => {
+      const transcriptTimelineSink = createRecordingTranscriptSink();
+      const { port } = await startServer({
+        transcriptTimelineSink,
+        transcriptRetentionMode,
+      });
+      const ws = await connect(port);
+
+      const authResponse = await sendAndReceive(ws, {
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "auth.hello",
+        seq: 1,
+        sent_at: new Date().toISOString(),
+        payload: {
+          token: "valid_token",
+          client_version: "0.1.0",
+          platform: "windows",
+          device_id: "dev_test_1",
+        },
+      });
+      const sessionId = authResponse.session_id as string;
+
+      ws.send(
+        JSON.stringify({
+          protocol_version: REALTIME_PROTOCOL_VERSION,
+          type: "audio.gap",
+          seq: 2,
+          session_id: sessionId,
+          sent_at: new Date().toISOString(),
+          payload: {
+            stream: "microphone",
+            start_ms: 1200,
+            end_ms: 1800,
+            dropped_chunks: 6,
+            reason: "local_buffer_full",
+          },
+        }),
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(transcriptTimelineSink.gapWrites).toEqual([]);
+    },
+  );
 
   it("keeps the session open and emits a recoverable error when transcript persistence fails", async () => {
     const transcriptTimelineSink: TranscriptTimelineSink = {

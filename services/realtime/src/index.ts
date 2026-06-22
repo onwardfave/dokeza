@@ -64,3 +64,13 @@ export type {
   TranscriptTimelineWriteStatus,
   TranscriptWriteInput,
 } from "./transcript-timeline.js";
+
+export { evaluateTranscriptTimelinePersistence } from "./transcript-retention-policy.js";
+export type {
+  TranscriptRetentionMode,
+  TranscriptTimelinePersistenceAction,
+  TranscriptTimelinePersistenceDecision,
+  TranscriptTimelinePersistenceInput,
+  TranscriptTimelinePersistenceReason,
+  TranscriptTimelineRecordKind,
+} from "./transcript-retention-policy.js";

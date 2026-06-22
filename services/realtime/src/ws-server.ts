@@ -17,6 +17,10 @@ import {
   InMemoryTranscriptTimelineSink,
   type TranscriptTimelineSink,
 } from "./transcript-timeline.js";
+import {
+  evaluateTranscriptTimelinePersistence,
+  type TranscriptRetentionMode,
+} from "./transcript-retention-policy.js";
 import { TranscriptProcessor } from "./transcript-processor.js";
 
 export interface TokenValidator {
@@ -27,6 +31,7 @@ export interface RealtimeServerOptions {
   tokenValidator: TokenValidator;
   sttAdapter?: SttAdapter;
   transcriptTimelineSink?: TranscriptTimelineSink;
+  transcriptRetentionMode?: TranscriptRetentionMode;
 }
 
 export interface RealtimeServerHandle {
@@ -47,6 +52,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   const sttAdapter = options.sttAdapter ?? new DeterministicSttAdapter();
   const transcriptTimelineSink =
     options.transcriptTimelineSink ?? new InMemoryTranscriptTimelineSink();
+  const transcriptRetentionMode = options.transcriptRetentionMode ?? "7_days";
   const httpServer = createServer((_req, res) => {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not_found" }));
@@ -118,6 +124,16 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       event: SttTranscriptEvent,
     ): Promise<void> => {
       if (event.type !== "transcript.final") {
+        return;
+      }
+
+      const persistenceDecision = evaluateTranscriptTimelinePersistence({
+        retentionMode: transcriptRetentionMode,
+        timelineRecordKind: "segment",
+        workspaceId,
+        sessionId,
+      });
+      if (persistenceDecision.action === "skip") {
         return;
       }
 
@@ -324,7 +340,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
               screen_context_allowed: true,
               cloud_stt_allowed: true,
               direct_provider_stt_allowed: false,
-              retention_mode: "7_days",
+              retention_mode: transcriptRetentionMode,
               max_local_audio_buffer_ms: 300000,
             },
           },
@@ -386,6 +402,16 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       if (frameResult.type === "audio.gap") {
+        const persistenceDecision = evaluateTranscriptTimelinePersistence({
+          retentionMode: transcriptRetentionMode,
+          timelineRecordKind: "gap",
+          workspaceId: session.workspaceId,
+          sessionId: session.sessionId,
+        });
+        if (persistenceDecision.action === "skip") {
+          return;
+        }
+
         try {
           await transcriptTimelineSink.recordGap({
             workspaceId: session.workspaceId,
