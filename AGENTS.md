@@ -29,6 +29,7 @@ Use the project-local skills in `.codex/skills/` when relevant:
 - `dokeza-systematic-debugging` for root-cause investigation before fixing bugs.
 - `dokeza-verification-before-completion` for evidence-based completion claims.
 - `dokeza-provider-integration` for external provider adapters, credentials, telemetry, retries, and data-flow updates.
+- `dokeza-data-governance` for retention, deletion, no-storage, export, and sensitive-content persistence changes.
 
 ## Current Technology Decisions
 

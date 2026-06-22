@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dokeza Data Governance"
+  short_description: "Retention, deletion, and privacy guardrails"
+  default_prompt: "Use $dokeza-data-governance to implement Dokeza retention, deletion, and sensitive data persistence changes safely."

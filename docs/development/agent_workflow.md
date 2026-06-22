@@ -40,6 +40,7 @@ The repo includes project-local skills under `.codex/skills/`:
 - `dokeza-systematic-debugging`: use when encountering any bug, test failure, or unexpected behavior before proposing fixes.
 - `dokeza-verification-before-completion`: use before claiming work is complete; requires running verification commands and confirming output with evidence.
 - `dokeza-provider-integration`: use when adding or modifying external provider adapters, provider config, credentials, telemetry, retry behavior, or data-flow documentation.
+- `dokeza-data-governance`: use when changing retention, deletion, export, no-storage, local/cloud persistence, or sensitive-content telemetry behavior.
 
 These skills are intentionally Dokeza-specific. They reference this repo's SRS, architecture, security, testing, and DevOps docs.
 
