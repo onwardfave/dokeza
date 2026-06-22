@@ -13,17 +13,31 @@ export type { RealtimeServerOptions, RealtimeServerHandle, TokenValidator } from
 
 export { DeterministicSttAdapter } from "./stt-adapter.js";
 export type {
+  SessionScopedSttAdapter,
   SttAdapter,
   SttAdapterError,
   SttAdapterResult,
   SttChunkInput,
+  SttSession,
+  SttSessionCloseReason,
+  SttSessionStartInput,
   SttTranscriptEvent,
 } from "./stt-adapter.js";
 
-export { DeepgramSttAdapter, DeepgramWebSocketTransport } from "./deepgram-stt-adapter.js";
+export { createSttAdapterFromConfig } from "./stt-adapter-factory.js";
+
+export {
+  DeepgramSttAdapter,
+  DeepgramWebSocketStreamingTransport,
+  DeepgramWebSocketTransport,
+} from "./deepgram-stt-adapter.js";
 export type {
   DeepgramAlternative,
+  DeepgramControlMessage,
   DeepgramResultsMessage,
+  DeepgramStreamingConnection,
+  DeepgramStreamingTransport,
+  DeepgramStreamingTransportInput,
   DeepgramSttAdapterOptions,
   DeepgramSttProviderMessage,
   DeepgramSttTransport,

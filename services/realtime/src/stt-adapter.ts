@@ -36,6 +36,28 @@ export interface SttAdapter {
   transcribeChunk(input: SttChunkInput): Promise<SttAdapterResult>;
 }
 
+export type SttSessionCloseReason = "session.end" | "connection.closed" | "connection.error";
+
+export interface SttSessionStartInput {
+  sessionId: string;
+  workspaceId: string;
+  emitTranscriptEvents(events: SttTranscriptEvent[]): void;
+  emitError(error: SttAdapterError): void;
+}
+
+export interface SttSession {
+  transcribeChunk(input: SttChunkInput): Promise<SttAdapterResult>;
+  close(reason: SttSessionCloseReason): Promise<void>;
+}
+
+export interface SessionScopedSttAdapter extends SttAdapter {
+  startSession(input: SttSessionStartInput): Promise<SttSession>;
+}
+
+export function supportsSttSessions(adapter: SttAdapter): adapter is SessionScopedSttAdapter {
+  return "startSession" in adapter && typeof adapter.startSession === "function";
+}
+
 export interface DeterministicSttAdapterOptions {
   transcriptText?: string;
 }
@@ -93,5 +115,17 @@ export class DeterministicSttAdapter implements SttAdapter {
         }),
       ],
     };
+  }
+}
+
+export class ChunkSttSession implements SttSession {
+  constructor(private readonly adapter: SttAdapter) {}
+
+  async transcribeChunk(input: SttChunkInput): Promise<SttAdapterResult> {
+    return await this.adapter.transcribeChunk(input);
+  }
+
+  async close(): Promise<void> {
+    // Chunk-based adapters do not hold provider resources.
   }
 }

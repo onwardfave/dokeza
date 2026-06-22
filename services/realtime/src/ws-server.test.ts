@@ -8,7 +8,13 @@ import {
   type RealtimeServerOptions,
   type TokenValidator,
 } from "./ws-server.js";
-import type { SttAdapter } from "./stt-adapter.js";
+import type {
+  SttAdapter,
+  SttSession,
+  SttSessionCloseReason,
+  SttSessionStartInput,
+  SttTranscriptEvent,
+} from "./stt-adapter.js";
 
 function createTestTokenValidator(): TokenValidator {
   return {
@@ -836,6 +842,296 @@ describe("createRealtimeServer", () => {
       },
     });
 
+    expect(closedResponse.type).toBe("session.closed");
+  });
+
+  it("uses one STT session for multiple audio chunks", async () => {
+    const starts: SttSessionStartInput[] = [];
+    const chunks: string[] = [];
+    const closes: SttSessionCloseReason[] = [];
+    const sttAdapter: SttAdapter & {
+      startSession(input: SttSessionStartInput): Promise<SttSession>;
+    } = {
+      async startSession(input) {
+        starts.push(input);
+        return {
+          async transcribeChunk(chunkInput) {
+            chunks.push(chunkInput.meta.chunk_id);
+            return {
+              events: [
+                {
+                  type: "transcript.final",
+                  payload: {
+                    segment_id: `seg_${chunkInput.meta.chunk_id}`,
+                    speaker: "user",
+                    text: `chunk ${chunkInput.meta.chunk_index}`,
+                    start_ms: chunkInput.meta.timestamp_ms,
+                    end_ms: chunkInput.meta.timestamp_ms + chunkInput.meta.duration_ms,
+                    confidence: 0.91,
+                  },
+                },
+              ],
+              telemetry: [],
+            };
+          },
+          async close(reason) {
+            closes.push(reason);
+          },
+        };
+      },
+      async transcribeChunk() {
+        throw new Error("Expected server to use session-scoped STT");
+      },
+    };
+
+    const { port } = await startServer({ sttAdapter });
+    const ws = await connect(port);
+
+    const authResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+    const sessionId = authResponse.session_id as string;
+
+    for (const [index, chunkId] of ["aud_session_1", "aud_session_2"].entries()) {
+      ws.send(
+        JSON.stringify({
+          protocol_version: REALTIME_PROTOCOL_VERSION,
+          type: "audio.chunk_meta",
+          seq: index + 2,
+          session_id: sessionId,
+          sent_at: new Date().toISOString(),
+          payload: {
+            chunk_id: chunkId,
+            chunk_index: index,
+            stream: "microphone",
+            format: "pcm_s16le",
+            sample_rate_hz: 16000,
+            channels: 1,
+            duration_ms: 100,
+            timestamp_ms: index * 100,
+            byte_length: 2,
+          },
+        }),
+      );
+
+      const transcript = receiveJson(ws, 500);
+      ws.send(Buffer.from([1, 2]), { binary: true });
+      expect((await transcript).type).toBe("transcript.final");
+    }
+
+    expect(starts).toHaveLength(1);
+    expect(starts[0]?.sessionId).toBe(sessionId);
+    expect(starts[0]?.workspaceId).toBe("ws_test_1");
+    expect(chunks).toEqual(["aud_session_1", "aud_session_2"]);
+
+    const closedResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.end",
+      seq: 4,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        reason: "user_stopped",
+        last_client_seq: 4,
+      },
+    });
+
+    expect(closedResponse.type).toBe("session.closed");
+    expect(closes).toEqual(["session.end"]);
+  });
+
+  it("emits asynchronous STT session transcript callbacks through the processor", async () => {
+    let callbacks: SttSessionStartInput | undefined;
+    const sttAdapter: SttAdapter & {
+      startSession(input: SttSessionStartInput): Promise<SttSession>;
+    } = {
+      async startSession(input) {
+        callbacks = input;
+        return {
+          async transcribeChunk() {
+            return { events: [], telemetry: [] };
+          },
+          async close() {},
+        };
+      },
+      async transcribeChunk() {
+        throw new Error("Expected server to use session-scoped STT");
+      },
+    };
+
+    const { port } = await startServer({ sttAdapter });
+    const ws = await connect(port);
+
+    const authResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+    const sessionId = authResponse.session_id as string;
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "audio.chunk_meta",
+        seq: 2,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          chunk_id: "aud_async",
+          chunk_index: 0,
+          stream: "microphone",
+          format: "pcm_s16le",
+          sample_rate_hz: 16000,
+          channels: 1,
+          duration_ms: 100,
+          timestamp_ms: 0,
+          byte_length: 2,
+        },
+      }),
+    );
+    ws.send(Buffer.from([1, 2]), { binary: true });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(callbacks).toBeDefined();
+    const transcriptEvent: SttTranscriptEvent = {
+      type: "transcript.final",
+      payload: {
+        segment_id: "seg_async",
+        speaker: "user",
+        text: "async final",
+        start_ms: 0,
+        end_ms: 100,
+        confidence: 0.91,
+      },
+    };
+
+    const transcript = receiveJson(ws, 500);
+    callbacks?.emitTranscriptEvents([transcriptEvent]);
+    const response = await transcript;
+
+    expect(response.type).toBe("transcript.final");
+    expect((response.payload as Record<string, unknown>).text).toBe("async final");
+
+    const closedResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.end",
+      seq: 3,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        reason: "user_stopped",
+        last_client_seq: 3,
+      },
+    });
+    expect(closedResponse.type).toBe("session.closed");
+
+    callbacks?.emitTranscriptEvents([
+      {
+        ...transcriptEvent,
+        payload: { ...transcriptEvent.payload, segment_id: "seg_after_close" },
+      },
+    ]);
+    await expect(receiveJson(ws, 200)).rejects.toThrow("Timeout waiting for response");
+  });
+
+  it("emits recoverable errors from asynchronous STT session callbacks", async () => {
+    let callbacks: SttSessionStartInput | undefined;
+    const sttAdapter: SttAdapter & {
+      startSession(input: SttSessionStartInput): Promise<SttSession>;
+    } = {
+      async startSession(input) {
+        callbacks = input;
+        return {
+          async transcribeChunk() {
+            return { events: [], telemetry: [] };
+          },
+          async close() {},
+        };
+      },
+      async transcribeChunk() {
+        throw new Error("Expected server to use session-scoped STT");
+      },
+    };
+
+    const { port } = await startServer({ sttAdapter });
+    const ws = await connect(port);
+
+    const authResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+    const sessionId = authResponse.session_id as string;
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "audio.chunk_meta",
+        seq: 2,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          chunk_id: "aud_async_error",
+          chunk_index: 0,
+          stream: "microphone",
+          format: "pcm_s16le",
+          sample_rate_hz: 16000,
+          channels: 1,
+          duration_ms: 100,
+          timestamp_ms: 0,
+          byte_length: 2,
+        },
+      }),
+    );
+    ws.send(Buffer.from([1, 2]), { binary: true });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const errorMessage = receiveJson(ws, 500);
+    callbacks?.emitError({
+      code: "stt_provider_timeout",
+      message: "Transcription provider timed out.",
+      recoverable: true,
+      retry_after_ms: 2000,
+    });
+
+    const response = await errorMessage;
+    expect(response.type).toBe("error");
+    expect((response.payload as Record<string, unknown>).code).toBe("stt_provider_timeout");
+
+    const closedResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.end",
+      seq: 3,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        reason: "user_stopped",
+        last_client_seq: 3,
+      },
+    });
     expect(closedResponse.type).toBe("session.closed");
   });
 

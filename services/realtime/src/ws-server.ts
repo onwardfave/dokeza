@@ -5,8 +5,12 @@ import type { Actor } from "@dokeza/authz";
 import { RealtimeFrameAssembler } from "./frame-assembler.js";
 import { SessionManager } from "./session-manager.js";
 import {
+  ChunkSttSession,
   DeterministicSttAdapter,
+  supportsSttSessions,
   type SttAdapter,
+  type SttSession,
+  type SttSessionCloseReason,
   type SttTranscriptEvent,
 } from "./stt-adapter.js";
 import { TranscriptProcessor } from "./transcript-processor.js";
@@ -47,6 +51,8 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     const connectionId = `conn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const assembler = new RealtimeFrameAssembler();
     let transcriptProcessor: TranscriptProcessor | undefined;
+    let sttSessionPromise: Promise<SttSession> | undefined;
+    let sttSession: SttSession | undefined;
     let authenticated = false;
 
     const sendJson = (message: Record<string, unknown>) => {
@@ -90,6 +96,65 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       });
     };
 
+    const emitTranscriptEvents = (sessionId: string, events: SttTranscriptEvent[]) => {
+      const session = sessionManager.getSession(sessionId);
+      if (session === undefined || session.state !== "active") {
+        return;
+      }
+
+      for (const event of events) {
+        const processed = transcriptProcessor?.process(event);
+        if (processed?.action === "emit") {
+          sendTranscript(sessionId, processed.event);
+        }
+      }
+    };
+
+    const getSttSession = (sessionId: string, workspaceId: string): Promise<SttSession> => {
+      if (sttSession !== undefined) {
+        return Promise.resolve(sttSession);
+      }
+
+      if (sttSessionPromise !== undefined) {
+        return sttSessionPromise;
+      }
+
+      sttSessionPromise = supportsSttSessions(sttAdapter)
+        ? sttAdapter.startSession({
+            sessionId,
+            workspaceId,
+            emitTranscriptEvents: (events) => emitTranscriptEvents(sessionId, events),
+            emitError: (error) => {
+              const session = sessionManager.getSession(sessionId);
+              if (session === undefined || session.state !== "active") {
+                return;
+              }
+              sendError(
+                error.code,
+                error.message,
+                error.recoverable,
+                sessionId,
+                error.retry_after_ms,
+              );
+            },
+          })
+        : Promise.resolve(new ChunkSttSession(sttAdapter));
+
+      sttSessionPromise = sttSessionPromise.then((createdSession) => {
+        sttSession = createdSession;
+        return createdSession;
+      });
+
+      return sttSessionPromise;
+    };
+
+    const closeSttSession = async (reason: SttSessionCloseReason): Promise<void> => {
+      const session = sttSession ?? (await sttSessionPromise?.catch(() => undefined));
+      if (session !== undefined) {
+        await session.close(reason);
+      }
+    };
+
     ws.on("message", async (data: RawData, isBinary: boolean) => {
       const buf = rawDataToBuffer(data);
 
@@ -116,7 +181,8 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           }
 
           try {
-            const sttResult = await sttAdapter.transcribeChunk({
+            const activeSttSession = await getSttSession(session.sessionId, session.workspaceId);
+            const sttResult = await activeSttSession.transcribeChunk({
               sessionId: session.sessionId,
               workspaceId: session.workspaceId,
               meta: result.meta,
@@ -134,12 +200,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
               return;
             }
 
-            for (const event of sttResult.events) {
-              const processed = transcriptProcessor?.process(event);
-              if (processed?.action === "emit") {
-                sendTranscript(session.sessionId, processed.event);
-              }
-            }
+            emitTranscriptEvents(session.sessionId, sttResult.events);
           } catch {
             sendError(
               "stt_provider_timeout",
@@ -289,6 +350,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         session !== undefined
       ) {
         transcriptProcessor?.close();
+        await closeSttSession("session.end").catch(() => undefined);
         sessionManager.endSession(session.sessionId, frameResult.message.payload.reason);
         const serverSeq = sessionManager.nextServerSeq(session.sessionId);
         sendJson({
@@ -306,11 +368,15 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     });
 
     ws.on("close", () => {
-      sessionManager.removeConnection(connectionId);
+      void closeSttSession("connection.closed").finally(() => {
+        sessionManager.removeConnection(connectionId);
+      });
     });
 
     ws.on("error", () => {
-      sessionManager.removeConnection(connectionId);
+      void closeSttSession("connection.error").finally(() => {
+        sessionManager.removeConnection(connectionId);
+      });
     });
   });
 
