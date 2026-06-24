@@ -56,13 +56,20 @@ type SessionClosedReason = Extract<
   RealtimeJsonMessage,
   { type: "session.closed" }
 >["payload"]["reason"];
+type ErrorCode = Extract<RealtimeJsonMessage, { type: "error" }>["payload"]["code"];
 
 function mapEndReasonToClosedReason(reason: SessionEndReason): SessionClosedReason {
-  if (reason === "policy_stopped") {
-    return "policy_violation";
+  switch (reason) {
+    case "user_stopped":
+    case "app_shutdown":
+      return "user_stopped";
+    case "policy_stopped":
+      return "policy_violation";
+    default: {
+      const _exhaustive: never = reason;
+      return _exhaustive;
+    }
   }
-
-  return "user_stopped";
 }
 
 export function createRealtimeServer(options: RealtimeServerOptions): RealtimeServerHandle {
@@ -93,7 +100,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     };
 
     const sendError = (
-      code: string,
+      code: ErrorCode,
       errorMessage: string,
       recoverable: boolean,
       sessionId?: string,
