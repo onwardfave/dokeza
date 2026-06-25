@@ -10,6 +10,8 @@ export default defineConfig({
       "@dokeza/authz": resolve(repoRoot, "packages/authz/src/index.ts"),
       "@dokeza/config": resolve(repoRoot, "packages/config/src/index.ts"),
       "@dokeza/contracts": resolve(repoRoot, "packages/contracts/src/index.ts"),
+      "@dokeza/db": resolve(repoRoot, "packages/db/src/index.ts"),
+      "@dokeza/db/schema": resolve(repoRoot, "packages/db/src/schema.ts"),
       "@dokeza/telemetry": resolve(repoRoot, "packages/telemetry/src/index.ts"),
       "@dokeza/test-fixtures": resolve(repoRoot, "packages/test-fixtures/src/index.ts"),
     },
