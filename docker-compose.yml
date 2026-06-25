@@ -1,0 +1,31 @@
+# Dokeza local development stack.
+# Start with: docker compose up -d
+# Stop with:  docker compose down
+#
+# PostgreSQL is available at localhost:5432.
+# Observability services are defined in infra/observability/docker-compose.yml
+# and included here for a unified `docker compose up`.
+
+include:
+  - path: infra/observability/docker-compose.yml
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dokeza}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dokeza_local}
+      POSTGRES_DB: ${POSTGRES_DB:-dokeza}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dokeza}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
