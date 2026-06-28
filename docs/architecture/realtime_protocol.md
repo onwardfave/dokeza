@@ -327,6 +327,7 @@ Initial server error codes include:
 - `audio_chunk_out_of_order`
 - `unsupported_audio_format`
 - `stt_provider_timeout`
+- `session_persistence_failed`
 - `transcript_persistence_failed`
 - `session_not_resumable`
 - `feature_unavailable`

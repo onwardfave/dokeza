@@ -1244,6 +1244,10 @@
                   "type": "string"
                 },
                 {
+                  "const": "session_persistence_failed",
+                  "type": "string"
+                },
+                {
                   "const": "transcript_persistence_failed",
                   "type": "string"
                 },

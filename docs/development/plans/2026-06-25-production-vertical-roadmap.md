@@ -37,7 +37,7 @@ Implemented foundation:
 - Telemetry redaction package.
 - Database RLS baseline migration for workspace-owned tables.
 - Workspace-scoped database package with Drizzle schema and RLS transaction helper.
-- PostgreSQL session store and transcript timeline sink interfaces/implementations with component tests and typed config factory wiring.
+- PostgreSQL session store and transcript timeline sink interfaces/implementations with component tests, typed config factory wiring, and realtime session lifecycle persistence hooks.
 - Desktop Tauri capability probes for audio, cache, crash diagnostics, realtime, shortcuts, and update policy.
 - Local development PostgreSQL and pgvector stack.
 
@@ -45,7 +45,7 @@ Key gaps:
 
 - No real desktop audio capture pipeline.
 - No production auth or workspace provisioning.
-- PostgreSQL-backed session store is not yet used by the realtime server lifecycle.
+- PostgreSQL-backed session and timeline persistence still needs local PostgreSQL integration tests.
 - No reconnect/resume implementation.
 - No live transcript product UI.
 - No suggestion engine, prompt assembly, or LLM provider path.
@@ -124,7 +124,7 @@ Acceptance criteria:
 
 Goal: replace in-memory-only meeting timeline persistence with workspace-scoped PostgreSQL implementations.
 
-Status: partially implemented. `PgSessionStore` and `PgTranscriptTimelineSink` exist with component tests, and typed config can construct PostgreSQL-backed realtime persistence; realtime server lifecycle use of `SessionStore` and PostgreSQL integration tests remain.
+Status: partially implemented. `PgSessionStore` and `PgTranscriptTimelineSink` exist with component tests, typed config can construct PostgreSQL-backed realtime persistence, and the realtime server can persist session start/end lifecycle through `SessionStore`; PostgreSQL integration tests remain.
 
 Tasks:
 

@@ -83,6 +83,20 @@ describe("realtime contracts", () => {
     ).toBe(true);
   });
 
+  it("accepts recoverable session persistence failures", () => {
+    expect(
+      validateRealtimeJsonMessage({
+        ...base,
+        type: "error",
+        payload: {
+          code: "session_persistence_failed",
+          message: "Session persistence failed.",
+          recoverable: true,
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("accepts recoverable feature unavailable errors", () => {
     expect(
       validateRealtimeJsonMessage({

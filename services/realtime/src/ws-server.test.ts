@@ -21,6 +21,12 @@ import type {
   TranscriptWriteInput,
 } from "./transcript-timeline.js";
 import type { TranscriptRetentionMode } from "./transcript-retention-policy.js";
+import type {
+  CreateSessionInput,
+  EndSessionInput,
+  SessionStore,
+  UpdateSessionSeqInput,
+} from "./session-store.js";
 
 function createTestTokenValidator(): TokenValidator {
   return {
@@ -142,6 +148,7 @@ describe("createRealtimeServer", () => {
       sttAdapter?: SttAdapter;
       transcriptTimelineSink?: TranscriptTimelineSink;
       transcriptRetentionMode?: TranscriptRetentionMode;
+      sessionStore?: SessionStore;
     } = {},
   ): Promise<{ port: number }> {
     const serverOptions: RealtimeServerOptions = {
@@ -155,6 +162,9 @@ describe("createRealtimeServer", () => {
     }
     if (options.transcriptRetentionMode !== undefined) {
       serverOptions.transcriptRetentionMode = options.transcriptRetentionMode;
+    }
+    if (options.sessionStore !== undefined) {
+      serverOptions.sessionStore = options.sessionStore;
     }
 
     handle = createRealtimeServer(serverOptions);
@@ -189,6 +199,53 @@ describe("createRealtimeServer", () => {
           segments: [],
           gaps: [],
         };
+      },
+    };
+  }
+
+  function createRecordingSessionStore(): SessionStore & {
+    creates: CreateSessionInput[];
+    seqUpdates: UpdateSessionSeqInput[];
+    ends: EndSessionInput[];
+  } {
+    const creates: CreateSessionInput[] = [];
+    const seqUpdates: UpdateSessionSeqInput[] = [];
+    const ends: EndSessionInput[] = [];
+
+    return {
+      creates,
+      seqUpdates,
+      ends,
+      async create(input) {
+        creates.push(input);
+        return {
+          id: input.id,
+          workspaceId: input.workspaceId,
+          createdBy: input.createdBy,
+          meetingSource: input.meetingSource,
+          status: "active",
+          startedAt: new Date(),
+          endedAt: null,
+          lastClientSeq: 0,
+          lastServerSeq: 0,
+          connectionId: input.connectionId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+      },
+      async getById() {
+        return undefined;
+      },
+      async listByWorkspace() {
+        return [];
+      },
+      async updateSeqState(input) {
+        seqUpdates.push(input);
+        return undefined;
+      },
+      async endSession(input) {
+        ends.push(input);
+        return undefined;
       },
     };
   }
@@ -365,6 +422,121 @@ describe("createRealtimeServer", () => {
 
     expect(closedResponse.type).toBe("session.closed");
     expect((closedResponse.payload as Record<string, unknown>).reason).toBe("user_stopped");
+  });
+
+  it("persists session start and end through the configured session store", async () => {
+    const sessionStore = createRecordingSessionStore();
+    const { port } = await startServer({ sessionStore });
+    const ws = await connect(port);
+
+    const authResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+    const sessionId = authResponse.session_id as string;
+    const connectionId = (authResponse.payload as { connection_id: string }).connection_id;
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "session.start",
+        seq: 2,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          workspace_id: "ws_test_1",
+          meeting_source: "manual",
+          capture: { microphone: true, system_audio: false, screen_context: false },
+          processing: { stt: "cloud", llm: "cloud", retrieval: "cloud" },
+        },
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(sessionStore.creates).toEqual([
+      {
+        id: sessionId,
+        workspaceId: "ws_test_1",
+        createdBy: "user_test_1",
+        meetingSource: "manual",
+        connectionId,
+      },
+    ]);
+
+    const closedResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.end",
+      seq: 3,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        reason: "user_stopped",
+        last_client_seq: 3,
+      },
+    });
+
+    expect(closedResponse.type).toBe("session.closed");
+    expect(sessionStore.seqUpdates).toEqual([
+      {
+        sessionId,
+        workspaceId: "ws_test_1",
+        lastClientSeq: 3,
+        lastServerSeq: 2,
+        connectionId,
+      },
+    ]);
+    expect(sessionStore.ends).toEqual([{ sessionId, workspaceId: "ws_test_1" }]);
+  });
+
+  it("keeps the session open and emits a recoverable error when session persistence fails", async () => {
+    const sessionStore = createRecordingSessionStore();
+    sessionStore.create = async () => {
+      throw new Error("database unavailable with meeting source manual");
+    };
+
+    const { port } = await startServer({ sessionStore });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const response = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.start",
+      seq: 2,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        workspace_id: "ws_test_1",
+        meeting_source: "manual",
+        capture: { microphone: true, system_audio: false, screen_context: false },
+        processing: { stt: "cloud", llm: "cloud", retrieval: "cloud" },
+      },
+    });
+
+    expect(response.type).toBe("error");
+    expect((response.payload as Record<string, unknown>).code).toBe("session_persistence_failed");
+    expect((response.payload as Record<string, unknown>).recoverable).toBe(true);
+    expect(JSON.stringify(response)).not.toContain("manual");
+
+    const closedResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.end",
+      seq: 3,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        reason: "user_stopped",
+        last_client_seq: 3,
+      },
+    });
+    expect(closedResponse.type).toBe("session.closed");
   });
 
   it.each([

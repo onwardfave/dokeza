@@ -26,6 +26,7 @@ import {
   type TranscriptRetentionMode,
 } from "./transcript-retention-policy.js";
 import { TranscriptProcessor } from "./transcript-processor.js";
+import type { SessionStore } from "./session-store.js";
 
 export interface TokenValidator {
   validate(token: string): Promise<Actor | undefined>;
@@ -36,6 +37,7 @@ export interface RealtimeServerOptions {
   sttAdapter?: SttAdapter;
   transcriptTimelineSink?: TranscriptTimelineSink;
   transcriptRetentionMode?: TranscriptRetentionMode;
+  sessionStore?: SessionStore;
 }
 
 export interface RealtimeServerHandle {
@@ -78,6 +80,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   const transcriptTimelineSink =
     options.transcriptTimelineSink ?? new InMemoryTranscriptTimelineSink();
   const transcriptRetentionMode = options.transcriptRetentionMode ?? "7_days";
+  const sessionStore = options.sessionStore;
   const httpServer = createServer((_req, res) => {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not_found" }));
@@ -92,6 +95,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     let sttSessionPromise: Promise<SttSession> | undefined;
     let sttSession: SttSession | undefined;
     let authenticated = false;
+    let sessionPersisted = false;
 
     const sendJson = (message: Record<string, unknown>) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -141,6 +145,15 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       sendError("transcript_persistence_failed", "Transcript persistence failed.", true, sessionId);
+    };
+
+    const sendSessionPersistenceError = (sessionId: string) => {
+      const session = sessionManager.getSession(sessionId);
+      if (session === undefined) {
+        return;
+      }
+
+      sendError("session_persistence_failed", "Session persistence failed.", true, sessionId);
     };
 
     const persistTranscriptEvent = async (
@@ -426,6 +439,24 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         return;
       }
 
+      if (frameResult.type === "json" && frameResult.message.type === "session.start") {
+        if (sessionStore !== undefined && !sessionPersisted) {
+          try {
+            await sessionStore.create({
+              id: session.sessionId,
+              workspaceId: session.workspaceId,
+              createdBy: session.actor.userId,
+              meetingSource: frameResult.message.payload.meeting_source,
+              connectionId,
+            });
+            sessionPersisted = true;
+          } catch {
+            sendSessionPersistenceError(session.sessionId);
+          }
+        }
+        return;
+      }
+
       if (frameResult.type === "audio.gap") {
         const persistenceDecision = evaluateTranscriptTimelinePersistence({
           retentionMode: transcriptRetentionMode,
@@ -493,6 +524,23 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         sessionManager.endSession(session.sessionId, frameResult.message.payload.reason);
         const serverSeq = sessionManager.nextServerSeq(session.sessionId);
         const closedReason = mapEndReasonToClosedReason(frameResult.message.payload.reason);
+        if (sessionStore !== undefined && sessionPersisted) {
+          try {
+            await sessionStore.updateSeqState({
+              sessionId: session.sessionId,
+              workspaceId: session.workspaceId,
+              lastClientSeq: session.clientSeq,
+              lastServerSeq: serverSeq ?? session.serverSeq,
+              connectionId,
+            });
+            await sessionStore.endSession({
+              sessionId: session.sessionId,
+              workspaceId: session.workspaceId,
+            });
+          } catch {
+            sendSessionPersistenceError(session.sessionId);
+          }
+        }
         sendJson({
           protocol_version: REALTIME_PROTOCOL_VERSION,
           type: "session.closed",

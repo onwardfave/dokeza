@@ -39,6 +39,7 @@ Realtime transcript timeline persistence from accepted transcript processor outp
 - Send an `audio.gap` message and assert one gap record.
 - Run the same final segment and audio gap workloads under `live_only` or `local_only` and assert no timeline sink writes.
 - Inject sink write failure and assert recoverable `transcript_persistence_failed`.
+- Inject session-store write failure and assert recoverable `session_persistence_failed`.
 - Close a session, then emit delayed STT callbacks and assert no timeline writes.
 
 ## Faults to Inject
