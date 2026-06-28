@@ -37,7 +37,7 @@ Implemented foundation:
 - Telemetry redaction package.
 - Database RLS baseline migration for workspace-owned tables.
 - Workspace-scoped database package with Drizzle schema and RLS transaction helper.
-- PostgreSQL session store and transcript timeline sink interfaces/implementations with component tests, typed config factory wiring, and realtime session lifecycle persistence hooks.
+- PostgreSQL session store and transcript timeline sink interfaces/implementations with component tests, typed config factory wiring, realtime session lifecycle persistence hooks, and opt-in local PostgreSQL integration coverage.
 - Desktop Tauri capability probes for audio, cache, crash diagnostics, realtime, shortcuts, and update policy.
 - Local development PostgreSQL and pgvector stack.
 
@@ -45,7 +45,7 @@ Key gaps:
 
 - No real desktop audio capture pipeline.
 - No production auth or workspace provisioning.
-- PostgreSQL-backed session and timeline persistence still needs local PostgreSQL integration tests.
+- PostgreSQL-backed session and timeline persistence still needs automated CI execution against PostgreSQL.
 - No reconnect/resume implementation.
 - No live transcript product UI.
 - No suggestion engine, prompt assembly, or LLM provider path.
@@ -124,7 +124,7 @@ Acceptance criteria:
 
 Goal: replace in-memory-only meeting timeline persistence with workspace-scoped PostgreSQL implementations.
 
-Status: partially implemented. `PgSessionStore` and `PgTranscriptTimelineSink` exist with component tests, typed config can construct PostgreSQL-backed realtime persistence, and the realtime server can persist session start/end lifecycle through `SessionStore`; PostgreSQL integration tests remain.
+Status: partially implemented. `PgSessionStore` and `PgTranscriptTimelineSink` exist with component tests, typed config can construct PostgreSQL-backed realtime persistence, the realtime server can persist session start/end lifecycle through `SessionStore`, and opt-in local PostgreSQL integration tests cover the store/sink path; automated CI execution against PostgreSQL remains.
 
 Tasks:
 
