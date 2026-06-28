@@ -14,7 +14,9 @@
     "@dokeza/authz": "workspace:*",
     "@dokeza/config": "workspace:*",
     "@dokeza/contracts": "workspace:*",
+    "@dokeza/db": "workspace:*",
     "@dokeza/telemetry": "workspace:*",
+    "drizzle-orm": "^0.44.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

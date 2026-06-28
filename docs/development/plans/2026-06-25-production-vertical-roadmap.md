@@ -36,6 +36,8 @@ Implemented foundation:
 - Workspace authz helper.
 - Telemetry redaction package.
 - Database RLS baseline migration for workspace-owned tables.
+- Workspace-scoped database package with Drizzle schema and RLS transaction helper.
+- PostgreSQL session store and transcript timeline sink interfaces/implementations with component tests.
 - Desktop Tauri capability probes for audio, cache, crash diagnostics, realtime, shortcuts, and update policy.
 - Local development PostgreSQL and pgvector stack.
 
@@ -43,7 +45,7 @@ Key gaps:
 
 - No real desktop audio capture pipeline.
 - No production auth or workspace provisioning.
-- No PostgreSQL-backed session store or transcript timeline sink.
+- PostgreSQL-backed session store and transcript timeline sink are not wired into the realtime server yet.
 - No reconnect/resume implementation.
 - No live transcript product UI.
 - No suggestion engine, prompt assembly, or LLM provider path.
@@ -121,6 +123,8 @@ Acceptance criteria:
 ### M1A.1 - PostgreSQL Session and Transcript Persistence
 
 Goal: replace in-memory-only meeting timeline persistence with workspace-scoped PostgreSQL implementations.
+
+Status: partially implemented. `PgSessionStore` and `PgTranscriptTimelineSink` exist with component tests; realtime server wiring and PostgreSQL integration tests remain.
 
 Tasks:
 

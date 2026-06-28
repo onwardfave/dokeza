@@ -65,6 +65,9 @@ export type {
   TranscriptWriteInput,
 } from "./transcript-timeline.js";
 
+export { PgTranscriptTimelineSink } from "./pg-transcript-timeline-sink.js";
+export type { PgTranscriptTimelineSinkOptions } from "./pg-transcript-timeline-sink.js";
+
 export { evaluateTranscriptTimelinePersistence } from "./transcript-retention-policy.js";
 export type {
   TranscriptRetentionMode,
@@ -74,3 +77,13 @@ export type {
   TranscriptTimelinePersistenceReason,
   TranscriptTimelineRecordKind,
 } from "./transcript-retention-policy.js";
+
+export { PgSessionStore } from "./session-store.js";
+export type {
+  CreateSessionInput,
+  EndSessionInput,
+  MeetingSessionRecord,
+  MeetingSessionStatus,
+  SessionStore,
+  UpdateSessionSeqInput,
+} from "./session-store.js";

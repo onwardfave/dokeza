@@ -6,8 +6,10 @@
  *
  * @example
  * ```ts
- * import { createPool, createDatabase, withWorkspaceTransaction, closePool } from "@dokeza/db";
- * import { meetingSessions } from "@dokeza/db/schema";
+ * import {
+ *   createPool, createDatabase, withWorkspaceTransaction, closePool,
+ *   meetingSessions, transcriptSegments,
+ * } from "@dokeza/db";
  *
  * const pool = createPool(process.env.DATABASE_URL);
  * const db = createDatabase(pool);
@@ -27,3 +29,19 @@ export {
   closePool,
   type Database,
 } from "./pool.js";
+
+// Re-export schema tables for convenient single-path imports.
+export {
+  workspaces,
+  users,
+  workspaceMemberships,
+  workspacePolicies,
+  meetingSessions,
+  transcriptSegments,
+  transcriptGaps,
+  suggestions,
+  documents,
+  documentChunks,
+  integrationConnections,
+  auditLogs,
+} from "./schema.js";
