@@ -36,6 +36,10 @@ describe("parseConfig", () => {
       team: "30_days",
       enterprise: "30_days",
     });
+    expect(result.config?.database).toEqual({
+      realtimePersistence: "memory",
+      poolMax: 10,
+    });
   });
 
   it("rejects invalid ports without exposing environment values in errors", () => {
@@ -131,6 +135,47 @@ describe("parseConfig", () => {
     expect(result.ok).toBe(false);
     expect(result.errors).toContain("DEEPGRAM_ENDPOINT must use wss in production.");
     expect(result.errors.join(" ")).not.toContain("dg_real_secret");
+  });
+
+  it("accepts explicit PostgreSQL realtime persistence settings", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_REALTIME_PERSISTENCE: "postgres",
+        DATABASE_URL: "postgres://dokeza:secret@localhost:5432/dokeza",
+        DATABASE_POOL_MAX: "5",
+      },
+      "realtime",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.config?.database).toEqual({
+      realtimePersistence: "postgres",
+      url: "postgres://dokeza:secret@localhost:5432/dokeza",
+      poolMax: 5,
+    });
+  });
+
+  it("requires sanitized database configuration for PostgreSQL realtime persistence", () => {
+    const missingUrl = parseConfig({ DOKEZA_REALTIME_PERSISTENCE: "postgres" }, "realtime");
+
+    expect(missingUrl.ok).toBe(false);
+    expect(missingUrl.errors).toContain(
+      "DATABASE_URL is required when DOKEZA_REALTIME_PERSISTENCE is postgres.",
+    );
+
+    const invalidUrl = parseConfig(
+      {
+        DOKEZA_REALTIME_PERSISTENCE: "postgres",
+        DATABASE_URL: "not-a-secret-url",
+        DATABASE_POOL_MAX: "0",
+      },
+      "realtime",
+    );
+
+    expect(invalidUrl.ok).toBe(false);
+    expect(invalidUrl.errors.join(" ")).not.toContain("not-a-secret-url");
+    expect(invalidUrl.errors).toContain("DATABASE_URL must be a postgres connection URL.");
+    expect(invalidUrl.errors).toContain("DATABASE_POOL_MAX must be a positive integer.");
   });
 
   it("rejects unsafe telemetry configuration without echoing values", () => {

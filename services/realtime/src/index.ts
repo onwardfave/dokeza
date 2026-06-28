@@ -25,6 +25,8 @@ export type {
 } from "./stt-adapter.js";
 
 export { createSttAdapterFromConfig } from "./stt-adapter-factory.js";
+export { createRealtimePersistenceFromConfig } from "./realtime-persistence-factory.js";
+export type { RealtimePersistence } from "./realtime-persistence-factory.js";
 
 export {
   DeepgramSttAdapter,

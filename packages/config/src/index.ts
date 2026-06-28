@@ -1,6 +1,7 @@
 export type EnvironmentName = "local" | "test" | "preview" | "staging" | "production";
 export type RetentionDefault = "7_days" | "30_days" | "1_year";
 export type DeepgramEncoding = "linear16";
+export type RealtimePersistenceMode = "memory" | "postgres";
 
 export interface DeepgramSttConfig {
   apiKey?: string;
@@ -39,6 +40,11 @@ export interface DokezaConfig {
     individual: RetentionDefault;
     team: RetentionDefault;
     enterprise: RetentionDefault;
+  };
+  database: {
+    realtimePersistence: RealtimePersistenceMode;
+    url?: string;
+    poolMax: number;
   };
 }
 
@@ -144,6 +150,17 @@ function readDeepgramEncoding(value: string | undefined): DeepgramEncoding | und
   return undefined;
 }
 
+function readRealtimePersistenceMode(
+  value: string | undefined,
+  environment: EnvironmentName | undefined,
+): RealtimePersistenceMode | undefined {
+  if (value === undefined) {
+    return environment === "production" ? "postgres" : "memory";
+  }
+
+  return value === "memory" || value === "postgres" ? value : undefined;
+}
+
 function readPositiveInteger(value: string | undefined, defaultValue: number): number | undefined {
   if (value === undefined) {
     return defaultValue;
@@ -151,6 +168,21 @@ function readPositiveInteger(value: string | undefined, defaultValue: number): n
 
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function readPostgresUrl(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim().length === 0) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "postgres:" || parsed.protocol === "postgresql:"
+      ? value.trim()
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function createDeepgramConfig(input: {
@@ -206,6 +238,12 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   const deepgramSampleRateHz = readPositiveInteger(env.DEEPGRAM_SAMPLE_RATE_HZ, 16000);
   const deepgramChannels = readPositiveInteger(env.DEEPGRAM_CHANNELS, 1);
   const deepgramTimeoutMs = readPositiveInteger(env.DEEPGRAM_TIMEOUT_MS, 5000);
+  const realtimePersistence = readRealtimePersistenceMode(
+    env.DOKEZA_REALTIME_PERSISTENCE,
+    environment,
+  );
+  const databaseUrl = readPostgresUrl(env.DATABASE_URL);
+  const databasePoolMax = readPositiveInteger(env.DATABASE_POOL_MAX, 10);
 
   if (environment === undefined) {
     errors.push("DOKEZA_ENV must be local, test, preview, staging, or production.");
@@ -273,6 +311,18 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   if (deepgramTimeoutMs === undefined) {
     errors.push("DEEPGRAM_TIMEOUT_MS must be a positive integer.");
   }
+  if (realtimePersistence === undefined) {
+    errors.push("DOKEZA_REALTIME_PERSISTENCE must be memory or postgres.");
+  }
+  if (env.DATABASE_URL !== undefined && databaseUrl === undefined) {
+    errors.push("DATABASE_URL must be a postgres connection URL.");
+  }
+  if (realtimePersistence === "postgres" && databaseUrl === undefined) {
+    errors.push("DATABASE_URL is required when DOKEZA_REALTIME_PERSISTENCE is postgres.");
+  }
+  if (databasePoolMax === undefined) {
+    errors.push("DATABASE_POOL_MAX must be a positive integer.");
+  }
   if (serviceName.trim().length === 0) {
     errors.push("serviceName is required.");
   }
@@ -295,7 +345,10 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     deepgramEncoding === undefined ||
     deepgramSampleRateHz === undefined ||
     deepgramChannels === undefined ||
-    deepgramTimeoutMs === undefined
+    deepgramTimeoutMs === undefined ||
+    realtimePersistence === undefined ||
+    databasePoolMax === undefined ||
+    (realtimePersistence === "postgres" && databaseUrl === undefined)
   ) {
     return { ok: false, errors };
   }
@@ -340,6 +393,11 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
         individual: "7_days",
         team: "30_days",
         enterprise: "30_days",
+      },
+      database: {
+        realtimePersistence,
+        ...(databaseUrl === undefined ? {} : { url: databaseUrl }),
+        poolMax: databasePoolMax,
       },
     },
     errors: [],

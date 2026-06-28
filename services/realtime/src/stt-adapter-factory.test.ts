@@ -29,6 +29,7 @@ describe("createSttAdapterFromConfig", () => {
           DOKEZA_ENV: "production",
           DEEPGRAM_API_KEY: "dg_test_secret",
           DEEPGRAM_ENDPOINT: "wss://api.deepgram.com/v1/listen",
+          DATABASE_URL: "postgres://dokeza:secret@db.example.com:5432/dokeza",
         },
         "realtime",
       ),
