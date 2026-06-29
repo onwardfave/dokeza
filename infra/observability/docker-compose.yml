@@ -2,7 +2,7 @@ name: dokeza-observability
 
 services:
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.154.0
+    image: otel/opentelemetry-collector-contrib:0.155.0
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
       - ./otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
@@ -34,7 +34,7 @@ services:
       - "127.0.0.1:16686:16686"
 
   grafana:
-    image: grafana/grafana:13.0.2
+    image: grafana/grafana:13.1.0
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
