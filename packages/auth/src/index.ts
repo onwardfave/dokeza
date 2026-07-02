@@ -80,7 +80,9 @@ function parseJsonPart(part: string): unknown {
   }
 }
 
-function toTokenMembership(membership: WorkspaceMembership): AuthTokenClaims["memberships"][number] {
+function toTokenMembership(
+  membership: WorkspaceMembership,
+): AuthTokenClaims["memberships"][number] {
   return {
     workspace_id: membership.workspaceId,
     user_id: membership.userId,

@@ -51,9 +51,7 @@ describe("authApiClient", () => {
     const fetcher: AuthApiFetch = async (input, init) => {
       calls.push({
         input,
-        ...(init?.headers?.Authorization === undefined
-          ? {}
-          : { auth: init.headers.Authorization }),
+        ...(init?.headers?.Authorization === undefined ? {} : { auth: init.headers.Authorization }),
         ...(init?.body === undefined ? {} : { body: init.body }),
       });
       return okJson({

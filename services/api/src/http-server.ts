@@ -32,10 +32,7 @@ function methodNotAllowed(res: ServerResponse): void {
   sendJson(res, 405, { error: "method_not_allowed" });
 }
 
-function createAuthTokenService(
-  config: DokezaConfig,
-  now: () => Date,
-): DokezaAuthTokenService {
+function createAuthTokenService(config: DokezaConfig, now: () => Date): DokezaAuthTokenService {
   return createDokezaAuthTokenService({
     issuer: config.auth.issuer,
     audience: config.auth.audience,

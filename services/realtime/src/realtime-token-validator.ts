@@ -1,7 +1,4 @@
-import {
-  createDokezaAuthTokenService,
-  type DokezaAuthTokenServiceOptions,
-} from "@dokeza/auth";
+import { createDokezaAuthTokenService, type DokezaAuthTokenServiceOptions } from "@dokeza/auth";
 import type { TokenValidator, RealtimeAuthContext } from "./ws-server.js";
 
 export class DokezaRealtimeTokenValidator implements TokenValidator {

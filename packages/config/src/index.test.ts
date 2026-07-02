@@ -253,7 +253,9 @@ describe("parseConfig", () => {
     expect(result.errors).toContain(
       "DOKEZA_AUTH_SIGNING_SECRET must be at least 32 characters outside local/test.",
     );
-    expect(result.errors).toContain("DOKEZA_AUTH_API_TOKEN_TTL_SECONDS must be a positive integer.");
+    expect(result.errors).toContain(
+      "DOKEZA_AUTH_API_TOKEN_TTL_SECONDS must be a positive integer.",
+    );
     expect(result.errors).toContain(
       "DOKEZA_AUTH_REALTIME_TOKEN_TTL_SECONDS must be a positive integer.",
     );

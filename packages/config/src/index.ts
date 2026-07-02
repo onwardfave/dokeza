@@ -262,10 +262,7 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   const tracesSampleRate = readSampleRate(env.OTEL_TRACES_SAMPLER_ARG);
   const otlpEndpoint = readOtlpEndpoint(env.OTEL_EXPORTER_OTLP_ENDPOINT);
   const contentLoggingAllowed = readBoolean(env.DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED, false);
-  const authIssuer = readRequiredString(
-    env.DOKEZA_AUTH_ISSUER,
-    "https://auth.local.dokeza.dev",
-  );
+  const authIssuer = readRequiredString(env.DOKEZA_AUTH_ISSUER, "https://auth.local.dokeza.dev");
   const authAudience = readRequiredString(env.DOKEZA_AUTH_AUDIENCE, "dokeza");
   const authSigningSecret = readSigningSecret(env.DOKEZA_AUTH_SIGNING_SECRET, environment);
   const apiTokenTtlSeconds = readPositiveInteger(env.DOKEZA_AUTH_API_TOKEN_TTL_SECONDS, 3600);

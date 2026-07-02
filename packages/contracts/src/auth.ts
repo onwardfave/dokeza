@@ -7,10 +7,7 @@ const WorkspaceRole = Type.Union([
   Type.Literal("member"),
 ]);
 
-const AuthTokenPurpose = Type.Union([
-  Type.Literal("api_access"),
-  Type.Literal("realtime_session"),
-]);
+const AuthTokenPurpose = Type.Union([Type.Literal("api_access"), Type.Literal("realtime_session")]);
 
 export const AuthWorkspaceMembershipSchema = Type.Object({
   workspace_id: Type.String({ minLength: 1 }),
