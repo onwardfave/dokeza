@@ -1,7 +1,7 @@
 import { authorizeWorkspace, type Actor } from "@dokeza/authz";
 import { createTelemetryEvent, type TelemetryEvent } from "@dokeza/telemetry";
 
-export type SessionState = "authenticating" | "active" | "ended";
+export type SessionState = "authenticating" | "active" | "disconnected" | "ended";
 
 export interface RealtimeSession {
   sessionId: string;
@@ -12,6 +12,16 @@ export interface RealtimeSession {
   clientSeq: number;
   serverSeq: number;
   startedAt: string;
+}
+
+export interface ResumeSessionInput {
+  sessionId: string;
+  previousConnectionId: string;
+  newConnectionId: string;
+  actor: Actor;
+  workspaceId: string;
+  lastClientSeq: number;
+  lastServerSeq: number;
 }
 
 export class SessionManager {
@@ -109,12 +119,58 @@ export class SessionManager {
     };
   }
 
+  resumeSession(
+    input: ResumeSessionInput,
+  ): { session: RealtimeSession; telemetry: TelemetryEvent } | { error: "session_not_resumable" } {
+    const session = this.sessions.get(input.sessionId);
+    if (session === undefined || session.state === "ended") {
+      return { error: "session_not_resumable" };
+    }
+
+    const authorization = authorizeWorkspace(input.actor, input.workspaceId);
+    if (
+      !authorization.allowed ||
+      session.workspaceId !== input.workspaceId ||
+      session.actor.userId !== input.actor.userId ||
+      session.connectionId !== input.previousConnectionId
+    ) {
+      return { error: "session_not_resumable" };
+    }
+
+    const temporarySessionId = this.connectionToSession.get(input.newConnectionId);
+    if (temporarySessionId !== undefined && temporarySessionId !== session.sessionId) {
+      this.sessions.delete(temporarySessionId);
+    }
+
+    this.connectionToSession.delete(input.previousConnectionId);
+    this.connectionToSession.set(input.newConnectionId, session.sessionId);
+
+    session.connectionId = input.newConnectionId;
+    session.actor = input.actor;
+    session.state = "active";
+    session.clientSeq = Math.max(session.clientSeq, input.lastClientSeq);
+    session.serverSeq = Math.max(session.serverSeq, input.lastServerSeq);
+
+    return {
+      session,
+      telemetry: createTelemetryEvent("realtime.session_resumed", {
+        sessionId: session.sessionId,
+        previousConnectionId: input.previousConnectionId,
+        connectionId: input.newConnectionId,
+        workspaceId: session.workspaceId,
+        role: authorization.role ?? "unknown",
+        lastClientSeq: session.clientSeq,
+        lastServerSeq: session.serverSeq,
+      }),
+    };
+  }
+
   removeConnection(connectionId: string): void {
     const sessionId = this.connectionToSession.get(connectionId);
     if (sessionId !== undefined) {
       const session = this.sessions.get(sessionId);
       if (session !== undefined && session.state === "active") {
-        session.state = "ended";
+        session.state = "disconnected";
       }
       this.connectionToSession.delete(connectionId);
     }
