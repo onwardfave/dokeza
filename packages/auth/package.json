@@ -1,0 +1,17 @@
+{
+  "name": "@dokeza/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run src",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@dokeza/authz": "workspace:*",
+    "@dokeza/contracts": "workspace:*"
+  }
+}

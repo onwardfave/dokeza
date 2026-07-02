@@ -4,6 +4,7 @@
     { "path": "./packages/contracts" },
     { "path": "./packages/config" },
     { "path": "./packages/authz" },
+    { "path": "./packages/auth" },
     { "path": "./packages/telemetry" },
     { "path": "./services/api" },
     { "path": "./services/realtime" },
