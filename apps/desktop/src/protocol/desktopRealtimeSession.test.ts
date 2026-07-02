@@ -390,6 +390,35 @@ describe("DesktopRealtimeSessionClient", () => {
     expect(client.snapshot.pendingAudioGaps).toBe(0);
   });
 
+  it("sends explicit local capture gaps while streaming", () => {
+    const { client, factory } = createBufferedClient();
+
+    client.startSyntheticSession();
+    factory.transport?.open();
+    factory.transport?.receive(authAccepted());
+
+    client.sendAudioGap({
+      stream: "microphone",
+      start_ms: 200,
+      end_ms: 500,
+      dropped_chunks: 3,
+      reason: "user_paused_capture",
+    });
+
+    const gap = sentJson(factory.transport!, 2);
+    expect(gap.type).toBe("audio.gap");
+    if (gap.type === "audio.gap") {
+      expect(gap.payload).toEqual({
+        stream: "microphone",
+        start_ms: 200,
+        end_ms: 500,
+        dropped_chunks: 3,
+        reason: "user_paused_capture",
+      });
+    }
+    expect(client.snapshot.pendingAudioGaps).toBe(0);
+  });
+
   it("creates browser WebSocket transports", () => {
     expect(new BrowserRealtimeTransportFactory()).toBeDefined();
   });

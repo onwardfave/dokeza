@@ -17,6 +17,7 @@ import {
   calculateReconnectDelayMs,
   InMemoryAudioBuffer,
   type AudioBufferLimits,
+  type DroppedAudioGap,
   type ReconnectBackoffOptions,
 } from "./realtimeRecovery.js";
 
@@ -193,6 +194,13 @@ export class DesktopRealtimeSessionClient {
 
   sendAudioChunk(chunk: SyntheticPcmChunk): void {
     this.audioBuffer.enqueue(chunk);
+    if (this.state.status === "streaming") {
+      this.flushBufferedAudio();
+    }
+  }
+
+  sendAudioGap(gap: DroppedAudioGap): void {
+    this.audioBuffer.enqueueGap(gap);
     if (this.state.status === "streaming") {
       this.flushBufferedAudio();
     }

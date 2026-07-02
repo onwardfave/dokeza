@@ -46,6 +46,10 @@ export class InMemoryAudioBuffer {
     this.trimToLimits();
   }
 
+  enqueueGap(gap: DroppedAudioGap): void {
+    this.gaps.push(gap);
+  }
+
   drainChunks(): BufferedAudioChunk[] {
     return this.chunks.splice(0, this.chunks.length);
   }
