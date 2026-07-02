@@ -6,6 +6,14 @@ describe("parseConfig", () => {
     const result = parseConfig({}, "realtime");
 
     expect(result.ok).toBe(true);
+    expect(result.config?.auth).toEqual({
+      issuer: "https://auth.local.dokeza.dev",
+      audience: "dokeza",
+      signingSecret: "dev_only_dokeza_auth_secret_do_not_use",
+      apiTokenTtlSeconds: 3600,
+      realtimeTokenTtlSeconds: 300,
+      developmentAuthEnabled: true,
+    });
     expect(result.config?.telemetry).toEqual({
       enabled: true,
       otlpEndpoint: "http://localhost:4318/",
@@ -68,6 +76,30 @@ describe("parseConfig", () => {
     });
   });
 
+  it("accepts explicit auth settings without echoing the signing secret", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_AUTH_ISSUER: "https://auth.example.com",
+        DOKEZA_AUTH_AUDIENCE: "dokeza-api",
+        DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
+        DOKEZA_AUTH_API_TOKEN_TTL_SECONDS: "7200",
+        DOKEZA_AUTH_REALTIME_TOKEN_TTL_SECONDS: "120",
+        DOKEZA_DEV_AUTH_ENABLED: "false",
+      },
+      "api",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.config?.auth).toEqual({
+      issuer: "https://auth.example.com",
+      audience: "dokeza-api",
+      signingSecret: "configured_secret_with_at_least_32_chars",
+      apiTokenTtlSeconds: 7200,
+      realtimeTokenTtlSeconds: 120,
+      developmentAuthEnabled: false,
+    });
+  });
+
   it("accepts explicit Deepgram STT settings", () => {
     const result = parseConfig(
       {
@@ -107,10 +139,14 @@ describe("parseConfig", () => {
 
     expect(missingKey.ok).toBe(false);
     expect(missingKey.errors).toContain("DEEPGRAM_API_KEY is required in production.");
+    expect(missingKey.errors).toContain(
+      "DOKEZA_AUTH_SIGNING_SECRET must be at least 32 characters outside local/test.",
+    );
 
     const invalidEndpoint = parseConfig(
       {
         DOKEZA_ENV: "production",
+        DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
         DEEPGRAM_API_KEY: "dg_real_secret",
         DEEPGRAM_ENDPOINT: "not-a-url",
       },
@@ -126,6 +162,7 @@ describe("parseConfig", () => {
     const result = parseConfig(
       {
         DOKEZA_ENV: "production",
+        DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
         DEEPGRAM_API_KEY: "dg_real_secret",
         DEEPGRAM_ENDPOINT: "ws://stt.example.com/v1/listen",
       },
@@ -182,6 +219,8 @@ describe("parseConfig", () => {
     const result = parseConfig(
       {
         DOKEZA_ENV: "production",
+        DOKEZA_AUTH_SIGNING_SECRET: "too_short",
+        DOKEZA_DEV_AUTH_ENABLED: "true",
         DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED: "true",
         OTEL_EXPORTER_OTLP_ENDPOINT: "not-a-url",
         OTEL_TRACES_SAMPLER_ARG: "2",
@@ -191,8 +230,32 @@ describe("parseConfig", () => {
 
     expect(result.ok).toBe(false);
     expect(result.errors.join(" ")).not.toContain("not-a-url");
+    expect(result.errors.join(" ")).not.toContain("too_short");
+    expect(result.errors).toContain("DOKEZA_DEV_AUTH_ENABLED can only be true in local or test.");
     expect(result.errors).toContain(
       "DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED cannot be true in production.",
+    );
+  });
+
+  it("rejects invalid auth TTLs and short secrets without echoing values", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_AUTH_SIGNING_SECRET: "short_secret",
+        DOKEZA_AUTH_API_TOKEN_TTL_SECONDS: "0",
+        DOKEZA_AUTH_REALTIME_TOKEN_TTL_SECONDS: "not-a-number",
+      },
+      "api",
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(" ")).not.toContain("short_secret");
+    expect(result.errors.join(" ")).not.toContain("not-a-number");
+    expect(result.errors).toContain(
+      "DOKEZA_AUTH_SIGNING_SECRET must be at least 32 characters outside local/test.",
+    );
+    expect(result.errors).toContain("DOKEZA_AUTH_API_TOKEN_TTL_SECONDS must be a positive integer.");
+    expect(result.errors).toContain(
+      "DOKEZA_AUTH_REALTIME_TOKEN_TTL_SECONDS must be a positive integer.",
     );
   });
 });

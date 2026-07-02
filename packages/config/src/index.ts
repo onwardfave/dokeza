@@ -22,6 +22,14 @@ export interface DokezaConfig {
   serviceName: string;
   port: number;
   logLevel: "debug" | "info" | "warn" | "error";
+  auth: {
+    issuer: string;
+    audience: string;
+    signingSecret: string;
+    apiTokenTtlSeconds: number;
+    realtimeTokenTtlSeconds: number;
+    developmentAuthEnabled: boolean;
+  };
   telemetry: {
     enabled: boolean;
     otlpEndpoint: string;
@@ -170,6 +178,33 @@ function readPositiveInteger(value: string | undefined, defaultValue: number): n
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+function readSigningSecret(
+  value: string | undefined,
+  environment: EnvironmentName | undefined,
+): string | undefined {
+  const secret = value?.trim();
+  if (secret !== undefined && secret.length > 0) {
+    return secret.length >= 32 ? secret : undefined;
+  }
+
+  if (environment === "local" || environment === "test") {
+    return "dev_only_dokeza_auth_secret_do_not_use";
+  }
+
+  return undefined;
+}
+
+function readDevelopmentAuthEnabled(
+  value: string | undefined,
+  environment: EnvironmentName | undefined,
+): boolean | undefined {
+  if (value === undefined) {
+    return environment === "local" || environment === "test";
+  }
+
+  return readBoolean(value, false);
+}
+
 function readPostgresUrl(value: string | undefined): string | undefined {
   if (value === undefined || value.trim().length === 0) {
     return undefined;
@@ -227,6 +262,21 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   const tracesSampleRate = readSampleRate(env.OTEL_TRACES_SAMPLER_ARG);
   const otlpEndpoint = readOtlpEndpoint(env.OTEL_EXPORTER_OTLP_ENDPOINT);
   const contentLoggingAllowed = readBoolean(env.DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED, false);
+  const authIssuer = readRequiredString(
+    env.DOKEZA_AUTH_ISSUER,
+    "https://auth.local.dokeza.dev",
+  );
+  const authAudience = readRequiredString(env.DOKEZA_AUTH_AUDIENCE, "dokeza");
+  const authSigningSecret = readSigningSecret(env.DOKEZA_AUTH_SIGNING_SECRET, environment);
+  const apiTokenTtlSeconds = readPositiveInteger(env.DOKEZA_AUTH_API_TOKEN_TTL_SECONDS, 3600);
+  const realtimeTokenTtlSeconds = readPositiveInteger(
+    env.DOKEZA_AUTH_REALTIME_TOKEN_TTL_SECONDS,
+    300,
+  );
+  const developmentAuthEnabled = readDevelopmentAuthEnabled(
+    env.DOKEZA_DEV_AUTH_ENABLED,
+    environment,
+  );
   const deepgramApiKey = env.DEEPGRAM_API_KEY?.trim();
   const deepgramEndpoint = readWebSocketEndpoint(env.DEEPGRAM_ENDPOINT);
   const deepgramModel = readRequiredString(env.DEEPGRAM_MODEL, "nova-3");
@@ -268,6 +318,32 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   }
   if (environment === "production" && contentLoggingAllowed === true) {
     errors.push("DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED cannot be true in production.");
+  }
+  if (authIssuer === undefined) {
+    errors.push("DOKEZA_AUTH_ISSUER is required.");
+  }
+  if (authAudience === undefined) {
+    errors.push("DOKEZA_AUTH_AUDIENCE is required.");
+  }
+  if (authSigningSecret === undefined) {
+    errors.push("DOKEZA_AUTH_SIGNING_SECRET must be at least 32 characters outside local/test.");
+  }
+  if (apiTokenTtlSeconds === undefined) {
+    errors.push("DOKEZA_AUTH_API_TOKEN_TTL_SECONDS must be a positive integer.");
+  }
+  if (realtimeTokenTtlSeconds === undefined) {
+    errors.push("DOKEZA_AUTH_REALTIME_TOKEN_TTL_SECONDS must be a positive integer.");
+  }
+  if (developmentAuthEnabled === undefined) {
+    errors.push("DOKEZA_DEV_AUTH_ENABLED must be true or false.");
+  }
+  if (
+    developmentAuthEnabled === true &&
+    environment !== undefined &&
+    environment !== "local" &&
+    environment !== "test"
+  ) {
+    errors.push("DOKEZA_DEV_AUTH_ENABLED can only be true in local or test.");
   }
   if (
     environment === "production" &&
@@ -336,6 +412,12 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     tracesSampleRate === undefined ||
     otlpEndpoint === undefined ||
     contentLoggingAllowed === undefined ||
+    authIssuer === undefined ||
+    authAudience === undefined ||
+    authSigningSecret === undefined ||
+    apiTokenTtlSeconds === undefined ||
+    realtimeTokenTtlSeconds === undefined ||
+    developmentAuthEnabled === undefined ||
     deepgramEndpoint === undefined ||
     deepgramModel === undefined ||
     deepgramLanguage === undefined ||
@@ -360,6 +442,14 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
       serviceName,
       port,
       logLevel,
+      auth: {
+        issuer: authIssuer,
+        audience: authAudience,
+        signingSecret: authSigningSecret,
+        apiTokenTtlSeconds,
+        realtimeTokenTtlSeconds,
+        developmentAuthEnabled,
+      },
       telemetry: {
         enabled: telemetryEnabled,
         otlpEndpoint,
