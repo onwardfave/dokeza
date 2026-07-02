@@ -1,7 +1,4 @@
-import {
-  validateRealtimeJsonMessage,
-  type RealtimeJsonMessage,
-} from "@dokeza/contracts";
+import { validateRealtimeJsonMessage, type RealtimeJsonMessage } from "@dokeza/contracts";
 import {
   createAudioChunkMetaMessage,
   createAuthHelloMessage,

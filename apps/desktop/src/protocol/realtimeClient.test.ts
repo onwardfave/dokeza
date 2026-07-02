@@ -136,10 +136,14 @@ describe("desktop realtime protocol client", () => {
     expect(chunks[1]?.meta.timestamp_ms).toBe(1);
     expect(chunks[0]?.bytes).toBeInstanceOf(Uint8Array);
     expect(chunks[0]?.bytes.byteLength).toBe(8);
-    expect(Array.from(chunks[0]!.bytes)).toEqual(Array.from(createSyntheticPcmChunks({
-      chunkCount: 1,
-      samplesPerChunk: 4,
-      amplitude: 1200,
-    })[0]!.bytes));
+    expect(Array.from(chunks[0]!.bytes)).toEqual(
+      Array.from(
+        createSyntheticPcmChunks({
+          chunkCount: 1,
+          samplesPerChunk: 4,
+          amplitude: 1200,
+        })[0]!.bytes,
+      ),
+    );
   });
 });

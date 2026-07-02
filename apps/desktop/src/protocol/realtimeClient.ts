@@ -73,10 +73,7 @@ function nextEnvelope(state: RealtimeClientState, sessionId?: string): SessionEn
   return envelope;
 }
 
-function nextSessionEnvelope(
-  state: RealtimeClientState,
-  sessionId: string,
-): SessionBoundEnvelope {
+function nextSessionEnvelope(state: RealtimeClientState, sessionId: string): SessionBoundEnvelope {
   return {
     ...nextEnvelope(state),
     session_id: sessionId,
