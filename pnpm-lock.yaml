@@ -79,6 +79,15 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.19.21)(vite@8.0.16(@types/node@22.19.21)(esbuild@0.28.1)(tsx@4.22.4))
 
+  packages/auth:
+    dependencies:
+      '@dokeza/authz':
+        specifier: workspace:*
+        version: link:../authz
+      '@dokeza/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/authz: {}
 
   packages/config: {}
@@ -121,12 +130,18 @@ importers:
 
   services/api:
     dependencies:
+      '@dokeza/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@dokeza/authz':
         specifier: workspace:*
         version: link:../../packages/authz
       '@dokeza/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@dokeza/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@dokeza/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
