@@ -323,10 +323,10 @@ export class DesktopRealtimeSessionClient {
       }),
     );
     this.state = { ...this.state, status: "streaming" };
-    this.sendSyntheticAudio(message.session_id);
+    this.sendSyntheticAudio();
   }
 
-  private sendSyntheticAudio(sessionId: string): void {
+  private sendSyntheticAudio(): void {
     for (const chunk of createSyntheticPcmChunks(this.syntheticAudio)) {
       this.sendAudioChunk(chunk);
     }
