@@ -4,6 +4,10 @@ import {
   DesktopRealtimeSessionClient,
   type DesktopRealtimeSnapshot,
 } from "../protocol/desktopRealtimeSession.js";
+import {
+  requestDevelopmentApiToken,
+  requestRealtimeSessionToken,
+} from "../protocol/authApiClient.js";
 import { captureDefaultMicrophonePcmChunks } from "../protocol/nativeMicrophoneSource.js";
 import {
   formatDiagnosticDetails,
@@ -61,7 +65,10 @@ export function App() {
 
 function LiveSessionPanel() {
   const [endpoint, setEndpoint] = useState("ws://127.0.0.1:3001/realtime");
-  const [token, setToken] = useState("valid_token");
+  const [apiEndpoint, setApiEndpoint] = useState("http://127.0.0.1:3000");
+  const [workspaceId, setWorkspaceId] = useState("ws_dev");
+  const [token, setToken] = useState("");
+  const [authMessage, setAuthMessage] = useState("No realtime token");
   const [snapshot, setSnapshot] = useState<DesktopRealtimeSnapshot>(initialLiveSessionSnapshot);
   const clientRef = useRef<DesktopRealtimeSessionClient | null>(null);
   const refreshTimerRef = useRef<number | undefined>(undefined);
@@ -71,6 +78,7 @@ function LiveSessionPanel() {
   const transcriptRows = toLiveTranscriptRows(snapshot.transcripts);
   const canStart =
     snapshot.status === "idle" || snapshot.status === "closed" || snapshot.status === "failed";
+  const canStartWithToken = canStart && token.trim().length > 0;
   const canStop =
     snapshot.status === "connecting" ||
     snapshot.status === "connected" ||
@@ -151,6 +159,29 @@ function LiveSessionPanel() {
     refreshSnapshot();
   }
 
+  async function requestDevRealtimeToken() {
+    setAuthMessage("Requesting token");
+
+    try {
+      const apiToken = await requestDevelopmentApiToken({
+        apiBaseUrl: apiEndpoint,
+        workspaceId,
+        userId: "user_desktop_preview",
+      });
+      const realtimeToken = await requestRealtimeSessionToken({
+        apiBaseUrl: apiEndpoint,
+        apiToken: apiToken.token,
+        workspaceId,
+        deviceId: "dev_desktop_preview",
+      });
+      setToken(realtimeToken.token);
+      setAuthMessage(`Token ready for ${realtimeToken.workspaceId}`);
+    } catch {
+      setToken("");
+      setAuthMessage("Auth token request failed");
+    }
+  }
+
   return (
     <section className="live-session" aria-labelledby="live-session-title">
       <div className="live-session-header">
@@ -170,6 +201,22 @@ function LiveSessionPanel() {
           />
         </label>
         <label>
+          <span>API endpoint</span>
+          <input
+            value={apiEndpoint}
+            onChange={(event) => setApiEndpoint(event.currentTarget.value)}
+            disabled={!canStart}
+          />
+        </label>
+        <label>
+          <span>Workspace</span>
+          <input
+            value={workspaceId}
+            onChange={(event) => setWorkspaceId(event.currentTarget.value)}
+            disabled={!canStart}
+          />
+        </label>
+        <label>
           <span>Dev token</span>
           <input
             type="password"
@@ -179,12 +226,15 @@ function LiveSessionPanel() {
           />
         </label>
         <div className="live-session-buttons">
-          <button type="button" disabled={!canStart} onClick={startSession}>
+          <button type="button" disabled={!canStart} onClick={() => void requestDevRealtimeToken()}>
+            Get dev token
+          </button>
+          <button type="button" disabled={!canStartWithToken} onClick={startSession}>
             Start synthetic
           </button>
           <button
             type="button"
-            disabled={!canStart || !nativeRuntimeAvailable}
+            disabled={!canStartWithToken || !nativeRuntimeAvailable}
             onClick={() => void startMicrophoneSession()}
           >
             Start microphone
@@ -194,6 +244,7 @@ function LiveSessionPanel() {
           </button>
         </div>
       </div>
+      <p className="live-session-detail">{authMessage}</p>
       <p className="live-session-detail">{detail}</p>
       <div className="live-transcript" aria-live="polite">
         {transcriptRows.length === 0 ? (
