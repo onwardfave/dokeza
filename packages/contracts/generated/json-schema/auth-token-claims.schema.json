@@ -1,0 +1,94 @@
+{
+  "type": "object",
+  "required": [
+    "iss",
+    "aud",
+    "sub",
+    "purpose",
+    "iat",
+    "exp",
+    "memberships"
+  ],
+  "properties": {
+    "iss": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "aud": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "sub": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "purpose": {
+      "anyOf": [
+        {
+          "const": "api_access",
+          "type": "string"
+        },
+        {
+          "const": "realtime_session",
+          "type": "string"
+        }
+      ]
+    },
+    "iat": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "exp": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "workspace_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "device_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "development_only": {
+      "type": "boolean"
+    },
+    "memberships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "user_id",
+          "role"
+        ],
+        "properties": {
+          "workspace_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "user_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "const": "owner",
+                "type": "string"
+              },
+              {
+                "const": "admin",
+                "type": "string"
+              },
+              {
+                "const": "member",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "required": [
+    "token",
+    "token_type",
+    "expires_at",
+    "workspace_id",
+    "development_only"
+  ],
+  "properties": {
+    "token": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "token_type": {
+      "const": "Bearer",
+      "type": "string"
+    },
+    "expires_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "workspace_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "development_only": {
+      "type": "boolean"
+    }
+  }
+}

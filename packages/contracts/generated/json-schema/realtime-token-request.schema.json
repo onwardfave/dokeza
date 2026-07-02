@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": [
+    "workspace_id"
+  ],
+  "properties": {
+    "workspace_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "device_id": {
+      "minLength": 1,
+      "type": "string"
+    }
+  }
+}

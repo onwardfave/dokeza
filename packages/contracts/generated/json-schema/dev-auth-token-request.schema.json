@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "workspace_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "role": {
+      "anyOf": [
+        {
+          "const": "owner",
+          "type": "string"
+        },
+        {
+          "const": "admin",
+          "type": "string"
+        },
+        {
+          "const": "member",
+          "type": "string"
+        }
+      ]
+    },
+    "display_name": {
+      "minLength": 1,
+      "type": "string"
+    }
+  }
+}
