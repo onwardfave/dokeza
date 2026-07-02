@@ -24,12 +24,43 @@ export interface NativeMicrophoneCaptureReport {
   chunks: NativeMicrophoneChunk[];
 }
 
-export type NativeInvoke = <T>(command: string) => Promise<T>;
+export interface NativeMicrophoneCaptureDevice {
+  id: string;
+  name?: string;
+  is_default: boolean;
+}
+
+export type NativeInvoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
+
+export async function listMicrophoneCaptureDevices(
+  invoke: NativeInvoke = tauriInvoke,
+): Promise<NativeMicrophoneCaptureDevice[]> {
+  return invoke<NativeMicrophoneCaptureDevice[]>("list_microphone_capture_devices");
+}
 
 export async function captureDefaultMicrophonePcmChunks(
   invoke: NativeInvoke = tauriInvoke,
 ): Promise<SyntheticPcmChunk[]> {
   const report = await invoke<NativeMicrophoneCaptureReport>("capture_default_microphone_chunks");
+  return toSyntheticPcmChunks(report);
+}
+
+export interface CaptureMicrophonePcmChunksOptions {
+  deviceId?: string;
+  invoke?: NativeInvoke;
+}
+
+export async function captureMicrophonePcmChunks(
+  options: CaptureMicrophonePcmChunksOptions = {},
+): Promise<SyntheticPcmChunk[]> {
+  const invoke = options.invoke ?? tauriInvoke;
+  const report = await invoke<NativeMicrophoneCaptureReport>("capture_microphone_chunks", {
+    deviceId: options.deviceId,
+  });
+  return toSyntheticPcmChunks(report);
+}
+
+function toSyntheticPcmChunks(report: NativeMicrophoneCaptureReport): SyntheticPcmChunk[] {
   return report.chunks.map((chunk) => ({
     meta: {
       chunk_id: chunk.chunk_id,

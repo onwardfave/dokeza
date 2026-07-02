@@ -12,7 +12,9 @@ use audio_probe::{
 };
 use cache_probe::probe_local_sqlite_cache;
 use crash_diagnostics::{install_panic_hook, probe_crash_diagnostics};
-use microphone_capture::capture_default_microphone_chunks;
+use microphone_capture::{
+    capture_default_microphone_chunks, capture_microphone_chunks, list_microphone_capture_devices,
+};
 use realtime_probe::probe_realtime_websocket;
 use shortcuts::{toggle_overlay_window, DEV_OVERLAY_TOGGLE_SHORTCUT};
 use tauri::Manager;
@@ -51,6 +53,8 @@ pub fn run() {
             probe_update_installation_policy,
             probe_default_microphone,
             capture_default_microphone_chunks,
+            capture_microphone_chunks,
+            list_microphone_capture_devices,
             probe_system_audio_loopback
         ])
         .run(tauri::generate_context!())

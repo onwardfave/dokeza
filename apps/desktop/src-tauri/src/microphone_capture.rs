@@ -40,18 +40,60 @@ pub struct CapturedMicrophoneChunksReport {
     pub chunks: Vec<CapturedMicrophoneChunk>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MicrophoneCaptureDevice {
+    pub id: String,
+    pub name: Option<String>,
+    pub is_default: bool,
+}
+
+#[tauri::command]
+pub fn list_microphone_capture_devices() -> Result<Vec<MicrophoneCaptureDevice>, String> {
+    let host = cpal::default_host();
+    let default_name = host.default_input_device().and_then(|device| device.name().ok());
+    let devices = host.input_devices().map_err(|error| error.to_string())?;
+
+    Ok(devices
+        .enumerate()
+        .map(|(index, device)| {
+            let name = device.name().ok();
+            let is_default = name.is_some() && name == default_name;
+            MicrophoneCaptureDevice {
+                id: input_device_id(index),
+                name,
+                is_default,
+            }
+        })
+        .collect())
+}
+
 #[tauri::command]
 pub fn capture_default_microphone_chunks() -> Result<CapturedMicrophoneChunksReport, String> {
     capture_default_microphone_chunks_for(Duration::from_millis(DEFAULT_CAPTURE_DURATION_MS))
 }
 
+#[tauri::command]
+pub fn capture_microphone_chunks(
+    device_id: Option<String>,
+) -> Result<CapturedMicrophoneChunksReport, String> {
+    capture_microphone_chunks_for(
+        device_id.as_deref(),
+        Duration::from_millis(DEFAULT_CAPTURE_DURATION_MS),
+    )
+}
+
 pub fn capture_default_microphone_chunks_for(
     duration: Duration,
 ) -> Result<CapturedMicrophoneChunksReport, String> {
+    capture_microphone_chunks_for(None, duration)
+}
+
+pub fn capture_microphone_chunks_for(
+    device_id: Option<&str>,
+    duration: Duration,
+) -> Result<CapturedMicrophoneChunksReport, String> {
     let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .ok_or_else(|| "microphone_default_device_missing".to_string())?;
+    let device = select_input_device(&host, device_id)?;
     let device_name = device.name().ok();
     let supported_config = device
         .default_input_config()
@@ -106,6 +148,30 @@ pub fn capture_default_microphone_chunks_for(
         chunk_duration_ms: DEFAULT_CHUNK_DURATION_MS,
         chunks,
     })
+}
+
+fn select_input_device(host: &cpal::Host, device_id: Option<&str>) -> Result<cpal::Device, String> {
+    match device_id.filter(|id| !id.trim().is_empty() && *id != "default") {
+        Some(id) => {
+            let index = parse_input_device_id(id)
+                .ok_or_else(|| "microphone_device_unavailable".to_string())?;
+            host.input_devices()
+                .map_err(|error| error.to_string())?
+                .nth(index)
+                .ok_or_else(|| "microphone_device_unavailable".to_string())
+        }
+        None => host
+            .default_input_device()
+            .ok_or_else(|| "microphone_default_device_missing".to_string()),
+    }
+}
+
+fn input_device_id(index: usize) -> String {
+    format!("input_{index}")
+}
+
+fn parse_input_device_id(device_id: &str) -> Option<usize> {
+    device_id.strip_prefix("input_")?.parse::<usize>().ok()
 }
 
 fn build_collecting_stream_f32(
@@ -311,6 +377,14 @@ mod tests {
         assert_eq!(chunks[0].byte_length, 3_200);
         assert_eq!(chunks[0].bytes.len(), 3_200);
         assert_eq!(chunks[1].timestamp_ms, 100);
+    }
+
+    #[test]
+    fn capture_device_ids_are_enumeration_indexes() {
+        assert_eq!(input_device_id(2), "input_2");
+        assert_eq!(parse_input_device_id("input_2"), Some(2));
+        assert_eq!(parse_input_device_id("input_"), None);
+        assert_eq!(parse_input_device_id("other_2"), None);
     }
 
     fn expect_approx(actual: i16, expected: i16, tolerance: i16) {

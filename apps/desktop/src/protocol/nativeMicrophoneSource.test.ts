@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { captureDefaultMicrophonePcmChunks } from "./nativeMicrophoneSource.js";
+import {
+  captureDefaultMicrophonePcmChunks,
+  captureMicrophonePcmChunks,
+  listMicrophoneCaptureDevices,
+} from "./nativeMicrophoneSource.js";
 
 describe("native microphone source", () => {
   it("invokes the Tauri microphone capture command and maps chunks", async () => {
@@ -45,5 +49,46 @@ describe("native microphone source", () => {
         bytes: Uint8Array.from([1, 0, 255, 255]),
       },
     ]);
+  });
+
+  it("lists selectable microphone capture devices", async () => {
+    const invoke = vi.fn().mockResolvedValue([
+      {
+        id: "input_0",
+        name: "Default array",
+        is_default: true,
+      },
+    ]);
+
+    await expect(listMicrophoneCaptureDevices(invoke)).resolves.toEqual([
+      {
+        id: "input_0",
+        name: "Default array",
+        is_default: true,
+      },
+    ]);
+    expect(invoke).toHaveBeenCalledWith("list_microphone_capture_devices");
+  });
+
+  it("captures from a selected microphone device", async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      device_name: "Selected microphone",
+      input_sample_rate_hz: 48_000,
+      input_channels: 1,
+      output_sample_rate_hz: 16_000,
+      output_channels: 1,
+      chunk_duration_ms: 100,
+      chunks: [],
+    });
+
+    await expect(
+      captureMicrophonePcmChunks({
+        deviceId: "input_2",
+        invoke,
+      }),
+    ).resolves.toEqual([]);
+    expect(invoke).toHaveBeenCalledWith("capture_microphone_chunks", {
+      deviceId: "input_2",
+    });
   });
 });
