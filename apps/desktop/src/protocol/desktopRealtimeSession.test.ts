@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   BrowserRealtimeTransportFactory,
   DesktopRealtimeSessionClient,
+  type RealtimeScheduler,
   type RealtimeTransport,
   type RealtimeTransportHandlers,
 } from "./desktopRealtimeSession.js";
+import { createSyntheticPcmChunks } from "./realtimeClient.js";
 
 class FakeTransport implements RealtimeTransport {
   readonly textFrames: string[] = [];
@@ -42,12 +44,31 @@ class FakeTransport implements RealtimeTransport {
 
 class FakeTransportFactory {
   transport: FakeTransport | undefined;
+  readonly transports: FakeTransport[] = [];
   connectedUrl: string | undefined;
 
   connect(url: string, handlers: RealtimeTransportHandlers): RealtimeTransport {
     this.connectedUrl = url;
     this.transport = new FakeTransport(handlers);
+    this.transports.push(this.transport);
     return this.transport;
+  }
+}
+
+class FakeScheduler implements RealtimeScheduler {
+  readonly delays: number[] = [];
+  private readonly callbacks: Array<() => void> = [];
+
+  setTimeout(callback: () => void, delayMs: number): number {
+    this.delays.push(delayMs);
+    this.callbacks.push(callback);
+    return this.callbacks.length;
+  }
+
+  clearTimeout(): void {}
+
+  runNext(): void {
+    this.callbacks.shift()?.();
   }
 }
 
@@ -107,6 +128,35 @@ function createClient(factory = new FakeTransportFactory()): {
         chunkCount: 2,
         samplesPerChunk: 4,
         amplitude: 1000,
+      },
+    }),
+  };
+}
+
+function createBufferedClient(): {
+  client: DesktopRealtimeSessionClient;
+  factory: FakeTransportFactory;
+  scheduler: FakeScheduler;
+} {
+  const factory = new FakeTransportFactory();
+  const scheduler = new FakeScheduler();
+  return {
+    factory,
+    scheduler,
+    client: new DesktopRealtimeSessionClient({
+      endpoint: "ws://127.0.0.1:3001/realtime",
+      token: "dev_token",
+      clientVersion: "0.1.0",
+      platform: "windows",
+      deviceId: "dev_1",
+      transportFactory: factory,
+      scheduler,
+      syntheticAudio: {
+        chunkCount: 0,
+      },
+      audioBuffer: {
+        maxDurationMs: 200,
+        maxBytes: 100000,
       },
     }),
   };
@@ -275,6 +325,69 @@ describe("DesktopRealtimeSessionClient", () => {
       });
     }
     expect(client.snapshot.status).toBe("reconnecting");
+  });
+
+  it("schedules exponential reconnect after an unexpected active-session close", () => {
+    const { client, factory, scheduler } = createBufferedClient();
+
+    client.startSyntheticSession();
+    factory.transport?.open();
+    factory.transport?.receive(authAccepted());
+    factory.transport?.close();
+
+    expect(client.snapshot.status).toBe("reconnecting");
+    expect(client.snapshot.nextReconnectDelayMs).toBe(1000);
+    expect(scheduler.delays).toEqual([1000]);
+
+    scheduler.runNext();
+    expect(factory.transports).toHaveLength(2);
+    factory.transport?.open();
+    expect(sentJson(factory.transport!, 0).type).toBe("auth.hello");
+  });
+
+  it("emits audio gaps and buffered audio after resume", () => {
+    const { client, factory, scheduler } = createBufferedClient();
+    const [first, second, third] = createSyntheticPcmChunks({
+      chunkCount: 3,
+      samplesPerChunk: 1600,
+      amplitude: 1000,
+    });
+    if (first === undefined || second === undefined || third === undefined) {
+      throw new Error("Expected synthetic chunks");
+    }
+
+    client.startSyntheticSession();
+    factory.transport?.open();
+    factory.transport?.receive(authAccepted());
+    factory.transport?.close();
+
+    client.sendAudioChunk(first);
+    client.sendAudioChunk(second);
+    client.sendAudioChunk(third);
+    expect(client.snapshot.pendingAudioChunks).toBe(2);
+    expect(client.snapshot.pendingAudioGaps).toBe(1);
+
+    scheduler.runNext();
+    factory.transport?.open();
+    factory.transport?.receive(authAccepted("temporary_session", "conn_2"));
+
+    expect(sentJson(factory.transport!, 1).type).toBe("resume.request");
+    const gap = sentJson(factory.transport!, 2);
+    expect(gap.type).toBe("audio.gap");
+    if (gap.type === "audio.gap") {
+      expect(gap.payload).toEqual({
+        stream: "microphone",
+        start_ms: 0,
+        end_ms: 100,
+        dropped_chunks: 1,
+        reason: "local_buffer_full",
+      });
+    }
+    expect(sentJson(factory.transport!, 3).type).toBe("audio.chunk_meta");
+    expect(sentJson(factory.transport!, 4).type).toBe("audio.chunk_meta");
+    expect(factory.transport?.binaryFrames).toHaveLength(2);
+    expect(client.snapshot.pendingAudioChunks).toBe(0);
+    expect(client.snapshot.pendingAudioGaps).toBe(0);
   });
 
   it("creates browser WebSocket transports", () => {

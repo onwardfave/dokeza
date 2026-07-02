@@ -39,6 +39,22 @@ describe("live session view model", () => {
     ).toBe("Transcription provider timed out.");
   });
 
+  it("summarizes reconnect buffering state", () => {
+    expect(
+      getLiveSessionDetail({
+        status: "reconnecting",
+        sessionId: "sess_1",
+        connectionId: "conn_1",
+        lastClientSeq: 8,
+        lastServerSeq: 4,
+        pendingAudioChunks: 2,
+        pendingAudioGaps: 1,
+        nextReconnectDelayMs: 1000,
+        transcripts: [],
+      }),
+    ).toBe("Reconnect in 1000 ms / 2 audio chunks buffered / 1 gap pending");
+  });
+
   it("formats transcript rows for the product UI", () => {
     expect(
       toLiveTranscriptRows([

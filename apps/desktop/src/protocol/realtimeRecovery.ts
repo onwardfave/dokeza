@@ -34,7 +34,12 @@ export class InMemoryAudioBuffer {
   private readonly chunks: BufferedAudioChunk[] = [];
   private readonly gaps: DroppedAudioGap[] = [];
 
-  constructor(private readonly limits: AudioBufferLimits) {}
+  constructor(private limits: AudioBufferLimits) {}
+
+  setLimits(limits: AudioBufferLimits): void {
+    this.limits = limits;
+    this.trimToLimits();
+  }
 
   enqueue(chunk: BufferedAudioChunk): void {
     this.chunks.push(chunk);

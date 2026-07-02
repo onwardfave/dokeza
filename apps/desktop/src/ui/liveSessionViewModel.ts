@@ -40,6 +40,22 @@ export function getLiveSessionDetail(snapshot: DesktopRealtimeSnapshot): string 
     return snapshot.statusMessage;
   }
 
+  if (snapshot.status === "reconnecting") {
+    const parts: string[] = [];
+    if (snapshot.nextReconnectDelayMs !== undefined) {
+      parts.push(`Reconnect in ${snapshot.nextReconnectDelayMs} ms`);
+    } else {
+      parts.push("Reconnecting");
+    }
+    if ((snapshot.pendingAudioChunks ?? 0) > 0) {
+      parts.push(`${snapshot.pendingAudioChunks} audio chunks buffered`);
+    }
+    if ((snapshot.pendingAudioGaps ?? 0) > 0) {
+      parts.push(`${snapshot.pendingAudioGaps} gap pending`);
+    }
+    return parts.join(" / ");
+  }
+
   if (snapshot.sessionId !== undefined && snapshot.connectionId !== undefined) {
     return `${snapshot.sessionId} / ${snapshot.connectionId}`;
   }

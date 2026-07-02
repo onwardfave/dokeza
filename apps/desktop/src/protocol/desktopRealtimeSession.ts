@@ -1,6 +1,7 @@
 import { validateRealtimeJsonMessage, type RealtimeJsonMessage } from "@dokeza/contracts";
 import {
   createAudioChunkMetaMessage,
+  createAudioGapMessage,
   createAuthHelloMessage,
   createInitialRealtimeClientState,
   createResumeRequestMessage,
@@ -9,8 +10,15 @@ import {
   createSyntheticPcmChunks,
   type DesktopPlatform,
   type RealtimeClientState,
+  type SyntheticPcmChunk,
   type SyntheticPcmOptions,
 } from "./realtimeClient.js";
+import {
+  calculateReconnectDelayMs,
+  InMemoryAudioBuffer,
+  type AudioBufferLimits,
+  type ReconnectBackoffOptions,
+} from "./realtimeRecovery.js";
 
 export type DesktopRealtimeStatus =
   | "idle"
@@ -39,6 +47,11 @@ export interface RealtimeTransportFactory {
   connect(url: string, handlers: RealtimeTransportHandlers): RealtimeTransport;
 }
 
+export interface RealtimeScheduler {
+  setTimeout(callback: () => void, delayMs: number): number;
+  clearTimeout(timerId: number): void;
+}
+
 export interface DesktopRealtimeTranscript {
   segmentId: string;
   speaker: "user" | "remote" | "unknown";
@@ -63,6 +76,11 @@ export interface DesktopRealtimeSnapshot {
   lastClientSeq: number;
   lastServerSeq: number;
   transcripts: DesktopRealtimeTranscript[];
+  pendingAudioChunks?: number;
+  pendingAudioBytes?: number;
+  pendingAudioGaps?: number;
+  reconnectAttempt?: number;
+  nextReconnectDelayMs?: number;
   lastError?: DesktopRealtimeError;
   statusMessage?: string;
 }
@@ -74,16 +92,27 @@ export interface DesktopRealtimeSessionClientOptions {
   platform: DesktopPlatform;
   deviceId: string;
   transportFactory?: RealtimeTransportFactory;
+  scheduler?: RealtimeScheduler;
   syntheticAudio?: SyntheticPcmOptions;
+  audioBuffer?: Partial<AudioBufferLimits>;
+  reconnectBackoff?: ReconnectBackoffOptions;
 }
 
 export class DesktopRealtimeSessionClient {
   private readonly transportFactory: RealtimeTransportFactory;
+  private readonly scheduler: RealtimeScheduler;
   private readonly syntheticAudio: SyntheticPcmOptions;
+  private readonly audioBuffer: InMemoryAudioBuffer;
+  private readonly configuredAudioBufferMaxDurationMs: number;
+  private readonly configuredAudioBufferMaxBytes: number;
+  private readonly reconnectBackoff: ReconnectBackoffOptions;
   private transport: RealtimeTransport | undefined;
   private protocolState: RealtimeClientState = createInitialRealtimeClientState();
   private resumeRequested = false;
   private previousConnectionId: string | undefined;
+  private reconnectAttempt = 0;
+  private reconnectTimerId: number | undefined;
+  private nextReconnectDelayMs: number | undefined;
   private state: DesktopRealtimeSnapshot = {
     status: "idle",
     lastClientSeq: 0,
@@ -93,16 +122,32 @@ export class DesktopRealtimeSessionClient {
 
   constructor(private readonly options: DesktopRealtimeSessionClientOptions) {
     this.transportFactory = options.transportFactory ?? new BrowserRealtimeTransportFactory();
+    this.scheduler = options.scheduler ?? new BrowserRealtimeScheduler();
     this.syntheticAudio = options.syntheticAudio ?? {};
+    this.configuredAudioBufferMaxDurationMs = options.audioBuffer?.maxDurationMs ?? 300000;
+    this.configuredAudioBufferMaxBytes = options.audioBuffer?.maxBytes ?? 25 * 1024 * 1024;
+    this.audioBuffer = new InMemoryAudioBuffer({
+      maxDurationMs: this.configuredAudioBufferMaxDurationMs,
+      maxBytes: this.configuredAudioBufferMaxBytes,
+    });
+    this.reconnectBackoff = options.reconnectBackoff ?? {};
   }
 
   get snapshot(): DesktopRealtimeSnapshot {
+    const buffer = this.audioBuffer.snapshot();
     const snapshot: DesktopRealtimeSnapshot = {
       ...this.state,
       transcripts: [...this.state.transcripts],
+      pendingAudioChunks: buffer.pendingChunks,
+      pendingAudioBytes: buffer.pendingBytes,
+      pendingAudioGaps: buffer.pendingGaps,
+      reconnectAttempt: this.reconnectAttempt,
     };
     if (this.state.lastError !== undefined) {
       snapshot.lastError = { ...this.state.lastError };
+    }
+    if (this.nextReconnectDelayMs !== undefined) {
+      snapshot.nextReconnectDelayMs = this.nextReconnectDelayMs;
     }
     return snapshot;
   }
@@ -110,6 +155,9 @@ export class DesktopRealtimeSessionClient {
   startSyntheticSession(): void {
     this.resumeRequested = false;
     this.previousConnectionId = undefined;
+    this.reconnectAttempt = 0;
+    this.nextReconnectDelayMs = undefined;
+    this.clearReconnectTimer();
     this.protocolState = createInitialRealtimeClientState();
     this.state = {
       status: "connecting",
@@ -128,6 +176,8 @@ export class DesktopRealtimeSessionClient {
 
     this.previousConnectionId = this.state.connectionId;
     this.resumeRequested = true;
+    this.nextReconnectDelayMs = undefined;
+    this.clearReconnectTimer();
     this.protocolState = createInitialRealtimeClientState();
     this.state = { ...this.state, status: "reconnecting" };
     this.connect();
@@ -139,6 +189,13 @@ export class DesktopRealtimeSessionClient {
     }
 
     this.sendJson(createSessionEndMessage(this.protocolState, this.state.sessionId, reason));
+  }
+
+  sendAudioChunk(chunk: SyntheticPcmChunk): void {
+    this.audioBuffer.enqueue(chunk);
+    if (this.state.status === "streaming") {
+      this.flushBufferedAudio();
+    }
   }
 
   private connect(): void {
@@ -220,6 +277,13 @@ export class DesktopRealtimeSessionClient {
         return;
       }
 
+      this.audioBuffer.setLimits({
+        maxDurationMs: Math.min(
+          this.configuredAudioBufferMaxDurationMs,
+          message.payload.policy.max_local_audio_buffer_ms,
+        ),
+        maxBytes: this.configuredAudioBufferMaxBytes,
+      });
       this.state = {
         ...this.state,
         connectionId: message.payload.connection_id,
@@ -233,9 +297,17 @@ export class DesktopRealtimeSessionClient {
           lastServerSeq: this.state.lastServerSeq,
         }),
       );
+      this.flushBufferedAudio();
       return;
     }
 
+    this.audioBuffer.setLimits({
+      maxDurationMs: Math.min(
+        this.configuredAudioBufferMaxDurationMs,
+        message.payload.policy.max_local_audio_buffer_ms,
+      ),
+      maxBytes: this.configuredAudioBufferMaxBytes,
+    });
     this.state = {
       ...this.state,
       status: "connected",
@@ -250,13 +322,27 @@ export class DesktopRealtimeSessionClient {
         deviceId: this.options.deviceId,
       }),
     );
-    this.sendSyntheticAudio(message.session_id);
     this.state = { ...this.state, status: "streaming" };
+    this.sendSyntheticAudio(message.session_id);
   }
 
   private sendSyntheticAudio(sessionId: string): void {
     for (const chunk of createSyntheticPcmChunks(this.syntheticAudio)) {
-      this.sendJson(createAudioChunkMetaMessage(this.protocolState, sessionId, chunk.meta));
+      this.sendAudioChunk(chunk);
+    }
+  }
+
+  private flushBufferedAudio(): void {
+    if (this.state.sessionId === undefined) {
+      return;
+    }
+
+    for (const gap of this.audioBuffer.drainGaps()) {
+      this.sendJson(createAudioGapMessage(this.protocolState, this.state.sessionId, gap));
+    }
+
+    for (const chunk of this.audioBuffer.drainChunks()) {
+      this.sendJson(createAudioChunkMetaMessage(this.protocolState, this.state.sessionId, chunk.meta));
       this.transport?.sendBinary(chunk.bytes);
     }
   }
@@ -296,6 +382,7 @@ export class DesktopRealtimeSessionClient {
   private handleClose(): void {
     if (this.state.status === "streaming" || this.state.status === "degraded") {
       this.state = { ...this.state, status: "reconnecting" };
+      this.scheduleReconnect();
       return;
     }
 
@@ -306,6 +393,37 @@ export class DesktopRealtimeSessionClient {
 
   private handleTransportError(): void {
     this.state = { ...this.state, status: "failed" };
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimerId !== undefined) {
+      return;
+    }
+
+    const delayMs = calculateReconnectDelayMs(this.reconnectAttempt, this.reconnectBackoff);
+    this.nextReconnectDelayMs = delayMs;
+    this.reconnectAttempt += 1;
+    this.reconnectTimerId = this.scheduler.setTimeout(() => {
+      this.reconnectTimerId = undefined;
+      this.resume();
+    }, delayMs);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimerId !== undefined) {
+      this.scheduler.clearTimeout(this.reconnectTimerId);
+      this.reconnectTimerId = undefined;
+    }
+  }
+}
+
+class BrowserRealtimeScheduler implements RealtimeScheduler {
+  setTimeout(callback: () => void, delayMs: number): number {
+    return globalThis.setTimeout(callback, delayMs) as unknown as number;
+  }
+
+  clearTimeout(timerId: number): void {
+    globalThis.clearTimeout(timerId);
   }
 }
 
