@@ -491,10 +491,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           resumeResult.session.serverSeq,
           connectionId,
         );
-        replayTranscriptMessages(
-          resumeResult.session.sessionId,
-          parsed.payload.last_server_seq,
-        );
+        replayTranscriptMessages(resumeResult.session.sessionId, parsed.payload.last_server_seq);
         return;
       }
 

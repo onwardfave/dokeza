@@ -145,9 +145,7 @@ describe("SessionManager", () => {
       expect(result.session.serverSeq).toBe(2);
       expect(result.telemetry.name).toBe("realtime.session_resumed");
     }
-    expect(manager.getSessionByConnection("conn_2")?.sessionId).toBe(
-      authResult.session.sessionId,
-    );
+    expect(manager.getSessionByConnection("conn_2")?.sessionId).toBe(authResult.session.sessionId);
   });
 
   it("removes the temporary authenticated session when resuming an existing session", () => {
