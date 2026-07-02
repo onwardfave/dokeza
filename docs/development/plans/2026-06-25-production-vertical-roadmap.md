@@ -46,7 +46,7 @@ Key gaps:
 - No real desktop audio capture pipeline.
 - No production auth or workspace provisioning.
 - PostgreSQL-backed session and timeline persistence still needs automated CI execution against PostgreSQL.
-- No reconnect/resume implementation.
+- Reconnect/resume is implemented for in-process realtime recovery with original session reattachment, final-transcript replay by server sequence, and safe invalid-resume failure behavior; durable replay after realtime process restart still needs persisted server-sequence metadata.
 - No live transcript product UI.
 - No suggestion engine, prompt assembly, or LLM provider path.
 - No knowledge ingestion or retrieval pipeline.
@@ -146,13 +146,15 @@ Acceptance criteria:
 
 Goal: reconnect preserves one session identity and replays the durable transcript timeline safely.
 
+Status: partially implemented. The realtime service supports authenticated resume of active or disconnected in-process sessions, preserves the original session ID, updates session recovery state, and replays bounded final-transcript messages by server sequence without duplicating transcript records. Durable replay after realtime process restart remains follow-up work because timeline records do not yet persist server sequence metadata.
+
 Tasks:
 
-1. Implement `resume.request` handler.
-2. Persist session sequence state needed for resume.
-3. Define replay window and transcript replay behavior.
-4. Emit `audio.gap` records for unrecoverable client-side buffer loss.
-5. Add reliability/property tests for reconnect.
+1. Implement `resume.request` handler. Done for in-process active/disconnected sessions.
+2. Persist session sequence state needed for resume. Done through `SessionStore.updateSeqState` on resume.
+3. Define replay window and transcript replay behavior. Done for bounded in-process final-transcript replay using `last_server_seq`.
+4. Emit `audio.gap` records for unrecoverable client-side buffer loss. Server-side gap persistence exists; client emission remains M1A.3/M1A.4.
+5. Add reliability/property tests for reconnect. Component coverage exists; broader fault-injection and process-restart tests remain.
 
 Acceptance criteria:
 

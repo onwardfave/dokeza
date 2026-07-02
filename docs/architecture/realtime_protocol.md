@@ -360,6 +360,7 @@ The client shall:
 - Use a default local buffer cap of five minutes per active audio stream or 25 MB per active audio stream, whichever is lower, unless workspace policy sets a stricter value.
 - Send `audio.gap` for any dropped buffered audio range.
 - Send `resume.request` after reconnect.
+- Use the original meeting `session_id` in the `resume.request` envelope, even though the new authenticated WebSocket receives its own temporary `auth.accepted.session_id`.
 
 ```json
 {
@@ -375,9 +376,12 @@ The client shall:
 The server shall:
 
 - Validate the session token and workspace access.
-- Resume the existing session if still active.
-- Replay missed non-audio server messages where available.
-- Return a clear unrecoverable `session_not_resumable` error if the session cannot be resumed or resume support is not enabled in the current milestone.
+- Resume the existing session if it is active or disconnected, the authenticated user matches the original session user, the workspace matches, and `previous_connection_id` matches the resumable session.
+- Reattach the new connection to the original session ID and preserve the original server sequence.
+- Replay missed final transcript messages with server `seq` greater than `last_server_seq` where replay state is available.
+- Return a clear unrecoverable `session_not_resumable` error if the session is unknown, ended, belongs to another workspace or user, has a mismatched previous connection, or cannot be safely resumed.
+
+M1A.2 replay is backed by bounded in-process final-transcript replay state plus idempotent durable transcript writes. Durable replay after realtime process restart requires persisted server-sequence metadata on timeline records and is tracked as follow-up work.
 
 ## 8. Backpressure
 

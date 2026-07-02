@@ -36,6 +36,7 @@ FULL
 | Component | Failure Mode | Detection | User Impact | Required Behavior | Data Loss |
 | --- | --- | --- | --- | --- | --- |
 | WebSocket | Connection drop | Missed heartbeat or socket close | Live updates stop | Reconnect with exponential backoff; send resume request | Possible loss of unbuffered audio |
+| WebSocket | Resume rejected | `session_not_resumable` realtime error | Live session cannot reattach | Keep failure explicit; start a new session only by user/client policy; emit `audio.gap` for dropped buffered audio when applicable | Possible loss of unbuffered audio and missed live messages |
 | WebSocket | Server backpressure | `flow_control` message | Transcript delayed | Pause sends, buffer locally within limit, show degraded state, emit `audio.gap` if buffered audio is dropped | Possible loss if buffer fills |
 | Microphone | Permission denied | OS permission response | No user audio | Show permission guidance; allow retry | No audio captured |
 | Microphone | Device unplugged | Device change event | User audio stops | Pause mic capture; prompt device selection | Audio missing while unplugged |
@@ -83,7 +84,9 @@ The UI should avoid alarming copy during meetings. Detailed errors belong in dia
 ## 6. Recovery Requirements
 
 - Recovery must not duplicate transcript segments or suggestions.
-- Reconnected sessions must preserve the original session ID.
+- Reconnected sessions must preserve the original session ID when resume succeeds.
+- Resume attempts must validate token, workspace, user, previous connection, and session state before replaying any transcript content.
+- Repeated resume attempts must not create duplicate durable transcript records.
 - Provider retries must use bounded exponential backoff.
 - Manual user actions should not be retried automatically if they could cause duplicate writeback.
 - Post-call workflows should retry safely through the workflow engine.
