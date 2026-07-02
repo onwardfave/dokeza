@@ -92,7 +92,8 @@ pub fn capture_default_microphone_chunks_for(
         .lock()
         .map_err(|_| "microphone_capture_samples_lock_poisoned".to_string())?
         .clone();
-    let output_samples = resample_mono_nearest(&samples, input_sample_rate_hz, TARGET_SAMPLE_RATE_HZ);
+    let output_samples =
+        resample_mono_nearest(&samples, input_sample_rate_hz, TARGET_SAMPLE_RATE_HZ);
     let bytes = encode_pcm_s16le(&output_samples);
     let chunks = chunk_pcm_s16le_bytes(&bytes, DEFAULT_CHUNK_DURATION_MS);
 
@@ -116,7 +117,9 @@ fn build_collecting_stream_f32(
     device
         .build_input_stream(
             config,
-            move |data: &[f32], _| append_samples(&captured_samples, &f32_to_mono_i16(data, channels)),
+            move |data: &[f32], _| {
+                append_samples(&captured_samples, &f32_to_mono_i16(data, channels))
+            },
             move |_error| {},
             None,
         )
@@ -132,7 +135,9 @@ fn build_collecting_stream_i16(
     device
         .build_input_stream(
             config,
-            move |data: &[i16], _| append_samples(&captured_samples, &i16_to_mono_i16(data, channels)),
+            move |data: &[i16], _| {
+                append_samples(&captured_samples, &i16_to_mono_i16(data, channels))
+            },
             move |_error| {},
             None,
         )
@@ -148,7 +153,9 @@ fn build_collecting_stream_u16(
     device
         .build_input_stream(
             config,
-            move |data: &[u16], _| append_samples(&captured_samples, &u16_to_mono_i16(data, channels)),
+            move |data: &[u16], _| {
+                append_samples(&captured_samples, &u16_to_mono_i16(data, channels))
+            },
             move |_error| {},
             None,
         )
@@ -207,8 +214,8 @@ pub fn resample_mono_nearest(samples: &[i16], input_rate_hz: u32, output_rate_hz
         ((samples.len() as u64 * u64::from(output_rate_hz)) / u64::from(input_rate_hz)) as usize;
     (0..output_len)
         .map(|output_index| {
-            let input_index =
-                (output_index as u64 * u64::from(input_rate_hz) / u64::from(output_rate_hz)) as usize;
+            let input_index = (output_index as u64 * u64::from(input_rate_hz)
+                / u64::from(output_rate_hz)) as usize;
             samples[input_index.min(samples.len() - 1)]
         })
         .collect()
