@@ -192,14 +192,14 @@ Acceptance criteria:
 
 Goal: capture real microphone audio and stream it through the proven realtime client.
 
-Status: partially implemented. The native Tauri layer can capture a bounded default-microphone sample, downmix/resample it to mono 16 kHz `pcm_s16le`, chunk it into protocol-compatible 100 ms frames, and the webview can stream those chunks through the realtime client. Remaining work is continuous microphone streaming, explicit device selection, pause/resume capture state, and device-failure handling.
+Status: implemented for the Windows-first microphone vertical. The native Tauri layer can enumerate selectable input devices, capture a bounded selected/default microphone sample, downmix/resample it to mono 16 kHz `pcm_s16le`, and chunk it into protocol-compatible 100 ms frames. The webview now runs a continuous capture controller over repeated bounded capture windows, reindexes chunks monotonically, streams them through the realtime client, supports pause/resume/stop state, and emits `audio.gap` records for user pauses and device capture failures. Follow-up work remains to replace the repeated bounded capture windows with a long-lived native stream and to add system-audio capture.
 
 Tasks:
 
-1. Implement Windows microphone capture first. Partially done for bounded default-device capture.
-2. Add device selection and capture state machine.
+1. Implement Windows microphone capture first. Done for selected/default microphone capture.
+2. Add device selection and capture state machine. Done.
 3. Add chunking to protocol-compatible PCM frames. Done for bounded default-device capture.
-4. Add dropped-audio buffering and `audio.gap` emission.
+4. Add dropped-audio buffering and `audio.gap` emission. Done for buffer overflow, user pause, and device capture failure.
 5. Defer Windows loopback and macOS system audio until after mic capture proves the vertical.
 
 Acceptance criteria:
@@ -236,12 +236,14 @@ Goal: make the vertical usable.
 
 Prerequisite: either a hosted identity integration or an explicitly development-only token issuer must provide workspace-scoped realtime tokens. Hardcoded desktop tokens are not acceptable beyond synthetic local probes.
 
+Status: implemented for the local authenticated realtime vertical. The desktop can request a development realtime token, start synthetic or microphone-backed sessions, select a microphone device, pause/resume microphone capture, stop sessions, show connection/capture status, render partial-to-final transcript updates, and display a compact overlay transcript view using in-memory broadcast updates.
+
 Tasks:
 
-1. Add transcript panel with partial-to-final updates.
-2. Add session controls: start, pause where supported, stop.
-3. Add status bar for connected, reconnecting, degraded, local-only, and unavailable states.
-4. Add compact overlay transcript view.
+1. Add transcript panel with partial-to-final updates. Done.
+2. Add session controls: start, pause where supported, stop. Done.
+3. Add status bar for connected, reconnecting, degraded, local-only, and unavailable states. Done for realtime and local capture states.
+4. Add compact overlay transcript view. Done with live in-memory broadcast updates only.
 
 Acceptance criteria:
 
