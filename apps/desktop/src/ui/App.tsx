@@ -4,6 +4,7 @@ import {
   DesktopRealtimeSessionClient,
   type DesktopRealtimeSnapshot,
 } from "../protocol/desktopRealtimeSession.js";
+import { captureDefaultMicrophonePcmChunks } from "../protocol/nativeMicrophoneSource.js";
 import {
   formatDiagnosticDetails,
   isTauriRuntime,
@@ -64,6 +65,7 @@ function LiveSessionPanel() {
   const [snapshot, setSnapshot] = useState<DesktopRealtimeSnapshot>(initialLiveSessionSnapshot);
   const clientRef = useRef<DesktopRealtimeSessionClient | null>(null);
   const refreshTimerRef = useRef<number | undefined>(undefined);
+  const nativeRuntimeAvailable = useMemo(() => isTauriRuntime(), []);
   const status = getLiveSessionStatusView(snapshot.status);
   const detail = getLiveSessionDetail(snapshot);
   const transcriptRows = toLiveTranscriptRows(snapshot.transcripts);
@@ -109,6 +111,41 @@ function LiveSessionPanel() {
     startRefreshLoop();
   }
 
+  async function startMicrophoneSession() {
+    const client = new DesktopRealtimeSessionClient({
+      endpoint,
+      token,
+      clientVersion: "0.1.0",
+      platform: "windows",
+      deviceId: "dev_desktop_preview",
+      syntheticAudio: {
+        chunkCount: 0,
+      },
+    });
+    clientRef.current = client;
+    client.startSyntheticSession();
+    setSnapshot(client.snapshot);
+    startRefreshLoop();
+
+    try {
+      const chunks = await captureDefaultMicrophonePcmChunks();
+      for (const chunk of chunks) {
+        client.sendAudioChunk(chunk);
+      }
+      setSnapshot(client.snapshot);
+    } catch {
+      setSnapshot({
+        ...client.snapshot,
+        status: "failed",
+        lastError: {
+          code: "microphone_capture_failed",
+          message: "Microphone capture failed.",
+          recoverable: true,
+        },
+      });
+    }
+  }
+
   function stopSession() {
     clientRef.current?.stop("user_stopped");
     refreshSnapshot();
@@ -144,6 +181,13 @@ function LiveSessionPanel() {
         <div className="live-session-buttons">
           <button type="button" disabled={!canStart} onClick={startSession}>
             Start synthetic
+          </button>
+          <button
+            type="button"
+            disabled={!canStart || !nativeRuntimeAvailable}
+            onClick={() => void startMicrophoneSession()}
+          >
+            Start microphone
           </button>
           <button type="button" disabled={!canStop} onClick={stopSession}>
             Stop
