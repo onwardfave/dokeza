@@ -149,10 +149,11 @@ describe("createRealtimeServer", () => {
       transcriptTimelineSink?: TranscriptTimelineSink;
       transcriptRetentionMode?: TranscriptRetentionMode;
       sessionStore?: SessionStore;
+      tokenValidator?: TokenValidator;
     } = {},
   ): Promise<{ port: number }> {
     const serverOptions: RealtimeServerOptions = {
-      tokenValidator: createTestTokenValidator(),
+      tokenValidator: options.tokenValidator ?? createTestTokenValidator(),
     };
     if (options.sttAdapter !== undefined) {
       serverOptions.sttAdapter = options.sttAdapter;
@@ -256,14 +257,17 @@ describe("createRealtimeServer", () => {
     return ws;
   }
 
-  async function authenticate(ws: WebSocket): Promise<string> {
+  async function authenticateWithDetails(
+    ws: WebSocket,
+    token = "valid_token",
+  ): Promise<{ sessionId: string; connectionId: string; workspaceId: string }> {
     const authResponse = await sendAndReceive(ws, {
       protocol_version: REALTIME_PROTOCOL_VERSION,
       type: "auth.hello",
       seq: 1,
       sent_at: new Date().toISOString(),
       payload: {
-        token: "valid_token",
+        token,
         client_version: "0.1.0",
         platform: "windows",
         device_id: "dev_test_1",
@@ -271,7 +275,16 @@ describe("createRealtimeServer", () => {
     });
 
     expect(authResponse.type).toBe("auth.accepted");
-    return authResponse.session_id as string;
+    const payload = authResponse.payload as { connection_id: string; workspace_id: string };
+    return {
+      sessionId: authResponse.session_id as string,
+      connectionId: payload.connection_id,
+      workspaceId: payload.workspace_id,
+    };
+  }
+
+  async function authenticate(ws: WebSocket): Promise<string> {
+    return (await authenticateWithDetails(ws)).sessionId;
   }
 
   it("accepts a valid auth.hello and returns auth.accepted", async () => {
@@ -563,19 +576,190 @@ describe("createRealtimeServer", () => {
     expect((closedResponse.payload as Record<string, unknown>).reason).toBe(testCase.closedReason);
   });
 
-  it("returns an explicit error for unsupported resume requests", async () => {
-    const { port } = await startServer();
-    const ws = await connect(port);
-    const sessionId = await authenticate(ws);
+  it("resumes the original session and replays missed final transcripts", async () => {
+    const sessionStore = createRecordingSessionStore();
+    const transcriptTimelineSink = createRecordingTranscriptSink();
+    const sttAdapter: SttAdapter = {
+      async transcribeChunk(input) {
+        return {
+          events: [
+            {
+              type: "transcript.final",
+              payload: {
+                segment_id: "seg_resume",
+                speaker: "user",
+                text: "missed final",
+                start_ms: input.meta.timestamp_ms,
+                end_ms: input.meta.timestamp_ms + input.meta.duration_ms,
+                confidence: 0.91,
+              },
+            },
+          ],
+          telemetry: [],
+        };
+      },
+    };
 
-    const response = await sendAndReceive(ws, {
+    const { port } = await startServer({ sttAdapter, transcriptTimelineSink, sessionStore });
+    const firstClient = await connect(port);
+    const firstAuth = await authenticateWithDetails(firstClient);
+
+    firstClient.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "session.start",
+        seq: 2,
+        session_id: firstAuth.sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          workspace_id: "ws_test_1",
+          meeting_source: "manual",
+          capture: { microphone: true, system_audio: false, screen_context: false },
+          processing: { stt: "cloud", llm: "cloud", retrieval: "cloud" },
+        },
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sessionStore.creates).toEqual([
+      {
+        id: firstAuth.sessionId,
+        workspaceId: "ws_test_1",
+        createdBy: "user_test_1",
+        meetingSource: "manual",
+        connectionId: firstAuth.connectionId,
+      },
+    ]);
+
+    firstClient.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "audio.chunk_meta",
+        seq: 3,
+        session_id: firstAuth.sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          chunk_id: "aud_resume",
+          chunk_index: 0,
+          stream: "microphone",
+          format: "pcm_s16le",
+          sample_rate_hz: 16000,
+          channels: 1,
+          duration_ms: 100,
+          timestamp_ms: 0,
+          byte_length: 2,
+        },
+      }),
+    );
+
+    const originalTranscriptPromise = receiveJson(firstClient, 500);
+    firstClient.send(Buffer.from([1, 2]), { binary: true });
+    const originalTranscript = await originalTranscriptPromise;
+    expect(originalTranscript.type).toBe("transcript.final");
+    expect(originalTranscript.session_id).toBe(firstAuth.sessionId);
+    const transcriptSeq = originalTranscript.seq as number;
+    expect(transcriptSeq).toBeGreaterThan(1);
+    expect(transcriptTimelineSink.transcriptWrites).toHaveLength(1);
+
+    const firstClose = waitForClose(firstClient);
+    firstClient.close();
+    await firstClose;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const secondClient = await connect(port);
+    const secondAuth = await authenticateWithDetails(secondClient);
+    expect(secondAuth.sessionId).not.toBe(firstAuth.sessionId);
+
+    const replayedTranscript = await sendAndReceive(secondClient, {
       protocol_version: REALTIME_PROTOCOL_VERSION,
       type: "resume.request",
       seq: 2,
-      session_id: sessionId,
+      session_id: firstAuth.sessionId,
       sent_at: new Date().toISOString(),
       payload: {
-        previous_connection_id: "conn_previous",
+        previous_connection_id: firstAuth.connectionId,
+        last_client_seq: 3,
+        last_server_seq: transcriptSeq - 1,
+      },
+    });
+
+    expect(replayedTranscript.type).toBe("transcript.final");
+    expect(replayedTranscript.session_id).toBe(firstAuth.sessionId);
+    expect(replayedTranscript.seq).toBe(transcriptSeq);
+    expect((replayedTranscript.payload as Record<string, unknown>).text).toBe("missed final");
+    expect(handle!.sessionManager.getSessionByConnection(secondAuth.connectionId)?.sessionId).toBe(
+      firstAuth.sessionId,
+    );
+    expect(transcriptTimelineSink.transcriptWrites).toHaveLength(1);
+    expect(sessionStore.seqUpdates).toEqual([
+      {
+        sessionId: firstAuth.sessionId,
+        workspaceId: "ws_test_1",
+        lastClientSeq: 3,
+        lastServerSeq: transcriptSeq,
+        connectionId: secondAuth.connectionId,
+      },
+    ]);
+
+    const secondClose = waitForClose(secondClient);
+    secondClient.close();
+    await secondClose;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const thirdClient = await connect(port);
+    const thirdAuth = await authenticateWithDetails(thirdClient);
+    const replayedAgain = await sendAndReceive(thirdClient, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "resume.request",
+      seq: 2,
+      session_id: firstAuth.sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        previous_connection_id: secondAuth.connectionId,
+        last_client_seq: 3,
+        last_server_seq: transcriptSeq - 1,
+      },
+    });
+
+    expect(replayedAgain.type).toBe("transcript.final");
+    expect(replayedAgain.session_id).toBe(firstAuth.sessionId);
+    expect(handle!.sessionManager.getSessionByConnection(thirdAuth.connectionId)?.sessionId).toBe(
+      firstAuth.sessionId,
+    );
+    expect(transcriptTimelineSink.transcriptWrites).toHaveLength(1);
+  });
+
+  it("rejects cross-workspace resume attempts without replaying transcript content", async () => {
+    const tokenValidator: TokenValidator = {
+      async validate(token: string) {
+        if (token === "workspace_one") {
+          return createTestActor({ userId: "user_1", workspaceId: "ws_test_1" });
+        }
+        if (token === "workspace_two") {
+          return createTestActor({ userId: "user_1", workspaceId: "ws_test_2" });
+        }
+        return undefined;
+      },
+    };
+
+    const { port } = await startServer({ tokenValidator });
+    const firstClient = await connect(port);
+    const firstAuth = await authenticateWithDetails(firstClient, "workspace_one");
+    const firstClose = waitForClose(firstClient);
+    firstClient.close();
+    await firstClose;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const secondClient = await connect(port);
+    await authenticateWithDetails(secondClient, "workspace_two");
+
+    const response = await sendAndReceive(secondClient, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "resume.request",
+      seq: 2,
+      session_id: firstAuth.sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        previous_connection_id: firstAuth.connectionId,
         last_client_seq: 1,
         last_server_seq: 1,
       },
@@ -586,6 +770,7 @@ describe("createRealtimeServer", () => {
       code: "session_not_resumable",
       recoverable: false,
     });
+    expect(JSON.stringify(response)).not.toContain(firstAuth.sessionId);
   });
 
   it("returns an explicit error for unavailable suggestion requests", async () => {

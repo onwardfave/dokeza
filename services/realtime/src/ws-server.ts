@@ -59,6 +59,9 @@ type SessionClosedReason = Extract<
   { type: "session.closed" }
 >["payload"]["reason"];
 type ErrorCode = Extract<RealtimeJsonMessage, { type: "error" }>["payload"]["code"];
+type ReplayableTranscriptMessage = Extract<RealtimeJsonMessage, { type: "transcript.final" }>;
+
+const MAX_REPLAYABLE_TRANSCRIPTS_PER_SESSION = 1000;
 
 function mapEndReasonToClosedReason(reason: SessionEndReason): SessionClosedReason {
   switch (reason) {
@@ -81,6 +84,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     options.transcriptTimelineSink ?? new InMemoryTranscriptTimelineSink();
   const transcriptRetentionMode = options.transcriptRetentionMode ?? "7_days";
   const sessionStore = options.sessionStore;
+  const replayableTranscriptsBySession = new Map<string, ReplayableTranscriptMessage[]>();
   const httpServer = createServer((_req, res) => {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not_found" }));
@@ -128,14 +132,29 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
 
     const sendTranscript = (sessionId: string, event: SttTranscriptEvent) => {
       const seq = sessionManager.nextServerSeq(sessionId);
-      sendJson({
+      const message = {
         protocol_version: REALTIME_PROTOCOL_VERSION,
         type: event.type,
         seq: seq ?? 0,
         session_id: sessionId,
         sent_at: new Date().toISOString(),
         payload: event.payload,
-      });
+      } as RealtimeJsonMessage;
+
+      if (event.type === "transcript.final") {
+        const replayableMessage = message as ReplayableTranscriptMessage;
+        const replayableMessages = replayableTranscriptsBySession.get(sessionId) ?? [];
+        replayableMessages.push(replayableMessage);
+        if (replayableMessages.length > MAX_REPLAYABLE_TRANSCRIPTS_PER_SESSION) {
+          replayableMessages.splice(
+            0,
+            replayableMessages.length - MAX_REPLAYABLE_TRANSCRIPTS_PER_SESSION,
+          );
+        }
+        replayableTranscriptsBySession.set(sessionId, replayableMessages);
+      }
+
+      sendJson(message);
     };
 
     const sendTranscriptPersistenceError = (sessionId: string) => {
@@ -154,6 +173,39 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       sendError("session_persistence_failed", "Session persistence failed.", true, sessionId);
+    };
+
+    const replayTranscriptMessages = (sessionId: string, lastServerSeq: number): void => {
+      const replayableMessages = replayableTranscriptsBySession.get(sessionId) ?? [];
+      for (const message of replayableMessages) {
+        if (message.seq > lastServerSeq) {
+          sendJson(message);
+        }
+      }
+    };
+
+    const updateSessionRecoveryState = async (
+      sessionId: string,
+      workspaceId: string,
+      lastClientSeq: number,
+      lastServerSeq: number,
+      currentConnectionId: string,
+    ): Promise<void> => {
+      if (sessionStore === undefined) {
+        return;
+      }
+
+      try {
+        await sessionStore.updateSeqState({
+          sessionId,
+          workspaceId,
+          lastClientSeq,
+          lastServerSeq,
+          connectionId: currentConnectionId,
+        });
+      } catch {
+        sendSessionPersistenceError(sessionId);
+      }
     };
 
     const persistTranscriptEvent = async (
@@ -406,6 +458,46 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         return;
       }
 
+      if (parsed.type === "resume.request") {
+        const resumeResult = sessionManager.resumeSession({
+          sessionId: parsed.session_id,
+          previousConnectionId: parsed.payload.previous_connection_id,
+          newConnectionId: connectionId,
+          actor: session.actor,
+          workspaceId: session.workspaceId,
+          lastClientSeq: Math.max(parsed.payload.last_client_seq, parsed.seq),
+          lastServerSeq: parsed.payload.last_server_seq,
+        });
+
+        if ("error" in resumeResult) {
+          sendError(
+            "session_not_resumable",
+            "Session cannot be resumed.",
+            false,
+            session.sessionId,
+          );
+          return;
+        }
+
+        transcriptProcessor = new TranscriptProcessor({
+          sessionId: resumeResult.session.sessionId,
+          workspaceId: resumeResult.session.workspaceId,
+        });
+        sessionPersisted = sessionStore !== undefined;
+        await updateSessionRecoveryState(
+          resumeResult.session.sessionId,
+          resumeResult.session.workspaceId,
+          resumeResult.session.clientSeq,
+          resumeResult.session.serverSeq,
+          connectionId,
+        );
+        replayTranscriptMessages(
+          resumeResult.session.sessionId,
+          parsed.payload.last_server_seq,
+        );
+        return;
+      }
+
       if (parsed.session_id !== session.sessionId) {
         sendError(
           "invalid_message",
@@ -481,16 +573,6 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         } catch {
           sendTranscriptPersistenceError(session.sessionId);
         }
-      }
-
-      if (frameResult.type === "json" && frameResult.message.type === "resume.request") {
-        sendError(
-          "session_not_resumable",
-          "Session resume is not available for this session.",
-          false,
-          session.sessionId,
-        );
-        return;
       }
 
       if (frameResult.type === "json" && frameResult.message.type === "suggestion.request") {
