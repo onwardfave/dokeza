@@ -43,12 +43,13 @@ Implemented foundation:
 - Desktop webview synthetic realtime client with protocol sequencing, deterministic PCM chunk generation, transcript/error/status handling, reconnect backoff, in-memory audio buffering, `audio.gap` emission for dropped buffered audio, resume request construction, and a visible live-session panel.
 - Bounded native default-microphone capture can produce protocol-compatible mono 16 kHz PCM chunks and feed them into the desktop realtime client.
 - Auth architecture baseline exists for hosted identity, Dokeza-owned workspace membership, and short-lived realtime session tokens.
+- Development-only auth token path exists: the API can issue synthetic API tokens, exchange them for short-lived workspace-scoped realtime tokens, realtime validates token purpose/workspace/device context, and the desktop can request local dev realtime tokens.
 - Local development PostgreSQL and pgvector stack.
 
 Key gaps:
 
 - No continuous desktop audio capture pipeline with device selection, pause/resume, and device-failure handling.
-- No implemented hosted auth, development token issuer, or workspace provisioning flow.
+- No implemented hosted auth provider, durable user/workspace provisioning, or production onboarding flow.
 - PostgreSQL-backed session and timeline persistence still needs automated CI execution against PostgreSQL.
 - Reconnect/resume is implemented for in-process realtime recovery with original session reattachment, final-transcript replay by server sequence, and safe invalid-resume failure behavior; durable replay after realtime process restart still needs persisted server-sequence metadata.
 - No live transcript product UI.
@@ -211,21 +212,23 @@ Acceptance criteria:
 
 Goal: unblock authenticated realtime sessions and meeting retrieval without hardcoded tokens.
 
+Status: partially implemented for local development. `@dokeza/auth` signs and validates Dokeza auth tokens; `services/api` exposes development-only token issuance plus profile, workspace list, and realtime-token endpoints; `services/realtime` accepts only selected-workspace realtime auth context; and the desktop can request a local dev realtime token. Hosted IdP integration, durable workspace provisioning, secure desktop token storage, and production onboarding remain follow-up work.
+
 Tasks:
 
-1. Select hosted identity provider or implement an explicitly development-only token issuer for local M1A testing.
-2. Define auth-related REST schemas in `@dokeza/contracts` for profile, workspace list, workspace selection, and realtime token issuance.
-3. Add API endpoints for authenticated user profile, workspace listing, and short-lived realtime token issuance.
-4. Update realtime auth validation to accept only Dokeza-issued realtime tokens for non-test sessions.
+1. Select hosted identity provider or implement an explicitly development-only token issuer for local M1A testing. Development-only issuer implemented; hosted provider remains.
+2. Define auth-related REST schemas in `@dokeza/contracts` for profile, workspace list, workspace selection, and realtime token issuance. Done.
+3. Add API endpoints for authenticated user profile, workspace listing, and short-lived realtime token issuance. Done for development-only in-memory memberships.
+4. Update realtime auth validation to accept only Dokeza-issued realtime tokens for non-test sessions. Done for token-purpose, workspace, and optional device context.
 5. Store desktop auth tokens using platform secure storage where available.
 6. Add failure behavior for IdP outage, token issuance failure, expired token, and cross-workspace token use.
 
 Acceptance criteria:
 
-- Desktop can obtain a workspace-scoped realtime token without hardcoded credentials.
+- Desktop can obtain a workspace-scoped realtime token without hardcoded credentials in local development.
 - Realtime rejects expired, malformed, wrong-purpose, and cross-workspace tokens.
 - API exposes only workspaces where the user is a member.
-- Auth telemetry excludes token values and customer content.
+- Auth telemetry and errors exclude token values and customer content.
 
 ### M1A.5 - Live Transcript UI
 

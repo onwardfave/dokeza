@@ -8,6 +8,8 @@ This document defines the initial authentication architecture for Dokeza across 
 
 Use a hosted identity provider for the first production-capable implementation. Dokeza should not hand-roll password storage, MFA, session refresh, or SSO protocols in the early product.
 
+For M1A local development, Dokeza includes a development-only HMAC token issuer so the desktop, API, and realtime service can exercise the final internal token boundary before hosted identity provider selection. This issuer is not a production identity provider and must remain disabled outside local/test environments.
+
 The internal Dokeza boundary is:
 
 - The desktop client receives user authentication through the provider's supported desktop/browser flow.
@@ -25,6 +27,7 @@ Provider choices can include Clerk, Auth0, Supabase Auth, or an equivalent hoste
 | Workspace | Dokeza | Tenant boundary for meetings, documents, policies, and billing. |
 | Membership | Dokeza | Maps provider user IDs to workspace IDs and roles. |
 | Realtime session token | Dokeza | Short-lived token scoped to user, workspace, device, and session-start intent. |
+| Development API token | Dokeza local/test only | Synthetic token for local M1A testing; unavailable outside local/test config. |
 | Refresh token | Hosted IdP | Stored only through provider-supported secure desktop/browser mechanisms. |
 
 ## 4. Token Requirements
@@ -39,6 +42,8 @@ API and realtime authentication must validate:
 - Token purpose, such as `api_access` or `realtime_session`.
 
 Realtime session tokens should be short-lived, single-purpose, and scoped to the selected workspace. They must not contain transcript, prompt, document, suggestion, or raw audio content.
+
+Development tokens are signed with `DOKEZA_AUTH_SIGNING_SECRET`; local/test environments have an explicit `dev_only` default, while production-like environments require a configured secret and reject `DOKEZA_DEV_AUTH_ENABLED=true`.
 
 ## 5. Desktop Flow
 
@@ -59,6 +64,7 @@ Tokens stored on device must use platform secure storage where available. Logs, 
 | Realtime service | Realtime token validation, workspace/user/session binding, recoverable auth failures, no provider refresh logic. |
 | Database package | Workspace-scoped transactions with RLS using the selected workspace ID. |
 | Authz package | Membership and role checks shared by API, realtime, and future services. |
+| Auth package | Dokeza token signing/validation for internal API and realtime token boundaries. |
 
 ## 7. Failure and Degraded Behavior
 
@@ -67,6 +73,7 @@ Tokens stored on device must use platform secure storage where available. Logs, 
 - If a realtime token expires before session start, desktop requests a new token.
 - If a token expires during an active realtime connection, the session may continue until the server policy requires renewal; reconnect must obtain a fresh token before `resume.request`.
 - If workspace membership cannot be verified, access fails closed.
+- If a development API token is presented outside local/test-enabled config, API access fails closed.
 
 ## 8. Security and Privacy
 

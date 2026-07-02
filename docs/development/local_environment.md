@@ -36,6 +36,42 @@ pnpm check
 pnpm --filter @dokeza/desktop build
 ```
 
+## Local Development Auth
+
+Local and test environments enable a development-only auth issuer so the API, realtime service, and desktop can exercise workspace-scoped tokens before a hosted identity provider is selected.
+
+Default local auth settings:
+
+- Issuer: `https://auth.local.dokeza.dev`
+- Audience: `dokeza`
+- Signing secret: `dev_only_dokeza_auth_secret_do_not_use`
+- API token TTL: 3600 seconds
+- Realtime token TTL: 300 seconds
+
+Production-like environments require `DOKEZA_AUTH_SIGNING_SECRET` and reject `DOKEZA_DEV_AUTH_ENABLED=true`.
+
+Request a synthetic local API token:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:3000/v1/dev/auth/token `
+  -Body '{"user_id":"user_dev","workspace_id":"ws_dev","role":"admin"}'
+```
+
+Exchange the API token for a short-lived realtime token:
+
+```powershell
+$apiToken = "<token from /v1/dev/auth/token>"
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:3000/v1/realtime/token `
+  -Headers @{ Authorization = "Bearer $apiToken" } `
+  -Body '{"workspace_id":"ws_dev","device_id":"dev_desktop_preview"}'
+```
+
+The desktop preview panel can perform the same exchange with the `Get dev token` button when pointed at the local API endpoint.
+
 Run native desktop checks:
 
 ```powershell
