@@ -40,6 +40,7 @@ Implemented foundation:
 - PostgreSQL session store and transcript timeline sink interfaces/implementations with component tests, typed config factory wiring, realtime session lifecycle persistence hooks, and opt-in local PostgreSQL integration coverage.
 - Desktop Tauri capability probes for audio, cache, crash diagnostics, realtime, shortcuts, and update policy.
 - Desktop webview synthetic realtime client with protocol sequencing, deterministic PCM chunk generation, transcript/error/status handling, reconnect backoff, in-memory audio buffering, `audio.gap` emission for dropped buffered audio, resume request construction, and a visible live-session panel.
+- Bounded native default-microphone capture can produce protocol-compatible mono 16 kHz PCM chunks and feed them into the desktop realtime client.
 - Local development PostgreSQL and pgvector stack.
 
 Key gaps:
@@ -187,13 +188,13 @@ Acceptance criteria:
 
 Goal: capture real microphone audio and stream it through the proven realtime client.
 
-Status: not yet implemented for native microphone capture. The TypeScript realtime client is ready to accept protocol-compatible PCM chunks, buffer them during reconnect, and emit `audio.gap`; the remaining work is the Windows native capture source, device selection, and device-failure handling.
+Status: partially implemented. The native Tauri layer can capture a bounded default-microphone sample, downmix/resample it to mono 16 kHz `pcm_s16le`, chunk it into protocol-compatible 100 ms frames, and the webview can stream those chunks through the realtime client. Remaining work is continuous microphone streaming, explicit device selection, pause/resume capture state, and device-failure handling.
 
 Tasks:
 
-1. Implement Windows microphone capture first.
+1. Implement Windows microphone capture first. Partially done for bounded default-device capture.
 2. Add device selection and capture state machine.
-3. Add chunking to protocol-compatible PCM frames.
+3. Add chunking to protocol-compatible PCM frames. Done for bounded default-device capture.
 4. Add dropped-audio buffering and `audio.gap` emission.
 5. Defer Windows loopback and macOS system audio until after mic capture proves the vertical.
 
