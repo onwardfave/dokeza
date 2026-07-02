@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "required": [
+    "meeting_id",
+    "workspace_id",
+    "format",
+    "content_type",
+    "content"
+  ],
+  "properties": {
+    "meeting_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "workspace_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "format": {
+      "anyOf": [
+        {
+          "const": "markdown",
+          "type": "string"
+        },
+        {
+          "const": "json",
+          "type": "string"
+        }
+      ]
+    },
+    "content_type": {
+      "anyOf": [
+        {
+          "const": "text/markdown",
+          "type": "string"
+        },
+        {
+          "const": "application/json",
+          "type": "string"
+        }
+      ]
+    },
+    "content": {
+      "type": "string"
+    }
+  }
+}

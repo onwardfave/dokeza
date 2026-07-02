@@ -1,0 +1,78 @@
+{
+  "type": "object",
+  "required": [
+    "workspace_id",
+    "meetings"
+  ],
+  "properties": {
+    "workspace_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "meetings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "meeting_id",
+          "workspace_id",
+          "created_by",
+          "meeting_source",
+          "status",
+          "segment_count",
+          "gap_count"
+        ],
+        "properties": {
+          "meeting_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "workspace_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "created_by": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "meeting_source": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "active",
+                "type": "string"
+              },
+              {
+                "const": "paused",
+                "type": "string"
+              },
+              {
+                "const": "ended",
+                "type": "string"
+              }
+            ]
+          },
+          "started_at": {
+            "description": "ISO 8601 timestamp",
+            "type": "string"
+          },
+          "ended_at": {
+            "description": "ISO 8601 timestamp",
+            "type": "string"
+          },
+          "segment_count": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "gap_count": {
+            "minimum": 0,
+            "type": "number"
+          }
+        }
+      }
+    }
+  }
+}

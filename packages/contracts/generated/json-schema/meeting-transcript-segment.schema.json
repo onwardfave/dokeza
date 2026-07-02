@@ -1,0 +1,49 @@
+{
+  "type": "object",
+  "required": [
+    "segment_id",
+    "speaker",
+    "text",
+    "start_ms",
+    "end_ms",
+    "confidence"
+  ],
+  "properties": {
+    "segment_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "speaker": {
+      "anyOf": [
+        {
+          "const": "user",
+          "type": "string"
+        },
+        {
+          "const": "remote",
+          "type": "string"
+        },
+        {
+          "const": "unknown",
+          "type": "string"
+        }
+      ]
+    },
+    "text": {
+      "type": "string"
+    },
+    "start_ms": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "end_ms": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "confidence": {
+      "minimum": 0,
+      "maximum": 1,
+      "type": "number"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "required": [
+    "meeting_id",
+    "workspace_id",
+    "deleted"
+  ],
+  "properties": {
+    "meeting_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "workspace_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "deleted": {
+      "const": true,
+      "type": "boolean"
+    }
+  }
+}
