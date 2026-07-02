@@ -9,7 +9,17 @@ export { SessionManager } from "./session-manager.js";
 export type { RealtimeSession, SessionState } from "./session-manager.js";
 
 export { createRealtimeServer } from "./ws-server.js";
-export type { RealtimeServerOptions, RealtimeServerHandle, TokenValidator } from "./ws-server.js";
+export type {
+  RealtimeAuthContext,
+  RealtimeServerOptions,
+  RealtimeServerHandle,
+  TokenValidator,
+} from "./ws-server.js";
+
+export {
+  DokezaRealtimeTokenValidator,
+  createDokezaRealtimeTokenValidator,
+} from "./realtime-token-validator.js";
 
 export { DeterministicSttAdapter } from "./stt-adapter.js";
 export type {

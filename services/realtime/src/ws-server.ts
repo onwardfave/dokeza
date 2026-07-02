@@ -29,7 +29,13 @@ import { TranscriptProcessor } from "./transcript-processor.js";
 import type { SessionStore } from "./session-store.js";
 
 export interface TokenValidator {
-  validate(token: string): Promise<Actor | undefined>;
+  validate(token: string): Promise<RealtimeAuthContext | undefined>;
+}
+
+export interface RealtimeAuthContext {
+  actor: Actor;
+  workspaceId: string;
+  deviceId?: string;
 }
 
 export interface RealtimeServerOptions {
@@ -384,25 +390,26 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           return;
         }
 
-        const actor = await options.tokenValidator.validate(parsed.payload.token);
-        if (actor === undefined) {
+        const authContext = await options.tokenValidator.validate(parsed.payload.token);
+        if (authContext === undefined) {
           sendError("auth_failed", "Invalid token", false);
           ws.close(1008, "auth_failed");
           return;
         }
 
-        // Extract workspace from token context or use a default for now
-        const workspaceId = actor.memberships[0]?.workspaceId;
-        if (workspaceId === undefined) {
-          sendError("auth_failed", "No workspace membership", false);
+        if (
+          authContext.deviceId !== undefined &&
+          authContext.deviceId !== parsed.payload.device_id
+        ) {
+          sendError("auth_failed", "Device does not match token", false);
           ws.close(1008, "auth_failed");
           return;
         }
 
         const authResult = sessionManager.authenticate(
           connectionId,
-          actor,
-          workspaceId,
+          authContext.actor,
+          authContext.workspaceId,
           parsed.seq,
         );
         if ("error" in authResult) {
@@ -425,7 +432,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           sent_at: new Date().toISOString(),
           payload: {
             connection_id: connectionId,
-            workspace_id: workspaceId,
+            workspace_id: authContext.workspaceId,
             policy: {
               screen_context_allowed: true,
               cloud_stt_allowed: true,

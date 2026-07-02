@@ -27,6 +27,7 @@ describe("createSttAdapterFromConfig", () => {
       parseConfig(
         {
           DOKEZA_ENV: "production",
+          DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
           DEEPGRAM_API_KEY: "dg_test_secret",
           DEEPGRAM_ENDPOINT: "wss://api.deepgram.com/v1/listen",
           DATABASE_URL: "postgres://dokeza:secret@db.example.com:5432/dokeza",

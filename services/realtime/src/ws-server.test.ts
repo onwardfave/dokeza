@@ -32,7 +32,11 @@ function createTestTokenValidator(): TokenValidator {
   return {
     async validate(token: string) {
       if (token === "valid_token") {
-        return createTestActor({ workspaceId: "ws_test_1" });
+        return {
+          actor: createTestActor({ workspaceId: "ws_test_1" }),
+          workspaceId: "ws_test_1",
+          deviceId: "dev_test_1",
+        };
       }
       return undefined;
     },
@@ -351,6 +355,39 @@ describe("createRealtimeServer", () => {
           client_version: "0.1.0",
           platform: "windows",
           device_id: "dev_test_1",
+        },
+      }),
+    );
+
+    const code = await closePromise;
+    expect(code).toBe(1008);
+  });
+
+  it("rejects auth when the device does not match the token context", async () => {
+    const tokenValidator: TokenValidator = {
+      async validate() {
+        return {
+          actor: createTestActor({ workspaceId: "ws_test_1" }),
+          workspaceId: "ws_test_1",
+          deviceId: "dev_expected",
+        };
+      },
+    };
+    const { port } = await startServer({ tokenValidator });
+    const ws = await connect(port);
+    const closePromise = waitForClose(ws);
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "auth.hello",
+        seq: 1,
+        sent_at: new Date().toISOString(),
+        payload: {
+          token: "valid_token",
+          client_version: "0.1.0",
+          platform: "windows",
+          device_id: "dev_other",
         },
       }),
     );
@@ -732,10 +769,16 @@ describe("createRealtimeServer", () => {
     const tokenValidator: TokenValidator = {
       async validate(token: string) {
         if (token === "workspace_one") {
-          return createTestActor({ userId: "user_1", workspaceId: "ws_test_1" });
+          return {
+            actor: createTestActor({ userId: "user_1", workspaceId: "ws_test_1" }),
+            workspaceId: "ws_test_1",
+          };
         }
         if (token === "workspace_two") {
-          return createTestActor({ userId: "user_1", workspaceId: "ws_test_2" });
+          return {
+            actor: createTestActor({ userId: "user_1", workspaceId: "ws_test_2" }),
+            workspaceId: "ws_test_2",
+          };
         }
         return undefined;
       },
