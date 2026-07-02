@@ -2,6 +2,7 @@ import { describe, expect, it, afterEach } from "vitest";
 import { createDokezaAuthTokenService } from "@dokeza/auth";
 import type { Actor } from "@dokeza/authz";
 import { createHttpServer, type HttpServerHandle } from "./http-server.js";
+import { InMemoryMeetingReviewRepository } from "./meeting-review-repository.js";
 
 function getPort(handle: HttpServerHandle): number {
   const addr = handle.server.address();
@@ -43,10 +44,59 @@ describe("API HTTP Server", () => {
     });
   }
 
+  const meetingRepository = new InMemoryMeetingReviewRepository([
+    {
+      meeting: {
+        meeting_id: "sess_ws_1",
+        workspace_id: "ws_1",
+        created_by: "user_1",
+        meeting_source: "manual",
+        status: "ended",
+        started_at: "2026-07-02T00:00:00.000Z",
+        ended_at: "2026-07-02T00:10:00.000Z",
+        segment_count: 1,
+        gap_count: 1,
+      },
+      segments: [
+        {
+          segment_id: "seg_1",
+          speaker: "user",
+          text: "follow up with pricing",
+          start_ms: 0,
+          end_ms: 1200,
+          confidence: 0.91,
+        },
+      ],
+      gaps: [
+        {
+          stream: "microphone",
+          start_ms: 1200,
+          end_ms: 1500,
+          dropped_chunks: 3,
+          reason: "user_paused_capture",
+        },
+      ],
+    },
+    {
+      meeting: {
+        meeting_id: "sess_ws_2",
+        workspace_id: "ws_2",
+        created_by: "user_2",
+        meeting_source: "manual",
+        status: "ended",
+        started_at: "2026-07-02T01:00:00.000Z",
+        ended_at: "2026-07-02T01:10:00.000Z",
+        segment_count: 0,
+        gap_count: 0,
+      },
+    },
+  ]);
+
   async function startServer(env?: NodeJS.ProcessEnv): Promise<number> {
     handle = createHttpServer({
       env: env ?? defaultEnv,
       now: () => fixedNow,
+      meetingRepository,
     });
     await new Promise<void>((resolve) => {
       handle!.server.listen(0, "127.0.0.1", () => resolve());
@@ -230,5 +280,180 @@ describe("API HTTP Server", () => {
     });
     expect(crossWorkspace.status).toBe(403);
     expect(await crossWorkspace.json()).toEqual({ error: "workspace_access_denied" });
+  });
+
+  it("lists meeting history for an authorized workspace without transcript content", async () => {
+    const apiToken = issueApiToken({
+      userId: "user_1",
+      memberships: [{ userId: "user_1", workspaceId: "ws_1", role: "member" }],
+    });
+    const port = await startServer();
+
+    const response = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({
+      workspace_id: "ws_1",
+      meetings: [
+        {
+          meeting_id: "sess_ws_1",
+          workspace_id: "ws_1",
+          created_by: "user_1",
+          meeting_source: "manual",
+          status: "ended",
+          started_at: "2026-07-02T00:00:00.000Z",
+          ended_at: "2026-07-02T00:10:00.000Z",
+          segment_count: 1,
+          gap_count: 1,
+        },
+      ],
+    });
+    expect(JSON.stringify(body)).not.toContain("follow up with pricing");
+  });
+
+  it("returns meeting detail and export for authorized workspace members", async () => {
+    const apiToken = issueApiToken({
+      userId: "user_1",
+      memberships: [{ userId: "user_1", workspaceId: "ws_1", role: "member" }],
+    });
+    const port = await startServer();
+
+    const detail = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings/sess_ws_1`,
+      {
+        headers: { Authorization: `Bearer ${apiToken}` },
+      },
+    );
+
+    expect(detail.status).toBe(200);
+    expect(await detail.json()).toMatchObject({
+      meeting: {
+        meeting_id: "sess_ws_1",
+        workspace_id: "ws_1",
+      },
+      transcript: {
+        segments: [
+          {
+            segment_id: "seg_1",
+            text: "follow up with pricing",
+          },
+        ],
+        gaps: [
+          {
+            reason: "user_paused_capture",
+          },
+        ],
+      },
+    });
+
+    const exported = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings/sess_ws_1/export?format=markdown`,
+      {
+        headers: { Authorization: `Bearer ${apiToken}` },
+      },
+    );
+
+    expect(exported.status).toBe(200);
+    const exportBody = await exported.json();
+    expect(exportBody).toMatchObject({
+      meeting_id: "sess_ws_1",
+      workspace_id: "ws_1",
+      format: "markdown",
+      content_type: "text/markdown",
+    });
+    expect(exportBody.content).toContain("follow up with pricing");
+  });
+
+  it("denies cross-workspace meeting access before repository reads", async () => {
+    const apiToken = issueApiToken({
+      userId: "user_1",
+      memberships: [{ userId: "user_1", workspaceId: "ws_1", role: "member" }],
+    });
+    const port = await startServer();
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_2/meetings/sess_ws_2`,
+      {
+        headers: { Authorization: `Bearer ${apiToken}` },
+      },
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "workspace_access_denied" });
+  });
+
+  it("returns not found and invalid export errors without transcript content", async () => {
+    const apiToken = issueApiToken({
+      userId: "user_1",
+      memberships: [{ userId: "user_1", workspaceId: "ws_1", role: "member" }],
+    });
+    const port = await startServer();
+
+    const missing = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings/missing`,
+      {
+        headers: { Authorization: `Bearer ${apiToken}` },
+      },
+    );
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ error: "meeting_not_found" });
+
+    const invalidExport = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings/sess_ws_1/export?format=pdf`,
+      {
+        headers: { Authorization: `Bearer ${apiToken}` },
+      },
+    );
+    expect(invalidExport.status).toBe(400);
+    expect(await invalidExport.json()).toEqual({ error: "invalid_request" });
+  });
+
+  it("deletes meetings through a workspace-scoped route", async () => {
+    const apiToken = issueApiToken({
+      userId: "user_1",
+      memberships: [{ userId: "user_1", workspaceId: "ws_1", role: "admin" }],
+    });
+    const deleteRepository = new InMemoryMeetingReviewRepository([
+      {
+        meeting: {
+          meeting_id: "sess_delete",
+          workspace_id: "ws_1",
+          created_by: "user_1",
+          meeting_source: "manual",
+          status: "ended",
+          segment_count: 0,
+          gap_count: 0,
+        },
+      },
+    ]);
+    handle = createHttpServer({
+      env: defaultEnv,
+      now: () => fixedNow,
+      meetingRepository: deleteRepository,
+    });
+    await new Promise<void>((resolve) => {
+      handle!.server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const port = getPort(handle);
+
+    const deleted = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings/sess_delete`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${apiToken}` },
+      },
+    );
+
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual({
+      meeting_id: "sess_delete",
+      workspace_id: "ws_1",
+      deleted: true,
+    });
+
+    await expect(deleteRepository.getMeetingDetail("ws_1", "sess_delete")).resolves.toBeUndefined();
   });
 });

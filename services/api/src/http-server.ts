@@ -8,10 +8,16 @@ import {
   type DevAuthTokenRequest,
 } from "@dokeza/contracts";
 import { createHealthResponse } from "./index.js";
+import {
+  InMemoryMeetingReviewRepository,
+  type MeetingExportFormat,
+  type MeetingReviewRepository,
+} from "./meeting-review-repository.js";
 
 export interface HttpServerOptions {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
+  meetingRepository?: MeetingReviewRepository;
 }
 
 export interface HttpServerHandle {
@@ -128,6 +134,48 @@ function workspaceName(workspaceId: string): string {
   return `Development Workspace ${workspaceId}`;
 }
 
+interface MeetingRouteMatch {
+  workspaceId: string;
+  meetingId?: string;
+  action?: "export";
+}
+
+function matchMeetingRoute(pathname: string): MeetingRouteMatch | undefined {
+  const parts = pathname.split("/").filter((part) => part.length > 0);
+  if (parts[0] !== "v1" || parts[1] !== "workspaces" || parts[3] !== "meetings") {
+    return undefined;
+  }
+
+  const workspaceId = decodeURIComponent(parts[2] ?? "");
+  if (workspaceId.length === 0 || parts.length > 6) {
+    return undefined;
+  }
+
+  if (parts.length === 4) {
+    return { workspaceId };
+  }
+
+  const meetingId = decodeURIComponent(parts[4] ?? "");
+  if (meetingId.length === 0) {
+    return undefined;
+  }
+
+  if (parts.length === 5) {
+    return { workspaceId, meetingId };
+  }
+
+  if (parts.length === 6 && parts[5] === "export") {
+    return { workspaceId, meetingId, action: "export" };
+  }
+
+  return undefined;
+}
+
+function readMeetingExportFormat(url: URL): MeetingExportFormat | undefined {
+  const format = url.searchParams.get("format") ?? "markdown";
+  return format === "markdown" || format === "json" ? format : undefined;
+}
+
 function handleHealth(req: IncomingMessage, res: ServerResponse, env: NodeJS.ProcessEnv): void {
   if (req.method !== "GET") {
     methodNotAllowed(res);
@@ -145,6 +193,8 @@ function handleHealth(req: IncomingMessage, res: ServerResponse, env: NodeJS.Pro
 export function createHttpServer(options: HttpServerOptions = {}): HttpServerHandle {
   const env = options.env ?? process.env;
   const now = options.now ?? (() => new Date());
+  const meetingRepository =
+    options.meetingRepository ?? new InMemoryMeetingReviewRepository();
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
@@ -287,6 +337,93 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
           });
         })
         .catch(() => sendJson(res, 400, { error: "invalid_request" }));
+      return;
+    }
+
+    const meetingRoute = matchMeetingRoute(url.pathname);
+    if (meetingRoute !== undefined) {
+      const auth = authenticateApiRequest(req, runtime.tokenService);
+      if ("error" in auth) {
+        sendJson(res, 401, { error: auth.error });
+        return;
+      }
+
+      const authorization = authorizeWorkspace(auth.actor, meetingRoute.workspaceId);
+      if (!authorization.allowed) {
+        sendJson(res, 403, { error: "workspace_access_denied" });
+        return;
+      }
+
+      if (meetingRoute.meetingId === undefined) {
+        if (req.method !== "GET") {
+          methodNotAllowed(res);
+          return;
+        }
+
+        void meetingRepository
+          .listMeetings(meetingRoute.workspaceId)
+          .then((body) => sendJson(res, 200, body))
+          .catch(() => sendJson(res, 503, { error: "service_unavailable" }));
+        return;
+      }
+
+      if (meetingRoute.action === "export") {
+        if (req.method !== "GET") {
+          methodNotAllowed(res);
+          return;
+        }
+
+        const format = readMeetingExportFormat(url);
+        if (format === undefined) {
+          sendJson(res, 400, { error: "invalid_request" });
+          return;
+        }
+
+        void meetingRepository
+          .exportMeeting(meetingRoute.workspaceId, meetingRoute.meetingId, format)
+          .then((body) => {
+            if (body === undefined) {
+              sendJson(res, 404, { error: "meeting_not_found" });
+              return;
+            }
+
+            sendJson(res, 200, body);
+          })
+          .catch(() => sendJson(res, 503, { error: "service_unavailable" }));
+        return;
+      }
+
+      if (req.method === "GET") {
+        void meetingRepository
+          .getMeetingDetail(meetingRoute.workspaceId, meetingRoute.meetingId)
+          .then((body) => {
+            if (body === undefined) {
+              sendJson(res, 404, { error: "meeting_not_found" });
+              return;
+            }
+
+            sendJson(res, 200, body);
+          })
+          .catch(() => sendJson(res, 503, { error: "service_unavailable" }));
+        return;
+      }
+
+      if (req.method === "DELETE") {
+        void meetingRepository
+          .deleteMeeting(meetingRoute.workspaceId, meetingRoute.meetingId)
+          .then((body) => {
+            if (body === undefined) {
+              sendJson(res, 404, { error: "meeting_not_found" });
+              return;
+            }
+
+            sendJson(res, 200, body);
+          })
+          .catch(() => sendJson(res, 503, { error: "service_unavailable" }));
+        return;
+      }
+
+      methodNotAllowed(res);
       return;
     }
 
