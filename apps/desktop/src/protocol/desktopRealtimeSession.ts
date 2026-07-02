@@ -342,7 +342,9 @@ export class DesktopRealtimeSessionClient {
     }
 
     for (const chunk of this.audioBuffer.drainChunks()) {
-      this.sendJson(createAudioChunkMetaMessage(this.protocolState, this.state.sessionId, chunk.meta));
+      this.sendJson(
+        createAudioChunkMetaMessage(this.protocolState, this.state.sessionId, chunk.meta),
+      );
       this.transport?.sendBinary(chunk.bytes);
     }
   }

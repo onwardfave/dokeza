@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  calculateReconnectDelayMs,
-  InMemoryAudioBuffer,
-} from "./realtimeRecovery.js";
+import { calculateReconnectDelayMs, InMemoryAudioBuffer } from "./realtimeRecovery.js";
 
 function chunk(index: number, startMs: number, durationMs = 100, bytes = 4) {
   return {
