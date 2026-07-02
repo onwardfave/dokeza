@@ -5,10 +5,19 @@ import {
   type DesktopRealtimeSnapshot,
 } from "../protocol/desktopRealtimeSession.js";
 import {
+  ContinuousMicrophoneCaptureController,
+  type ContinuousMicrophoneCaptureControllerOptions,
+  type MicrophoneCaptureSnapshot,
+} from "../protocol/microphoneCaptureController.js";
+import {
   requestDevelopmentApiToken,
   requestRealtimeSessionToken,
 } from "../protocol/authApiClient.js";
-import { captureDefaultMicrophonePcmChunks } from "../protocol/nativeMicrophoneSource.js";
+import {
+  captureMicrophonePcmChunks,
+  listMicrophoneCaptureDevices,
+  type NativeMicrophoneCaptureDevice,
+} from "../protocol/nativeMicrophoneSource.js";
 import {
   formatDiagnosticDetails,
   isTauriRuntime,
@@ -29,6 +38,20 @@ const initialLiveSessionSnapshot: DesktopRealtimeSnapshot = {
   lastServerSeq: 0,
   transcripts: [],
 };
+
+const initialMicrophoneCaptureSnapshot: MicrophoneCaptureSnapshot = {
+  state: "idle",
+  chunksSent: 0,
+  nextChunkIndex: 0,
+  streamTimeMs: 0,
+};
+
+const liveSessionBroadcastChannel = "dokeza.live-session";
+
+interface LiveSessionBroadcastMessage {
+  type: "live-session.snapshot";
+  snapshot: DesktopRealtimeSnapshot;
+}
 
 export function App() {
   const surface = selectDesktopSurface(globalThis.location.hash);
@@ -70,8 +93,15 @@ function LiveSessionPanel() {
   const [token, setToken] = useState("");
   const [authMessage, setAuthMessage] = useState("No realtime token");
   const [snapshot, setSnapshot] = useState<DesktopRealtimeSnapshot>(initialLiveSessionSnapshot);
+  const [microphoneDevices, setMicrophoneDevices] = useState<NativeMicrophoneCaptureDevice[]>([]);
+  const [selectedMicrophoneDeviceId, setSelectedMicrophoneDeviceId] = useState("");
+  const [captureSnapshot, setCaptureSnapshot] = useState<MicrophoneCaptureSnapshot>(
+    initialMicrophoneCaptureSnapshot,
+  );
   const clientRef = useRef<DesktopRealtimeSessionClient | null>(null);
+  const captureControllerRef = useRef<ContinuousMicrophoneCaptureController | null>(null);
   const refreshTimerRef = useRef<number | undefined>(undefined);
+  const broadcastRef = useRef<BroadcastChannel | null>(null);
   const nativeRuntimeAvailable = useMemo(() => isTauriRuntime(), []);
   const status = getLiveSessionStatusView(snapshot.status);
   const detail = getLiveSessionDetail(snapshot);
@@ -84,10 +114,31 @@ function LiveSessionPanel() {
     snapshot.status === "connected" ||
     snapshot.status === "streaming" ||
     snapshot.status === "degraded";
+  const canPauseCapture = captureSnapshot.state === "capturing";
+  const canResumeCapture = captureSnapshot.state === "paused";
+  const selectedMicrophoneDevice =
+    microphoneDevices.find((device) => device.id === selectedMicrophoneDeviceId) ?? null;
+  const captureLabel = getMicrophoneCaptureLabel(captureSnapshot);
 
   useEffect(() => {
-    return () => window.clearInterval(refreshTimerRef.current);
-  }, []);
+    broadcastRef.current = openLiveSessionBroadcastChannel();
+    if (nativeRuntimeAvailable) {
+      void refreshMicrophoneDevices();
+    }
+
+    return () => {
+      window.clearInterval(refreshTimerRef.current);
+      captureControllerRef.current?.stop();
+      broadcastRef.current?.close();
+    };
+  }, [nativeRuntimeAvailable]);
+
+  useEffect(() => {
+    broadcastRef.current?.postMessage({
+      type: "live-session.snapshot",
+      snapshot,
+    } satisfies LiveSessionBroadcastMessage);
+  }, [snapshot]);
 
   function refreshSnapshot() {
     const client = clientRef.current;
@@ -101,7 +152,33 @@ function LiveSessionPanel() {
     refreshTimerRef.current = window.setInterval(refreshSnapshot, 250);
   }
 
+  async function refreshMicrophoneDevices() {
+    try {
+      const devices = await listMicrophoneCaptureDevices();
+      setMicrophoneDevices(devices);
+      setSelectedMicrophoneDeviceId((current) => {
+        if (current !== "" && devices.some((device) => device.id === current)) {
+          return current;
+        }
+
+        return devices.find((device) => device.is_default)?.id ?? devices[0]?.id ?? "";
+      });
+    } catch {
+      setMicrophoneDevices([]);
+      setSelectedMicrophoneDeviceId("");
+      setCaptureSnapshot({
+        ...initialMicrophoneCaptureSnapshot,
+        state: "failed",
+        lastErrorCode: "microphone_device_list_failed",
+      });
+    }
+  }
+
   function startSession() {
+    captureControllerRef.current?.stop();
+    captureControllerRef.current = null;
+    setCaptureSnapshot(initialMicrophoneCaptureSnapshot);
+
     const client = new DesktopRealtimeSessionClient({
       endpoint,
       token,
@@ -120,6 +197,8 @@ function LiveSessionPanel() {
   }
 
   async function startMicrophoneSession() {
+    captureControllerRef.current?.stop();
+
     const client = new DesktopRealtimeSessionClient({
       endpoint,
       token,
@@ -135,26 +214,44 @@ function LiveSessionPanel() {
     setSnapshot(client.snapshot);
     startRefreshLoop();
 
-    try {
-      const chunks = await captureDefaultMicrophonePcmChunks();
-      for (const chunk of chunks) {
-        client.sendAudioChunk(chunk);
-      }
-      setSnapshot(client.snapshot);
-    } catch {
-      setSnapshot({
-        ...client.snapshot,
-        status: "failed",
-        lastError: {
-          code: "microphone_capture_failed",
-          message: "Microphone capture failed.",
-          recoverable: true,
-        },
-      });
+    const controllerOptions: ContinuousMicrophoneCaptureControllerOptions = {
+      capture: ({ deviceId }) =>
+        captureMicrophonePcmChunks(deviceId === undefined ? {} : { deviceId }),
+      sendAudioChunk: (chunk) => client.sendAudioChunk(chunk),
+      sendAudioGap: (gap) => client.sendAudioGap(gap),
+      onStateChange: setCaptureSnapshot,
+    };
+    if (selectedMicrophoneDeviceId !== "") {
+      controllerOptions.deviceId = selectedMicrophoneDeviceId;
     }
+
+    const controller = new ContinuousMicrophoneCaptureController(controllerOptions);
+    captureControllerRef.current = controller;
+    controller.start();
+    setCaptureSnapshot(controller.snapshot);
+  }
+
+  function pauseMicrophoneCapture() {
+    captureControllerRef.current?.pause();
+    if (captureControllerRef.current !== null) {
+      setCaptureSnapshot(captureControllerRef.current.snapshot);
+    }
+    refreshSnapshot();
+  }
+
+  function resumeMicrophoneCapture() {
+    captureControllerRef.current?.resume();
+    if (captureControllerRef.current !== null) {
+      setCaptureSnapshot(captureControllerRef.current.snapshot);
+    }
+    refreshSnapshot();
   }
 
   function stopSession() {
+    captureControllerRef.current?.stop();
+    if (captureControllerRef.current !== null) {
+      setCaptureSnapshot(captureControllerRef.current.snapshot);
+    }
     clientRef.current?.stop("user_stopped");
     refreshSnapshot();
   }
@@ -187,7 +284,7 @@ function LiveSessionPanel() {
       <div className="live-session-header">
         <div>
           <p className="eyebrow">Live Session</p>
-          <h2 id="live-session-title">Synthetic realtime</h2>
+          <h2 id="live-session-title">Realtime session</h2>
         </div>
         <span className={`status-pill ${status.tone}`}>{status.label}</span>
       </div>
@@ -225,9 +322,35 @@ function LiveSessionPanel() {
             disabled={!canStart}
           />
         </label>
+        <label>
+          <span>Microphone</span>
+          <select
+            value={selectedMicrophoneDeviceId}
+            onChange={(event) => setSelectedMicrophoneDeviceId(event.currentTarget.value)}
+            disabled={!canStart || !nativeRuntimeAvailable || microphoneDevices.length === 0}
+          >
+            {microphoneDevices.length === 0 ? (
+              <option value="">Default microphone</option>
+            ) : (
+              microphoneDevices.map((device) => (
+                <option value={device.id} key={device.id}>
+                  {device.name ?? `Microphone ${device.id}`}
+                  {device.is_default ? " (default)" : ""}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
         <div className="live-session-buttons">
           <button type="button" disabled={!canStart} onClick={() => void requestDevRealtimeToken()}>
             Get dev token
+          </button>
+          <button
+            type="button"
+            disabled={!canStart || !nativeRuntimeAvailable}
+            onClick={() => void refreshMicrophoneDevices()}
+          >
+            Refresh mics
           </button>
           <button type="button" disabled={!canStartWithToken} onClick={startSession}>
             Start synthetic
@@ -242,10 +365,39 @@ function LiveSessionPanel() {
           <button type="button" disabled={!canStop} onClick={stopSession}>
             Stop
           </button>
+          <button type="button" disabled={!canPauseCapture} onClick={pauseMicrophoneCapture}>
+            Pause mic
+          </button>
+          <button type="button" disabled={!canResumeCapture} onClick={resumeMicrophoneCapture}>
+            Resume mic
+          </button>
         </div>
       </div>
       <p className="live-session-detail">{authMessage}</p>
       <p className="live-session-detail">{detail}</p>
+      <dl className="live-session-stats">
+        <div>
+          <dt>Capture</dt>
+          <dd>{captureLabel}</dd>
+        </div>
+        <div>
+          <dt>Device</dt>
+          <dd>
+            {selectedMicrophoneDevice?.name ??
+              (selectedMicrophoneDeviceId === ""
+                ? "Default microphone"
+                : selectedMicrophoneDeviceId)}
+          </dd>
+        </div>
+        <div>
+          <dt>Client seq</dt>
+          <dd>{snapshot.lastClientSeq}</dd>
+        </div>
+        <div>
+          <dt>Server seq</dt>
+          <dd>{snapshot.lastServerSeq}</dd>
+        </div>
+      </dl>
       <div className="live-transcript" aria-live="polite">
         {transcriptRows.length === 0 ? (
           <p className="live-transcript-empty">Transcript waiting</p>
@@ -371,15 +523,71 @@ function DiagnosticsPanel() {
 }
 
 function OverlaySurface() {
+  const [snapshot, setSnapshot] = useState<DesktopRealtimeSnapshot>(initialLiveSessionSnapshot);
+  const status = getLiveSessionStatusView(snapshot.status);
+  const transcriptRows = toLiveTranscriptRows(snapshot.transcripts);
+  const latestTranscript = transcriptRows.at(-1);
+
+  useEffect(() => {
+    const channel = openLiveSessionBroadcastChannel();
+    if (channel === null) {
+      return;
+    }
+
+    channel.onmessage = (event: MessageEvent<unknown>) => {
+      if (isLiveSessionBroadcastMessage(event.data)) {
+        setSnapshot(event.data.snapshot);
+      }
+    };
+
+    return () => channel.close();
+  }, []);
+
   return (
     <main className="overlay-shell" data-tauri-drag-region>
       <section className="overlay-panel" data-tauri-drag-region>
-        <div className="overlay-status" aria-label="Capture status" />
+        <div className={`overlay-status ${status.tone}`} aria-label="Capture status" />
         <div>
           <p className="overlay-eyebrow">Dokeza</p>
-          <p className="overlay-title">Ready for live assistance</p>
+          <p className="overlay-title">
+            {latestTranscript?.text ?? (snapshot.status === "idle" ? "Ready" : status.label)}
+          </p>
+          <p className="overlay-meta">
+            {latestTranscript === undefined
+              ? status.label
+              : `${latestTranscript.speaker} / ${latestTranscript.state}`}
+          </p>
         </div>
       </section>
     </main>
   );
+}
+
+function getMicrophoneCaptureLabel(snapshot: MicrophoneCaptureSnapshot): string {
+  const base = `${snapshot.state} / ${snapshot.chunksSent} chunks / ${snapshot.streamTimeMs} ms`;
+  if (snapshot.lastErrorCode !== undefined) {
+    return `${base} / ${snapshot.lastErrorCode}`;
+  }
+
+  if (snapshot.lastGapReason !== undefined) {
+    return `${base} / ${snapshot.lastGapReason}`;
+  }
+
+  return base;
+}
+
+function openLiveSessionBroadcastChannel(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === "undefined") {
+    return null;
+  }
+
+  return new BroadcastChannel(liveSessionBroadcastChannel);
+}
+
+function isLiveSessionBroadcastMessage(value: unknown): value is LiveSessionBroadcastMessage {
+  if (typeof value !== "object" || value === null || !("type" in value) || !("snapshot" in value)) {
+    return false;
+  }
+
+  return (value as LiveSessionBroadcastMessage).type === "live-session.snapshot";
 }

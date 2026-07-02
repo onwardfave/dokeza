@@ -115,10 +115,13 @@ export class ContinuousMicrophoneCaptureController {
 
   private captureNextWindow(): void {
     const runId = this.captureRunId;
+    const input: CaptureMicrophoneBatchInput = {};
+    if (this.options.deviceId !== undefined) {
+      input.deviceId = this.options.deviceId;
+    }
+
     void this.options
-      .capture({
-        deviceId: this.options.deviceId,
-      })
+      .capture(input)
       .then((chunks) => {
         if (this.state !== "capturing" || runId !== this.captureRunId) {
           return;
