@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createAudioGapMessage,
   createAuthHelloMessage,
   createAudioChunkMetaMessage,
   createInitialRealtimeClientState,
@@ -76,6 +77,29 @@ describe("desktop realtime protocol client", () => {
     expect(message.type).toBe("audio.chunk_meta");
     expect(message.seq).toBe(3);
     expect(message.payload.byte_length).toBe(3200);
+  });
+
+  it("creates audio.gap metadata for dropped buffered audio", () => {
+    const state = createInitialRealtimeClientState();
+    state.nextSeq = 5;
+
+    const message = createAudioGapMessage(state, "sess_123", {
+      stream: "microphone",
+      start_ms: 100,
+      end_ms: 300,
+      dropped_chunks: 2,
+      reason: "local_buffer_full",
+    });
+
+    expect(message.type).toBe("audio.gap");
+    expect(message.seq).toBe(5);
+    expect(message.payload).toEqual({
+      stream: "microphone",
+      start_ms: 100,
+      end_ms: 300,
+      dropped_chunks: 2,
+      reason: "local_buffer_full",
+    });
   });
 
   it("creates session.end with the last client sequence in the payload", () => {

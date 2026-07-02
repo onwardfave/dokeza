@@ -1,5 +1,6 @@
 import {
   REALTIME_PROTOCOL_VERSION,
+  type AudioGapMessage,
   type AudioChunkMetaMessage,
   type RealtimeJsonMessage,
   validateRealtimeJsonMessage,
@@ -188,6 +189,24 @@ export function createAudioChunkMetaMessage(
 
   if (!validateRealtimeJsonMessage(message)) {
     throw new Error("invalid_audio_chunk_meta_message");
+  }
+
+  return message;
+}
+
+export function createAudioGapMessage(
+  state: RealtimeClientState,
+  sessionId: string,
+  payload: AudioGapMessage["payload"],
+): AudioGapMessage {
+  const message = {
+    ...nextSessionEnvelope(state, sessionId),
+    type: "audio.gap",
+    payload,
+  } satisfies AudioGapMessage;
+
+  if (!validateRealtimeJsonMessage(message)) {
+    throw new Error("invalid_audio_gap_message");
   }
 
   return message;
