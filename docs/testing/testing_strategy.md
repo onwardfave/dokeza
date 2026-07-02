@@ -49,6 +49,7 @@ The property-testing and workload-testing approach is inspired by Antithesis' pu
 ### 4.2 Realtime
 
 - WebSocket authentication.
+- Realtime token validation for expiration, purpose, workspace, user, and resume identity.
 - Session start/end lifecycle.
 - Audio frame handling.
 - Transcript partial/final ordering.
@@ -81,6 +82,7 @@ The property-testing and workload-testing approach is inspired by Antithesis' pu
 ### 4.5 Security
 
 - Workspace isolation.
+- Authentication token validation and hosted-IdP failure handling.
 - Role-based access control.
 - Vector retrieval isolation.
 - Signed URL authorization.

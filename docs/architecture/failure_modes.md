@@ -38,6 +38,9 @@ FULL
 | WebSocket | Connection drop | Missed heartbeat or socket close | Live updates stop | Reconnect with exponential backoff; send resume request | Possible loss of unbuffered audio |
 | WebSocket | Resume rejected | `session_not_resumable` realtime error | Live session cannot reattach | Keep failure explicit; start a new session only by user/client policy; emit `audio.gap` for dropped buffered audio when applicable | Possible loss of unbuffered audio and missed live messages |
 | WebSocket | Server backpressure | `flow_control` message | Transcript delayed | Pause sends, buffer locally within limit, show degraded state, emit `audio.gap` if buffered audio is dropped | Possible loss if buffer fills |
+| Authentication provider | Sign-in outage | Hosted IdP timeout, 5xx, DNS failure, or SDK error | New sign-ins and token refresh unavailable | Show sign-in unavailable; keep already authenticated local state only until existing tokens expire; do not start new realtime sessions without valid tokens | No meeting data loss; new sessions blocked |
+| Authentication provider | Token verification key unavailable | API/realtime cannot refresh JWKS or provider metadata and has no valid cached key | API or realtime auth may fail | Fail closed for unverified tokens; use bounded cached provider keys only within configured TTL; expose recoverable unavailable state to clients | No customer content loss |
+| API auth | Realtime token issuance failure | API error while exchanging valid user auth for a Dokeza realtime token | User cannot start or resume live session | Keep desktop signed in; mark live session unavailable; allow retry; do not fall back to hardcoded or unsigned tokens | No meeting data loss; live session delayed |
 | Microphone | Permission denied | OS permission response | No user audio | Show permission guidance; allow retry | No audio captured |
 | Microphone | Device unplugged | Device change event | User audio stops | Pause mic capture; prompt device selection | Audio missing while unplugged |
 | System audio | Loopback unavailable | Platform capture error | Remote speaker audio missing | Continue mic-only; show setup guidance | Remote audio unavailable |
@@ -96,6 +99,7 @@ The UI should avoid alarming copy during meetings. Detailed errors belong in dia
 Each release candidate should run failure injection tests for:
 
 - Network drop during live session.
+- Authentication provider outage during sign-in and realtime-token issuance.
 - STT timeout.
 - LLM timeout.
 - Audio device unplug.

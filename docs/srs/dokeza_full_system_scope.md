@@ -70,6 +70,7 @@ The full system scope is supported by these engineering specifications:
 
 - `docs/architecture/c4_architecture.md`
 - `docs/architecture/code_architecture.md`
+- `docs/architecture/authentication.md`
 - `docs/architecture/adr/0001-desktop-shell-tauri-v2.md`
 - `docs/architecture/adr/0002-backend-runtime-and-contracts.md`
 - `docs/architecture/adr/0003-data-store-vector-and-workflow-baseline.md`
@@ -537,6 +538,8 @@ Verification:
 
 The milestones below describe a full system path. Each milestone should end with a demonstrable release, objective quality gates, and a decision about whether to proceed.
 
+The production vertical roadmap in `docs/development/plans/2026-06-25-production-vertical-roadmap.md` is the implementation-order source of truth for a small team proving one commercially useful vertical. This full-system scope remains the product-completeness target. When the two appear to differ, treat this document as describing final milestone capability and the production vertical roadmap as the narrower build sequence used to reduce scope risk.
+
 ### Milestone 0: Product and Architecture Foundation
 
 Objective: Make the system buildable by locking the initial architecture, operating model, and quality targets.
@@ -895,6 +898,15 @@ Exit gate:
 | PERF-004 | Knowledge retrieval shall complete under 500 ms P95 for typical workspaces. | Retrieval service traces. |
 | PERF-005 | Post-call summary for a 60-minute meeting shall complete under 2 minutes. | Post-call workflow telemetry. |
 
+### 10.1.1 Cost and Usage Requirements
+
+| ID | Requirement | Verification |
+| --- | --- | --- |
+| COST-001 | AI, STT, embedding, and reranking provider usage shall be attributable by workspace, session, provider route, and feature. | Usage ledger and telemetry reconciliation. |
+| COST-002 | Live suggestion requests shall enforce token budgets for transcript context, retrieved sources, system instructions, and generated output. | Prompt assembly tests and usage telemetry. |
+| COST-003 | Automatic LLM-triggered requests shall be debounced to no more than six requests per minute per active meeting session unless workspace policy sets a stricter limit. | Rate-limit and debounce tests. |
+| COST-004 | Individual-plan normal usage should target provider cost below the configured commercial threshold, initially $0.15 for a 60-minute meeting until production pricing data replaces the planning assumption. | Cost model review against provider usage traces. |
+
 ### 10.2 Quality Requirements
 
 | ID | Requirement | Verification |
@@ -1083,12 +1095,15 @@ A Dokeza feature is done only when:
 
 ## 17. Open Decisions
 
-Initial implementation decisions for backend runtime, data store, vector store, workflow queue, realtime audio routing/framing, AI providers, and retention defaults are resolved in the architecture ADRs. The remaining decisions below are product, commercial, legal, or enterprise-launch decisions.
+Initial implementation decisions for backend runtime, data store, vector store, workflow queue, realtime audio routing/framing, AI providers, retention defaults, and the Windows Tauri v2 spike result are resolved in the architecture ADRs and spike evidence. The remaining decisions below are product, commercial, legal, or enterprise-launch decisions.
 
 - Which vertical should be the first commercial wedge: sales, CS, recruiting, consulting, or support?
-- Did the Tauri v2 implementation spike satisfy the accepted ADR criteria?
-- Should local STT be prioritized before enterprise launch or after?
 - Which CRM should be first: Salesforce or HubSpot?
 - Which ATS should be first for recruiting workflows?
 - What regions must be supported for first enterprise customers?
 - What disclosure and consent UX should be configurable by admins?
+
+Resolved decisions:
+
+- The Tauri v2 implementation spike passed the accepted ADR criteria on Windows, with macOS validation pending before cross-platform beta. See `docs/development/tauri_capability_spike_results.md`.
+- Local STT remains supported by architecture boundaries but is not prioritized before the initial commercial vertical. ADR-0005 sets cloud-first STT and LLM defaults; local-first capabilities remain part of Milestone 9.

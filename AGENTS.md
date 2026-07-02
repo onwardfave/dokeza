@@ -9,6 +9,7 @@ Read the relevant docs before changing code:
 - `docs/srs/traceability_matrix.md`
 - `docs/architecture/c4_architecture.md`
 - `docs/architecture/code_architecture.md`
+- `docs/architecture/authentication.md`
 - `docs/architecture/realtime_protocol.md`
 - `docs/architecture/failure_modes.md`
 - `docs/architecture/multi_tenancy.md`
@@ -33,10 +34,10 @@ Use the project-local skills in `.codex/skills/` when relevant:
 
 ## Current Technology Decisions
 
-- Desktop shell: Tauri v2, pending spike validation.
+- Desktop shell: Tauri v2; Windows spike passed, macOS validation pending.
 - Desktop UI: React + TypeScript inside Tauri WebView.
 - Desktop native layer: Rust.
-- Backend: TypeScript or Go, pending implementation decision.
+- Backend: TypeScript/Node.js initially, with stable JSON Schema contract artifacts.
 - Infrastructure: Terraform-first.
 - Realtime transport: WebSocket over TLS.
 

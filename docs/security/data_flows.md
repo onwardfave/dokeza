@@ -24,9 +24,11 @@ flowchart LR
         Screen[Screen Context]
         Cache[Local Cache]
         Overlay[Overlay]
+        DesktopAuth[Desktop Auth Flow]
     end
 
     subgraph Cloud[Dokeza Cloud]
+        API[API Service]
         RT[Realtime Service]
         CTX[Context Service]
         KB[Knowledge Service]
@@ -44,12 +46,16 @@ flowchart LR
     end
 
     subgraph CustomerSystems[Customer Systems]
+        IdP[Identity Provider]
         Cal[Calendar]
         CRM[CRM]
         Docs[Docs]
         Email[Email]
     end
 
+    DesktopAuth -->|sign-in redirect or provider SDK| IdP
+    IdP -->|auth code or provider token| API
+    API -->|workspace list and realtime session token| DesktopAuth
     Mic -->|audio chunks| RT
     Sys -->|audio chunks| RT
     Screen -->|extracted text if enabled| CTX
@@ -67,6 +73,7 @@ flowchart LR
     WF --> CRM
     WF --> Email
     Cal --> WF
+    API --> DB
     RT --> DB
     CTX --> DB
 ```
@@ -86,6 +93,8 @@ Initial cloud STT implementation:
 
 | Flow | Data | Sensitive Content | Protection | Opt-Out / Policy |
 | --- | --- | --- | --- | --- |
+| Desktop/API to identity provider | Login redirects, provider tokens, profile identifiers | Account identity, email, auth metadata | TLS, hosted IdP controls, short-lived tokens, secure local token storage | Required for cloud account usage; local-only future mode may differ |
+| API to desktop | Workspace list, user profile, short-lived realtime token | Account identity, workspace membership, bearer token | TLS, token TTL, platform secure storage, redacted diagnostics | Sign out; revoke sessions |
 | Device to realtime service | Audio chunks | Voice, meeting content, PII | TLS, session token, retention policy | Disable capture; local mode where supported |
 | Device to context service | Screen text, active window metadata | Visible documents, customer data, secrets | TLS, redaction, permission prompt | Disable screen context |
 | Realtime service to STT provider | Audio or audio stream | Voice, meeting content | TLS, provider DPA, Dokeza-managed provider credentials, retention settings | Local STT or provider disabled by policy |

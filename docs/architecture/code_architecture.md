@@ -23,10 +23,11 @@ packages/
   authz/                # Workspace authorization helpers
   telemetry/            # Shared tracing and metrics helpers
   config/               # Typed configuration and environment parsing
+  db/                   # Drizzle schema, connection pool, and workspace-scoped transactions
   test-fixtures/        # Shared fixtures for transcripts, docs, sessions
 infra/
   terraform/            # Cloud infrastructure
-  db/                   # Database migrations and RLS tests
+  db/                   # SQL migrations, seeds, and RLS validation assets
   observability/        # Local observability stack
 docs/
   architecture/
@@ -96,6 +97,7 @@ Required contracts:
 
 - REST API schemas.
 - Realtime protocol messages.
+- Authentication token claims and auth-related REST schemas.
 - Webhook payloads.
 - Integration writeback schemas.
 - Structured AI output schemas.
@@ -116,6 +118,7 @@ Configuration must be typed and validated at startup.
 Required categories:
 
 - Environment identity.
+- Auth provider and token validation.
 - Database connections.
 - Vector store.
 - Object storage.

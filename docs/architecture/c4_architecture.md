@@ -180,7 +180,8 @@ flowchart TB
 
 | Decision | Baseline |
 | --- | --- |
-| Desktop shell | Tauri v2, pending spike validation per `docs/architecture/adr/0001-desktop-shell-tauri-v2.md`. |
+| Desktop shell | Tauri v2. The implementation spike passed accepted ADR criteria on Windows; macOS validation remains pending before cross-platform beta. |
+| Authentication | Hosted identity provider for user sign-in, with Dokeza-owned workspace membership, authz, and short-lived realtime session tokens per `docs/architecture/authentication.md`. |
 | Desktop-to-backend realtime transport | WebSocket over TLS. |
 | Audio frame encoding | Binary frames for audio, JSON frames for control and events. |
 | Backend runtime | TypeScript/Node.js for initial services, with generated JSON Schema contract artifacts. |
@@ -196,7 +197,7 @@ flowchart TB
 
 ## 7. Open Architecture Decisions
 
-- Whether the Tauri v2 spike passes all accepted ADR criteria.
+- Hosted identity provider selection and desktop sign-in redirect/SDK mechanism.
 - When direct client-to-provider STT is worth reconsidering for enterprise policy exceptions.
 - When vector isolation must move from pgvector shared tables to per-workspace collections or a dedicated vector store.
 - Whether enterprise deployments require regional service stacks from the beginning.

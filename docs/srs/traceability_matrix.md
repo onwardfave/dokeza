@@ -20,7 +20,7 @@ This document maps requirements from `realtime_meeting_copilot_srs.md` to milest
 | Live suggestion engine | FR-180 to FR-186 | Milestone 2, Milestone 5, Milestone 8 | Question detection, objection handling, ranking, suppression | Aligned |
 | Overlay and live UI | FR-200 to FR-208 | Milestone 1, Milestone 2, Milestone 10 | Overlay, compact mode, status indicators, display privacy controls | Aligned |
 | Post-call processing | FR-220 to FR-226 | Milestone 4, Milestone 6 | Summary, action items, follow-up, CRM-ready outputs | Aligned |
-| Integrations | FR-240 to FR-247 | Milestone 4, Milestone 6 | Calendar, email, CRM, ATS, Slack, support systems | Aligned |
+| Integrations | FR-240 to FR-251 | Milestone 4, Milestone 6 | Calendar, email, CRM, ATS, Slack, support systems, pre-call briefs | Aligned |
 | Administration | FR-260 to FR-266 | Milestone 7 | RBAC, policies, audit logs, SSO, SCIM | Aligned |
 | Billing and plans | FR-280 to FR-283 | Milestone 10 | Billing, plans, seats, usage metering | Aligned |
 | Performance requirements | NFR-001 to NFR-005 | Milestone 1, Milestone 2, Milestone 10 | Latency, responsiveness, CPU, memory | Aligned |
@@ -28,6 +28,7 @@ This document maps requirements from `realtime_meeting_copilot_srs.md` to milest
 | Security requirements | NFR-040 to NFR-046 | Milestone 7, Milestone 10 | Encryption, authz, retention, audit, model-training policy | Requires threat model and data flows |
 | Privacy and compliance | NFR-060 to NFR-065 | Milestone 7, Milestone 9 | Retention, export, subprocessors, consent docs | Requires data-flow annotations |
 | Maintainability | NFR-100 to NFR-104 | Milestone 0, Milestone 10 | Modular services, prompt versioning, provider abstraction, telemetry | Aligned |
+| Cost and usage controls | NFR-110 to NFR-113 | Milestone 2, Milestone 10 | Cost attribution, token budgets, debounce limits, per-meeting commercial thresholds | Aligned |
 
 ## 3. Priority Corrections
 
@@ -35,20 +36,20 @@ This document maps requirements from `realtime_meeting_copilot_srs.md` to milest
 
 The full-system scope treats pre-call briefs as central to Dokeza's before/during/after meeting lifecycle. The SRS must treat pre-call briefs as `Must` for the full product, not a low-priority enhancement.
 
-Required SRS alignment:
+SRS alignment:
 
-- Upgrade calendar-based pre-call briefs to `Must` for full-system scope.
-- Add sub-requirements for account, participant, prior-meeting, and knowledge-base context.
-- Keep advanced CRM-enriched brief quality dependent on integration availability.
+- Calendar-based pre-call briefs are `Must` for full-system scope.
+- Sub-requirements cover account, participant, prior-meeting, and knowledge-base context.
+- Advanced CRM-enriched brief quality remains dependent on integration availability.
 
 ### 3.2 Browser Extension Context
 
 The full-system scope treats browser extension context as a platform capability. The SRS originally described structured browser context as `Could`, which is too low for the full Dokeza system.
 
-Required SRS alignment:
+SRS alignment:
 
-- Browser extension context should be `Should` for early full product and `Must` for mature business/enterprise plans.
-- OCR should remain available as fallback, but structured browser context should be preferred.
+- Browser extension context is `Should` for the early full product and can become `Must` for mature business/enterprise plans.
+- OCR remains available as fallback, but structured browser context is preferred.
 - Browser extension permissions must be transparent and revocable.
 
 ### 3.3 Realtime Protocol

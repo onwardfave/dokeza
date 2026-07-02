@@ -12,11 +12,12 @@ This roadmap is the implementation basis for future feature slices. Each slice m
 - Milestone 2: LLM orchestration and live suggestions.
 - Milestone 3: knowledge ingestion, retrieval, and source grounding.
 - Milestone 4: pre-call and post-call workflows.
-- Milestone 5+: production identity, governance, billing, infrastructure, and advanced integrations.
+- Milestone 5+: enterprise identity expansion, governance, billing, infrastructure, and advanced integrations.
 
 Primary M1A requirements:
 
 - FR-001 to FR-008: desktop shell and diagnostics.
+- FR-020 to FR-025: account onboarding, workspace selection, permissions, and visible capture state.
 - FR-040 to FR-047: audio capture, device handling, chunking, local buffering.
 - FR-060 to FR-067: realtime STT and graceful STT failure behavior.
 - FR-100 to FR-105: session lifecycle, rolling state, retention, deletion foundation.
@@ -41,12 +42,13 @@ Implemented foundation:
 - Desktop Tauri capability probes for audio, cache, crash diagnostics, realtime, shortcuts, and update policy.
 - Desktop webview synthetic realtime client with protocol sequencing, deterministic PCM chunk generation, transcript/error/status handling, reconnect backoff, in-memory audio buffering, `audio.gap` emission for dropped buffered audio, resume request construction, and a visible live-session panel.
 - Bounded native default-microphone capture can produce protocol-compatible mono 16 kHz PCM chunks and feed them into the desktop realtime client.
+- Auth architecture baseline exists for hosted identity, Dokeza-owned workspace membership, and short-lived realtime session tokens.
 - Local development PostgreSQL and pgvector stack.
 
 Key gaps:
 
-- No real desktop audio capture pipeline.
-- No production auth or workspace provisioning.
+- No continuous desktop audio capture pipeline with device selection, pause/resume, and device-failure handling.
+- No implemented hosted auth, development token issuer, or workspace provisioning flow.
 - PostgreSQL-backed session and timeline persistence still needs automated CI execution against PostgreSQL.
 - Reconnect/resume is implemented for in-process realtime recovery with original session reattachment, final-transcript replay by server sequence, and safe invalid-resume failure behavior; durable replay after realtime process restart still needs persisted server-sequence metadata.
 - No live transcript product UI.
@@ -63,7 +65,7 @@ M1A exercises every core boundary:
 - Realtime backend service.
 - PostgreSQL data model and RLS.
 - STT provider adapter.
-- API service for session retrieval and dev auth.
+- API service for workspace selection, auth token exchange, and session retrieval.
 - Telemetry and diagnostics.
 
 ## Contracts and Data Model
@@ -99,7 +101,8 @@ Reconnect/resume requires more than session columns. It must define replay seman
 - Do not log transcript text, prompt text, document text, suggestion content, or raw audio by default.
 - `live_only` and `local_only` must block cloud transcript persistence.
 - Provider credentials remain server-side only.
-- Dev auth for M1A must be clearly marked as development-only if production identity is deferred.
+- Dev auth for M1A must be clearly marked as development-only if hosted identity implementation is staged after local vertical testing.
+- Short-lived realtime tokens must be scoped to user, workspace, device where available, and session-start intent.
 
 ## Implementation Tasks
 
@@ -204,9 +207,31 @@ Acceptance criteria:
 - Transcript appears within the latency target under normal conditions.
 - Audio device disconnect degrades without crashing.
 
+### M1A.Auth - Minimum Auth and Workspace Token Path
+
+Goal: unblock authenticated realtime sessions and meeting retrieval without hardcoded tokens.
+
+Tasks:
+
+1. Select hosted identity provider or implement an explicitly development-only token issuer for local M1A testing.
+2. Define auth-related REST schemas in `@dokeza/contracts` for profile, workspace list, workspace selection, and realtime token issuance.
+3. Add API endpoints for authenticated user profile, workspace listing, and short-lived realtime token issuance.
+4. Update realtime auth validation to accept only Dokeza-issued realtime tokens for non-test sessions.
+5. Store desktop auth tokens using platform secure storage where available.
+6. Add failure behavior for IdP outage, token issuance failure, expired token, and cross-workspace token use.
+
+Acceptance criteria:
+
+- Desktop can obtain a workspace-scoped realtime token without hardcoded credentials.
+- Realtime rejects expired, malformed, wrong-purpose, and cross-workspace tokens.
+- API exposes only workspaces where the user is a member.
+- Auth telemetry excludes token values and customer content.
+
 ### M1A.5 - Live Transcript UI
 
 Goal: make the vertical usable.
+
+Prerequisite: either a hosted identity integration or an explicitly development-only token issuer must provide workspace-scoped realtime tokens. Hardcoded desktop tokens are not acceptable beyond synthetic local probes.
 
 Tasks:
 
@@ -264,7 +289,7 @@ Tasks:
 ### Later Milestones
 
 - M4: pre-call briefs and post-call workflows.
-- M5: production auth and onboarding.
+- M5: enterprise identity expansion, onboarding hardening, and admin-managed identity controls.
 - M6: enterprise governance and admin console.
 - M7: billing and usage metering.
 - M8: production infrastructure and release operations.
@@ -302,7 +327,7 @@ Update docs when a slice changes:
 
 ## Open Questions
 
-1. Dev auth: development JWT endpoint versus hosted auth provider from day one.
+1. Auth implementation sequence: hosted provider from day one versus development-only issuer for local M1A testing before hosted provider integration.
 2. Desktop platform priority: Windows-only M1A versus Windows plus macOS.
 3. STT provider: continue with Deepgram first, then evaluate alternatives after M1A.
 4. API/realtime topology: keep modular services rather than merge unless local development friction becomes a blocker.

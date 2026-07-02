@@ -68,6 +68,7 @@ This SRS is supported by the following execution-level documents:
 - `docs/architecture/c4_architecture.md`
 - `docs/architecture/code_architecture.md`
 - `docs/architecture/adr/0001-desktop-shell-tauri-v2.md`
+- `docs/architecture/authentication.md`
 - `docs/architecture/realtime_protocol.md`
 - `docs/architecture/failure_modes.md`
 - `docs/architecture/multi_tenancy.md`
@@ -253,7 +254,7 @@ Supported meeting environments should include:
 | LLM | OpenAI through model gateway for initial live and post-call paths | Anthropic, Google, or local model |
 | Observability | OpenTelemetry + Sentry | Datadog |
 
-### 3.4 Processing Location Model
+### 3.3 Processing Location Model
 
 Every major AI pipeline stage should declare where it executes:
 
@@ -266,7 +267,7 @@ Every major AI pipeline stage should declare where it executes:
 
 The initial implementation may use cloud-first processing, but internal interfaces must not assume that all stages are permanently cloud-only.
 
-### 3.3 Latency Budget
+### 3.4 Latency Budget
 
 The live assistance path should target the following budget:
 
@@ -444,7 +445,7 @@ The live assistance path should target the following budget:
 | --- | --- | --- |
 | FR-240 | The system shall support Google Calendar integration. | Must |
 | FR-241 | The system shall support Microsoft Outlook Calendar integration. | Should |
-| FR-242 | The system shall use calendar events to generate pre-call briefs. | Should |
+| FR-242 | The system shall use calendar events to generate pre-call briefs. | Must |
 | FR-243 | The system should support HubSpot integration. | Should |
 | FR-244 | The system should support Salesforce integration. | Should |
 | FR-245 | The system should support Slack export or sharing. | Could |
@@ -545,6 +546,15 @@ The live assistance path should target the following budget:
 | NFR-102 | Model provider integrations shall be abstracted behind internal interfaces. |
 | NFR-103 | The system shall include automated tests for critical backend and desktop service logic. |
 | NFR-104 | The system shall include telemetry for latency, error rate, and suggestion delivery success. |
+
+### 5.7 Cost and Usage Controls
+
+| ID | Requirement |
+| --- | --- |
+| NFR-110 | The system shall track estimated AI and transcription cost by workspace, session, provider route, and feature. |
+| NFR-111 | The system shall enforce token budget limits for live suggestion, summary, retrieval, and post-call generation requests. |
+| NFR-112 | The system shall debounce automatic LLM calls to no more than six requests per minute per active meeting session unless a stricter workspace policy applies. |
+| NFR-113 | Individual-plan normal usage should target a per-meeting provider cost below the configured commercial threshold, initially $0.15 for a 60-minute meeting until pricing data replaces the planning assumption. |
 
 ## 6. Data Requirements
 
@@ -799,10 +809,12 @@ Before public beta:
 
 ## 14. Open Questions
 
-- Did the Tauri v2 implementation spike satisfy the ADR acceptance criteria?
 - What is the first target user segment: sales, recruiting, consulting, or general meetings?
 - Which integrations are mandatory for beta customers?
-- What level of local processing is required for privacy-sensitive users?
 - What legal consent/disclosure copy should be shown during onboarding?
 
-Initial backend, vector, workflow, realtime audio, provider, and retention defaults are documented in `docs/architecture/adr/0002-backend-runtime-and-contracts.md`, `docs/architecture/adr/0003-data-store-vector-and-workflow-baseline.md`, `docs/architecture/adr/0004-realtime-audio-routing-and-framing.md`, and `docs/architecture/adr/0005-initial-provider-and-retention-defaults.md`.
+Resolved implementation decisions:
+
+- The Tauri v2 spike satisfied the accepted ADR criteria on Windows, with macOS validation still pending. See `docs/development/tauri_capability_spike_results.md`.
+- Initial backend, vector, workflow, realtime audio, provider, and retention defaults are documented in `docs/architecture/adr/0002-backend-runtime-and-contracts.md`, `docs/architecture/adr/0003-data-store-vector-and-workflow-baseline.md`, `docs/architecture/adr/0004-realtime-audio-routing-and-framing.md`, and `docs/architecture/adr/0005-initial-provider-and-retention-defaults.md`.
+- Local processing remains a supported architecture direction, but ADR-0005 sets cloud-first provider defaults for the initial implementation and defers local-first STT/LLM paths to later privacy milestones.
