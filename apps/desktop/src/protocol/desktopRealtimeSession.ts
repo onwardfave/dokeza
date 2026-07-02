@@ -100,12 +100,14 @@ export class DesktopRealtimeSessionClient {
   }
 
   get snapshot(): DesktopRealtimeSnapshot {
-    return {
+    const snapshot: DesktopRealtimeSnapshot = {
       ...this.state,
       transcripts: [...this.state.transcripts],
-      lastError:
-        this.state.lastError === undefined ? undefined : { ...this.state.lastError },
     };
+    if (this.state.lastError !== undefined) {
+      snapshot.lastError = { ...this.state.lastError };
+    }
+    return snapshot;
   }
 
   startSyntheticSession(): void {
@@ -333,7 +335,9 @@ class BrowserRealtimeTransport implements RealtimeTransport {
   }
 
   sendBinary(frame: Uint8Array): void {
-    this.socket.send(frame);
+    const copy = new ArrayBuffer(frame.byteLength);
+    new Uint8Array(copy).set(frame);
+    this.socket.send(copy);
   }
 
   close(): void {

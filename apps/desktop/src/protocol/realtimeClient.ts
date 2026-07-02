@@ -50,6 +50,8 @@ interface SessionEnvelope {
   sent_at: string;
 }
 
+type SessionBoundEnvelope = SessionEnvelope & { session_id: string };
+
 export function createInitialRealtimeClientState(): RealtimeClientState {
   return { nextSeq: 1 };
 }
@@ -69,6 +71,16 @@ function nextEnvelope(state: RealtimeClientState, sessionId?: string): SessionEn
   }
 
   return envelope;
+}
+
+function nextSessionEnvelope(
+  state: RealtimeClientState,
+  sessionId: string,
+): SessionBoundEnvelope {
+  return {
+    ...nextEnvelope(state),
+    session_id: sessionId,
+  };
 }
 
 export function createAuthHelloMessage(
@@ -98,7 +110,7 @@ export function createSessionStartMessage(
   identity: DesktopSessionIdentity,
 ): RealtimeJsonMessage {
   const message = {
-    ...nextEnvelope(state, identity.sessionId),
+    ...nextSessionEnvelope(state, identity.sessionId),
     type: "session.start",
     payload: {
       workspace_id: identity.workspaceId,
@@ -130,7 +142,7 @@ export function createSessionEndMessage(
 ): RealtimeJsonMessage {
   const envelope = nextEnvelope(state, sessionId);
   const message = {
-    ...envelope,
+    ...nextSessionEnvelopeFromEnvelope(envelope, sessionId),
     type: "session.end",
     payload: {
       reason,
@@ -150,7 +162,7 @@ export function createResumeRequestMessage(
   input: ResumeRequestInput,
 ): RealtimeJsonMessage {
   const message = {
-    ...nextEnvelope(state, input.sessionId),
+    ...nextSessionEnvelope(state, input.sessionId),
     type: "resume.request",
     payload: {
       previous_connection_id: input.previousConnectionId,
@@ -172,7 +184,7 @@ export function createAudioChunkMetaMessage(
   payload: AudioChunkMetaMessage["payload"],
 ): AudioChunkMetaMessage {
   const message = {
-    ...nextEnvelope(state, sessionId),
+    ...nextSessionEnvelope(state, sessionId),
     type: "audio.chunk_meta",
     payload,
   } satisfies AudioChunkMetaMessage;
@@ -182,6 +194,16 @@ export function createAudioChunkMetaMessage(
   }
 
   return message;
+}
+
+function nextSessionEnvelopeFromEnvelope(
+  envelope: SessionEnvelope,
+  sessionId: string,
+): SessionBoundEnvelope {
+  return {
+    ...envelope,
+    session_id: sessionId,
+  };
 }
 
 export function createSyntheticPcmChunks(options: SyntheticPcmOptions = {}): SyntheticPcmChunk[] {

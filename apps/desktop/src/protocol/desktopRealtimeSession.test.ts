@@ -151,18 +151,33 @@ describe("DesktopRealtimeSessionClient", () => {
     factory.transport?.receive(authAccepted());
 
     factory.transport?.receive({
-      ...transcriptFinal(2, "partial text"),
+      protocol_version: REALTIME_PROTOCOL_VERSION,
       type: "transcript.partial",
+      seq: 2,
+      session_id: "sess_1",
+      sent_at: new Date().toISOString(),
       payload: {
-        ...transcriptFinal(2, "partial text").payload,
         segment_id: "seg_live",
+        speaker: "user",
+        text: "partial text",
+        start_ms: 0,
+        end_ms: 100,
+        confidence: 0.91,
       },
-    } as RealtimeJsonMessage);
+    });
     factory.transport?.receive({
-      ...transcriptFinal(3, "final text"),
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "transcript.final",
+      seq: 3,
+      session_id: "sess_1",
+      sent_at: new Date().toISOString(),
       payload: {
-        ...transcriptFinal(3, "final text").payload,
         segment_id: "seg_live",
+        speaker: "user",
+        text: "final text",
+        start_ms: 0,
+        end_ms: 100,
+        confidence: 0.91,
       },
     });
 
