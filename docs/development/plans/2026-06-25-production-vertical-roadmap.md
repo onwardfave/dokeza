@@ -39,6 +39,7 @@ Implemented foundation:
 - Workspace-scoped database package with Drizzle schema and RLS transaction helper.
 - PostgreSQL session store and transcript timeline sink interfaces/implementations with component tests, typed config factory wiring, realtime session lifecycle persistence hooks, and opt-in local PostgreSQL integration coverage.
 - Desktop Tauri capability probes for audio, cache, crash diagnostics, realtime, shortcuts, and update policy.
+- Desktop webview synthetic realtime client with protocol sequencing, deterministic PCM chunk generation, transcript/error/status handling, resume request construction, and a visible live-session panel.
 - Local development PostgreSQL and pgvector stack.
 
 Key gaps:
@@ -167,12 +168,14 @@ Acceptance criteria:
 
 Goal: wire the desktop to the realtime server before adding native audio complexity.
 
+Status: partially implemented. The desktop TypeScript client can authenticate, send `session.start`, stream deterministic synthetic PCM chunks with `audio.chunk_meta` plus binary frames, receive transcript/error/status/close messages, build resume requests from stored sequence state, and expose connection state through a live-session panel. Automatic reconnect backoff and buffered audio replay remain to deepen in M1A.4 with real capture.
+
 Tasks:
 
-1. Expand the desktop realtime client to run full auth/session/audio/transcript lifecycle.
-2. Add synthetic PCM audio source for deterministic UI and protocol testing.
-3. Handle server `error`, `session.status`, `transcript.partial`, `transcript.final`, and `session.closed`.
-4. Add reconnect state machine with exponential backoff.
+1. Expand the desktop realtime client to run full auth/session/audio/transcript lifecycle. Done for synthetic webview transport.
+2. Add synthetic PCM audio source for deterministic UI and protocol testing. Done.
+3. Handle server `error`, `session.status`, `transcript.partial`, `transcript.final`, and `session.closed`. Done.
+4. Add reconnect state machine with exponential backoff. Resume primitives and reconnecting state exist; timed backoff and buffered resend remain.
 
 Acceptance criteria:
 
