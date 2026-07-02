@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dokeza Desktop Realtime Client"
+  short_description: "Build Dokeza desktop realtime client slices."
+  default_prompt: "Implement the next Dokeza desktop realtime client slice."
