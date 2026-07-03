@@ -154,6 +154,7 @@ describe("createRealtimeServer", () => {
       transcriptRetentionMode?: TranscriptRetentionMode;
       sessionStore?: SessionStore;
       tokenValidator?: TokenValidator;
+      liveSuggestionService?: RealtimeServerOptions["liveSuggestionService"];
     } = {},
   ): Promise<{ port: number }> {
     const serverOptions: RealtimeServerOptions = {
@@ -170,6 +171,9 @@ describe("createRealtimeServer", () => {
     }
     if (options.sessionStore !== undefined) {
       serverOptions.sessionStore = options.sessionStore;
+    }
+    if (options.liveSuggestionService !== undefined) {
+      serverOptions.liveSuggestionService = options.liveSuggestionService;
     }
 
     handle = createRealtimeServer(serverOptions);
@@ -816,8 +820,124 @@ describe("createRealtimeServer", () => {
     expect(JSON.stringify(response)).not.toContain(firstAuth.sessionId);
   });
 
-  it("returns an explicit error for unavailable suggestion requests", async () => {
-    const { port } = await startServer();
+  it("streams live suggestion tokens and completion for manual requests", async () => {
+    const requests: unknown[] = [];
+    const { port } = await startServer({
+      liveSuggestionService: {
+        async *streamLiveSuggestion(input) {
+          requests.push(input);
+          yield {
+            type: "token",
+            requestId: input.requestId,
+            suggestionId: `sug_${input.requestId}`,
+            token: "First ",
+            index: 0,
+          };
+          yield {
+            type: "token",
+            requestId: input.requestId,
+            suggestionId: `sug_${input.requestId}`,
+            token: "answer",
+            index: 1,
+          };
+          yield {
+            type: "complete",
+            requestId: input.requestId,
+            suggestionId: `sug_${input.requestId}`,
+            kind: input.kind,
+            content: "First answer",
+            sources: [],
+            confidence: "medium",
+            promptVersion: "live.answer.v1",
+            model: "deterministic-live-v1",
+            telemetry: [],
+          };
+        },
+      },
+    });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "suggestion.request",
+        seq: 2,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          request_id: "sreq_test",
+          kind: "answer_question",
+          user_prompt: "content must not appear in telemetry",
+          include_sources: true,
+        },
+      }),
+    );
+
+    const responses = await receiveJsonMessages(ws, 3);
+
+    expect(responses.map((response) => response.type)).toEqual([
+      "suggestion.stream_token",
+      "suggestion.stream_token",
+      "suggestion.complete",
+    ]);
+    expect(responses[0]?.payload).toMatchObject({
+      request_id: "sreq_test",
+      suggestion_id: "sug_sreq_test",
+      token: "First ",
+      index: 0,
+    });
+    expect(responses[2]?.payload).toMatchObject({
+      request_id: "sreq_test",
+      suggestion_id: "sug_sreq_test",
+      kind: "answer_question",
+      content: "First answer",
+      sources: [],
+      confidence: "medium",
+      prompt_version: "live.answer.v1",
+      model: "deterministic-live-v1",
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      workspaceId: "ws_test_1",
+      sessionId,
+      requestId: "sreq_test",
+      kind: "answer_question",
+      includeSources: true,
+      userPrompt: "content must not appear in telemetry",
+    });
+
+    const closedResponse = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "session.end",
+      seq: 3,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        reason: "user_stopped",
+        last_client_seq: 3,
+      },
+    });
+
+    expect(closedResponse.type).toBe("session.closed");
+  });
+
+  it("returns a recoverable LLM error without leaking request prompt content", async () => {
+    const { port } = await startServer({
+      liveSuggestionService: {
+        streamLiveSuggestion() {
+          return {
+            [Symbol.asyncIterator]() {
+              return {
+                async next(): Promise<IteratorResult<never>> {
+                  throw new Error("provider failed with sensitive request");
+                },
+              };
+            },
+          };
+        },
+      },
+    });
     const ws = await connect(port);
     const sessionId = await authenticate(ws);
 
@@ -837,10 +957,11 @@ describe("createRealtimeServer", () => {
 
     expect(response.type).toBe("error");
     expect(response.payload).toMatchObject({
-      code: "feature_unavailable",
+      code: "llm_provider_timeout",
       recoverable: true,
     });
     expect(JSON.stringify(response)).not.toContain("content must not appear in telemetry");
+    expect(JSON.stringify(response)).not.toContain("sensitive request");
 
     const closedResponse = await sendAndReceive(ws, {
       protocol_version: REALTIME_PROTOCOL_VERSION,

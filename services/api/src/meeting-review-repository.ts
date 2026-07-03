@@ -7,11 +7,46 @@ import type {
   MeetingTranscriptGap,
   MeetingTranscriptSegment,
 } from "@dokeza/contracts";
+import {
+  closePool,
+  createDatabase,
+  createPool,
+  meetingSessions,
+  transcriptGaps,
+  transcriptSegments,
+  withWorkspaceTransaction,
+  workspacePolicies,
+  type Database,
+} from "@dokeza/db";
+import type { DokezaConfig } from "@dokeza/config";
+import { and, count, desc, eq, ilike, inArray, lt } from "drizzle-orm";
 
 export type MeetingExportFormat = MeetingExportResponse["format"];
+export type MeetingReviewRetentionMode =
+  | "live_only"
+  | "local_only"
+  | "7_days"
+  | "30_days"
+  | "1_year"
+  | "indefinite";
+
+export interface ListMeetingsOptions {
+  transcriptQuery?: string;
+}
+
+export interface RetentionCleanupInput {
+  workspaceId: string;
+  now: Date;
+}
+
+export interface RetentionCleanupResult {
+  workspace_id: string;
+  retention_mode: MeetingReviewRetentionMode;
+  deleted_count: number;
+}
 
 export interface MeetingReviewRepository {
-  listMeetings(workspaceId: string): Promise<MeetingHistoryResponse>;
+  listMeetings(workspaceId: string, options?: ListMeetingsOptions): Promise<MeetingHistoryResponse>;
   getMeetingDetail(
     workspaceId: string,
     meetingId: string,
@@ -22,6 +57,7 @@ export interface MeetingReviewRepository {
     format: MeetingExportFormat,
   ): Promise<MeetingExportResponse | undefined>;
   deleteMeeting(workspaceId: string, meetingId: string): Promise<MeetingDeleteResponse | undefined>;
+  cleanupExpiredMeetings(input: RetentionCleanupInput): Promise<RetentionCleanupResult>;
 }
 
 export interface MeetingReviewSeed {
@@ -36,11 +72,19 @@ interface StoredMeetingReview {
   gaps: MeetingTranscriptGap[];
 }
 
+export interface InMemoryMeetingReviewRepositoryOptions {
+  seeds?: MeetingReviewSeed[];
+  retentionMode?: MeetingReviewRetentionMode;
+}
+
 export class InMemoryMeetingReviewRepository implements MeetingReviewRepository {
   private readonly meetings = new Map<string, StoredMeetingReview>();
+  private readonly retentionMode: MeetingReviewRetentionMode;
 
-  constructor(seeds: MeetingReviewSeed[] = []) {
-    for (const seed of seeds) {
+  constructor(seedsOrOptions: MeetingReviewSeed[] | InMemoryMeetingReviewRepositoryOptions = []) {
+    const options = Array.isArray(seedsOrOptions) ? { seeds: seedsOrOptions } : seedsOrOptions;
+    this.retentionMode = options.retentionMode ?? "30_days";
+    for (const seed of options.seeds ?? []) {
       this.upsert(seed);
     }
   }
@@ -57,9 +101,14 @@ export class InMemoryMeetingReviewRepository implements MeetingReviewRepository 
     });
   }
 
-  async listMeetings(workspaceId: string): Promise<MeetingHistoryResponse> {
+  async listMeetings(
+    workspaceId: string,
+    options: ListMeetingsOptions = {},
+  ): Promise<MeetingHistoryResponse> {
+    const query = normalizeSearchQuery(options.transcriptQuery);
     const meetings = [...this.meetings.values()]
       .filter((entry) => entry.meeting.workspace_id === workspaceId)
+      .filter((entry) => query === undefined || reviewMatchesTranscriptQuery(entry, query))
       .map((entry) => entry.meeting)
       .sort(compareMeetingSummaries);
 
@@ -132,6 +181,272 @@ export class InMemoryMeetingReviewRepository implements MeetingReviewRepository 
       deleted: true,
     };
   }
+
+  async cleanupExpiredMeetings(input: RetentionCleanupInput): Promise<RetentionCleanupResult> {
+    const cutoff = retentionCutoff(this.retentionMode, input.now);
+    if (cutoff === undefined) {
+      return {
+        workspace_id: input.workspaceId,
+        retention_mode: this.retentionMode,
+        deleted_count: 0,
+      };
+    }
+
+    let deletedCount = 0;
+    for (const [storedKey, review] of this.meetings.entries()) {
+      if (review.meeting.workspace_id !== input.workspaceId) {
+        continue;
+      }
+
+      const endedAt = review.meeting.ended_at;
+      if (endedAt === undefined) {
+        continue;
+      }
+
+      if (new Date(endedAt).getTime() < cutoff.getTime()) {
+        this.meetings.delete(storedKey);
+        deletedCount += 1;
+      }
+    }
+
+    return {
+      workspace_id: input.workspaceId,
+      retention_mode: this.retentionMode,
+      deleted_count: deletedCount,
+    };
+  }
+}
+
+export interface PgMeetingReviewRepositoryOptions {
+  db: Database;
+  defaultRetentionMode?: MeetingReviewRetentionMode;
+}
+
+export class PgMeetingReviewRepository implements MeetingReviewRepository {
+  private readonly db: Database;
+  private readonly defaultRetentionMode: MeetingReviewRetentionMode;
+
+  constructor(options: PgMeetingReviewRepositoryOptions) {
+    this.db = options.db;
+    this.defaultRetentionMode = options.defaultRetentionMode ?? "30_days";
+  }
+
+  async listMeetings(
+    workspaceId: string,
+    options: ListMeetingsOptions = {},
+  ): Promise<MeetingHistoryResponse> {
+    return withWorkspaceTransaction(this.db, workspaceId, async (tx) => {
+      const query = normalizeSearchQuery(options.transcriptQuery);
+      const matchingMeetingIds =
+        query === undefined ? undefined : await findTranscriptMeetingIds(tx, workspaceId, query);
+
+      if (matchingMeetingIds !== undefined && matchingMeetingIds.length === 0) {
+        return { workspace_id: workspaceId, meetings: [] };
+      }
+
+      const filters = [eq(meetingSessions.workspaceId, workspaceId)];
+      if (matchingMeetingIds !== undefined) {
+        filters.push(inArray(meetingSessions.id, matchingMeetingIds));
+      }
+
+      const rows = await tx
+        .select()
+        .from(meetingSessions)
+        .where(and(...filters))
+        .orderBy(desc(meetingSessions.startedAt), desc(meetingSessions.id));
+
+      const meetings = await Promise.all(
+        rows.map(async (row) => {
+          const [segmentCount, gapCount] = await Promise.all([
+            countSegments(tx, workspaceId, row.id),
+            countGaps(tx, workspaceId, row.id),
+          ]);
+          return toMeetingSummary(row, segmentCount, gapCount);
+        }),
+      );
+
+      return { workspace_id: workspaceId, meetings };
+    });
+  }
+
+  async getMeetingDetail(
+    workspaceId: string,
+    meetingId: string,
+  ): Promise<MeetingDetailResponse | undefined> {
+    return withWorkspaceTransaction(this.db, workspaceId, async (tx) => {
+      const rows = await tx
+        .select()
+        .from(meetingSessions)
+        .where(
+          and(eq(meetingSessions.workspaceId, workspaceId), eq(meetingSessions.id, meetingId)),
+        );
+
+      const row = rows[0];
+      if (row === undefined) {
+        return undefined;
+      }
+
+      const [segmentRows, gapRows] = await Promise.all([
+        tx
+          .select()
+          .from(transcriptSegments)
+          .where(
+            and(
+              eq(transcriptSegments.workspaceId, workspaceId),
+              eq(transcriptSegments.meetingSessionId, meetingId),
+            ),
+          )
+          .orderBy(transcriptSegments.startMs, transcriptSegments.endMs),
+        tx
+          .select()
+          .from(transcriptGaps)
+          .where(
+            and(
+              eq(transcriptGaps.workspaceId, workspaceId),
+              eq(transcriptGaps.meetingSessionId, meetingId),
+            ),
+          )
+          .orderBy(transcriptGaps.startMs, transcriptGaps.endMs),
+      ]);
+
+      return {
+        meeting: toMeetingSummary(row, segmentRows.length, gapRows.length),
+        transcript: {
+          segments: segmentRows.map(toTranscriptSegment),
+          gaps: gapRows.map(toTranscriptGap),
+        },
+      };
+    });
+  }
+
+  async exportMeeting(
+    workspaceId: string,
+    meetingId: string,
+    format: MeetingExportFormat,
+  ): Promise<MeetingExportResponse | undefined> {
+    const detail = await this.getMeetingDetail(workspaceId, meetingId);
+    if (detail === undefined) {
+      return undefined;
+    }
+
+    return toExportResponse(workspaceId, meetingId, format, detail);
+  }
+
+  async deleteMeeting(
+    workspaceId: string,
+    meetingId: string,
+  ): Promise<MeetingDeleteResponse | undefined> {
+    return withWorkspaceTransaction(this.db, workspaceId, async (tx) => {
+      const existing = await tx
+        .select({ id: meetingSessions.id })
+        .from(meetingSessions)
+        .where(
+          and(eq(meetingSessions.workspaceId, workspaceId), eq(meetingSessions.id, meetingId)),
+        );
+
+      if (existing.length === 0) {
+        return undefined;
+      }
+
+      await tx
+        .delete(meetingSessions)
+        .where(
+          and(eq(meetingSessions.workspaceId, workspaceId), eq(meetingSessions.id, meetingId)),
+        );
+
+      return {
+        meeting_id: meetingId,
+        workspace_id: workspaceId,
+        deleted: true,
+      };
+    });
+  }
+
+  async cleanupExpiredMeetings(input: RetentionCleanupInput): Promise<RetentionCleanupResult> {
+    return withWorkspaceTransaction(this.db, input.workspaceId, async (tx) => {
+      const retentionMode = await resolveWorkspaceRetentionMode(
+        tx,
+        input.workspaceId,
+        this.defaultRetentionMode,
+      );
+      const cutoff = retentionCutoff(retentionMode, input.now);
+      if (cutoff === undefined) {
+        return {
+          workspace_id: input.workspaceId,
+          retention_mode: retentionMode,
+          deleted_count: 0,
+        };
+      }
+
+      const expired = await tx
+        .select({ id: meetingSessions.id })
+        .from(meetingSessions)
+        .where(
+          and(
+            eq(meetingSessions.workspaceId, input.workspaceId),
+            eq(meetingSessions.status, "ended"),
+            lt(meetingSessions.endedAt, cutoff),
+          ),
+        );
+
+      const expiredIds = expired.map((row) => row.id);
+      if (expiredIds.length === 0) {
+        return {
+          workspace_id: input.workspaceId,
+          retention_mode: retentionMode,
+          deleted_count: 0,
+        };
+      }
+
+      await tx
+        .delete(meetingSessions)
+        .where(
+          and(
+            eq(meetingSessions.workspaceId, input.workspaceId),
+            inArray(meetingSessions.id, expiredIds),
+          ),
+        );
+
+      return {
+        workspace_id: input.workspaceId,
+        retention_mode: retentionMode,
+        deleted_count: expiredIds.length,
+      };
+    });
+  }
+}
+
+export interface MeetingReviewPersistence {
+  repository: MeetingReviewRepository;
+  close(): Promise<void>;
+}
+
+export function createMeetingReviewPersistenceFromConfig(
+  config: DokezaConfig,
+): MeetingReviewPersistence {
+  if (config.database.realtimePersistence === "memory") {
+    return {
+      repository: new InMemoryMeetingReviewRepository(),
+      close: async () => undefined,
+    };
+  }
+
+  if (config.database.url === undefined) {
+    throw new Error("DATABASE_URL is required for PostgreSQL meeting review persistence.");
+  }
+
+  const pool = createPool(config.database.url, { max: config.database.poolMax });
+  const db = createDatabase(pool);
+
+  return {
+    repository: new PgMeetingReviewRepository({
+      db,
+      defaultRetentionMode: config.retentionDefaults.individual,
+    }),
+    close: async () => {
+      await closePool(pool);
+    },
+  };
 }
 
 function key(workspaceId: string, meetingId: string): string {
@@ -142,6 +457,195 @@ function compareMeetingSummaries(left: MeetingSummary, right: MeetingSummary): n
   const leftTime = left.started_at ?? "";
   const rightTime = right.started_at ?? "";
   return rightTime.localeCompare(leftTime) || right.meeting_id.localeCompare(left.meeting_id);
+}
+
+function normalizeSearchQuery(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const query = value.trim().slice(0, 128).toLowerCase();
+  return query.length === 0 ? undefined : query;
+}
+
+function reviewMatchesTranscriptQuery(review: StoredMeetingReview, query: string): boolean {
+  return review.segments.some((segment) => segment.text.toLowerCase().includes(query));
+}
+
+function toExportResponse(
+  workspaceId: string,
+  meetingId: string,
+  format: MeetingExportFormat,
+  detail: MeetingDetailResponse,
+): MeetingExportResponse {
+  return {
+    meeting_id: meetingId,
+    workspace_id: workspaceId,
+    format,
+    content_type: format === "markdown" ? "text/markdown" : "application/json",
+    content:
+      format === "markdown"
+        ? toMarkdownExport(detail)
+        : JSON.stringify(
+            {
+              meeting: detail.meeting,
+              transcript: detail.transcript,
+            },
+            null,
+            2,
+          ),
+  };
+}
+
+function retentionCutoff(retentionMode: MeetingReviewRetentionMode, now: Date): Date | undefined {
+  switch (retentionMode) {
+    case "live_only":
+    case "local_only":
+      return now;
+    case "7_days":
+      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    case "30_days":
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    case "1_year":
+      return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    case "indefinite":
+      return undefined;
+  }
+}
+
+function readRetentionMode(value: string | undefined): MeetingReviewRetentionMode | undefined {
+  if (
+    value === "live_only" ||
+    value === "local_only" ||
+    value === "7_days" ||
+    value === "30_days" ||
+    value === "1_year" ||
+    value === "indefinite"
+  ) {
+    return value;
+  }
+
+  return undefined;
+}
+
+async function resolveWorkspaceRetentionMode(
+  tx: Database,
+  workspaceId: string,
+  defaultRetentionMode: MeetingReviewRetentionMode,
+): Promise<MeetingReviewRetentionMode> {
+  const rows = await tx
+    .select({ retentionMode: workspacePolicies.retentionMode })
+    .from(workspacePolicies)
+    .where(eq(workspacePolicies.workspaceId, workspaceId))
+    .orderBy(desc(workspacePolicies.updatedAt))
+    .limit(1);
+
+  return readRetentionMode(rows[0]?.retentionMode) ?? defaultRetentionMode;
+}
+
+async function findTranscriptMeetingIds(
+  tx: Database,
+  workspaceId: string,
+  query: string,
+): Promise<string[]> {
+  const rows = await tx
+    .select({ meetingSessionId: transcriptSegments.meetingSessionId })
+    .from(transcriptSegments)
+    .where(
+      and(
+        eq(transcriptSegments.workspaceId, workspaceId),
+        ilike(transcriptSegments.text, `%${query}%`),
+      ),
+    );
+
+  return [...new Set(rows.map((row) => row.meetingSessionId))];
+}
+
+async function countSegments(
+  tx: Database,
+  workspaceId: string,
+  meetingId: string,
+): Promise<number> {
+  const rows = await tx
+    .select({ value: count() })
+    .from(transcriptSegments)
+    .where(
+      and(
+        eq(transcriptSegments.workspaceId, workspaceId),
+        eq(transcriptSegments.meetingSessionId, meetingId),
+      ),
+    );
+  return rows[0]?.value ?? 0;
+}
+
+async function countGaps(tx: Database, workspaceId: string, meetingId: string): Promise<number> {
+  const rows = await tx
+    .select({ value: count() })
+    .from(transcriptGaps)
+    .where(
+      and(
+        eq(transcriptGaps.workspaceId, workspaceId),
+        eq(transcriptGaps.meetingSessionId, meetingId),
+      ),
+    );
+  return rows[0]?.value ?? 0;
+}
+
+function toMeetingStatus(value: string): MeetingSummary["status"] {
+  if (value === "active" || value === "paused" || value === "ended") {
+    return value;
+  }
+
+  return value === "created" ? "active" : "ended";
+}
+
+function toMeetingSummary(
+  row: typeof meetingSessions.$inferSelect,
+  segmentCount: number,
+  gapCount: number,
+): MeetingSummary {
+  const summary: MeetingSummary = {
+    meeting_id: row.id,
+    workspace_id: row.workspaceId,
+    created_by: row.createdBy,
+    meeting_source: row.meetingSource,
+    status: toMeetingStatus(row.status),
+    segment_count: segmentCount,
+    gap_count: gapCount,
+  };
+
+  if (row.startedAt !== null) {
+    summary.started_at = row.startedAt.toISOString();
+  }
+
+  if (row.endedAt !== null) {
+    summary.ended_at = row.endedAt.toISOString();
+  }
+
+  return summary;
+}
+
+function toTranscriptSegment(
+  row: typeof transcriptSegments.$inferSelect,
+): MeetingTranscriptSegment {
+  return {
+    segment_id: row.id,
+    speaker: row.speaker as MeetingTranscriptSegment["speaker"],
+    text: row.text,
+    start_ms: row.startMs,
+    end_ms: row.endMs,
+    confidence: row.confidence === null ? 0 : Number(row.confidence),
+  };
+}
+
+function toTranscriptGap(row: typeof transcriptGaps.$inferSelect): MeetingTranscriptGap {
+  return {
+    stream: row.stream as MeetingTranscriptGap["stream"],
+    start_ms: row.startMs,
+    end_ms: row.endMs,
+    dropped_chunks: row.droppedChunks,
+    reason: row.reason as MeetingTranscriptGap["reason"],
+  };
 }
 
 function toMarkdownExport(detail: MeetingDetailResponse): string {

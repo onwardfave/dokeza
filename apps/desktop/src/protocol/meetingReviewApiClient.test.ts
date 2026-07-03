@@ -57,6 +57,29 @@ describe("meetingReviewApiClient", () => {
     ]);
   });
 
+  it("adds encoded transcript search query to meeting history requests", async () => {
+    const calls: string[] = [];
+    const fetcher: MeetingReviewApiFetch = async (input) => {
+      calls.push(input);
+      return okJson({
+        workspace_id: "ws_1",
+        meetings: [],
+      });
+    };
+
+    await expect(
+      listMeetings({
+        apiBaseUrl: "http://127.0.0.1:3000",
+        apiToken: "api_token",
+        workspaceId: "ws_1",
+        transcriptQuery: "pricing recap",
+        fetcher,
+      }),
+    ).resolves.toEqual([]);
+
+    expect(calls).toEqual(["http://127.0.0.1:3000/v1/workspaces/ws_1/meetings?q=pricing%20recap"]);
+  });
+
   it("loads detail, export, and delete routes", async () => {
     const calls: Array<{ input: string; method?: string }> = [];
     const fetcher: MeetingReviewApiFetch = async (input, init) => {

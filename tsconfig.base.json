@@ -21,6 +21,7 @@
     "outDir": "dist",
     "paths": {
       "@dokeza/authz": ["packages/authz/src/index.ts"],
+      "@dokeza/ai-orchestrator": ["services/ai-orchestrator/src/index.ts"],
       "@dokeza/config": ["packages/config/src/index.ts"],
       "@dokeza/contracts": ["packages/contracts/src/index.ts"],
       "@dokeza/db": ["packages/db/src/index.ts"],

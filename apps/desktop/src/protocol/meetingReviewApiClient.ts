@@ -27,6 +27,7 @@ export interface MeetingReviewApiRequest {
   apiBaseUrl: string;
   apiToken: string;
   workspaceId: string;
+  transcriptQuery?: string;
   fetcher?: MeetingReviewApiFetch;
 }
 
@@ -70,9 +71,11 @@ async function fetchJson(
 
 export async function listMeetings(input: MeetingReviewApiRequest): Promise<MeetingSummary[]> {
   const workspaceId = encodeURIComponent(input.workspaceId);
+  const query = input.transcriptQuery?.trim();
+  const search = query === undefined || query.length === 0 ? "" : `?q=${encodeURIComponent(query)}`;
   const body = await fetchJson(
     input,
-    `${trimBaseUrl(input.apiBaseUrl)}/v1/workspaces/${workspaceId}/meetings`,
+    `${trimBaseUrl(input.apiBaseUrl)}/v1/workspaces/${workspaceId}/meetings${search}`,
   );
 
   if (!validateMeetingHistoryResponse(body)) {

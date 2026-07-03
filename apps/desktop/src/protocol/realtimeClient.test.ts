@@ -7,6 +7,7 @@ import {
   createResumeRequestMessage,
   createSessionEndMessage,
   createSessionStartMessage,
+  createSuggestionRequestMessage,
   createSyntheticPcmChunks,
 } from "./realtimeClient.js";
 
@@ -133,6 +134,30 @@ describe("desktop realtime protocol client", () => {
         previous_connection_id: "conn_old",
         last_client_seq: 11,
         last_server_seq: 9,
+      });
+    }
+  });
+
+  it("creates manual suggestion.request messages without requiring source retrieval", () => {
+    const state = createInitialRealtimeClientState();
+    state.nextSeq = 15;
+
+    const message = createSuggestionRequestMessage(state, {
+      sessionId: "sess_123",
+      requestId: "sreq_123",
+      kind: "answer_question",
+      userPrompt: "Suggest an answer",
+      includeSources: false,
+    });
+
+    expect(message.type).toBe("suggestion.request");
+    expect(message.seq).toBe(15);
+    if (message.type === "suggestion.request") {
+      expect(message.payload).toEqual({
+        request_id: "sreq_123",
+        kind: "answer_question",
+        user_prompt: "Suggest an answer",
+        include_sources: false,
       });
     }
   });

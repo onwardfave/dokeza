@@ -46,7 +46,7 @@ FULL
 | System audio | Loopback unavailable | Platform capture error | Remote speaker audio missing | Continue mic-only; show setup guidance | Remote audio unavailable |
 | STT provider | Timeout or 503 | Provider error | Transcript delayed | Retry; buffer audio; switch provider if configured | Possible loss beyond buffer limit |
 | STT provider | Low confidence output | STT confidence threshold | Poor transcript | Mark low confidence; avoid triggering high-stakes suggestions | No data loss |
-| LLM provider | Timeout or 503 | Provider error | Suggestions unavailable | Show unavailable state; retry manual request if safe | No data loss |
+| LLM provider | Timeout or 503 | Provider error or recoverable `llm_provider_timeout` realtime error | Suggestions unavailable | Show unavailable state; keep session active; retry manual request if safe | No data loss |
 | LLM provider | Invalid structured output | Schema validation failure | Missing output | Retry with repair prompt; log validation error | No data loss |
 | Retrieval | Timeout | Service timeout | Generic answer or no grounded answer | Fall back to transcript-only; label as not source-grounded | No data loss |
 | Retrieval | Authz failure | Permission check failure | No source answer | Block retrieval; show safe error | No data loss |

@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@dokeza/authz": resolve(repoRoot, "packages/authz/src/index.ts"),
+      "@dokeza/ai-orchestrator": resolve(repoRoot, "services/ai-orchestrator/src/index.ts"),
       "@dokeza/config": resolve(repoRoot, "packages/config/src/index.ts"),
       "@dokeza/contracts": resolve(repoRoot, "packages/contracts/src/index.ts"),
       "@dokeza/db": resolve(repoRoot, "packages/db/src/index.ts"),

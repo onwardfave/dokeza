@@ -1,5 +1,6 @@
 import type {
   DesktopRealtimeSnapshot,
+  DesktopRealtimeSuggestion,
   DesktopRealtimeStatus,
   DesktopRealtimeTranscript,
 } from "../protocol/desktopRealtimeSession.js";
@@ -14,6 +15,14 @@ export interface LiveTranscriptRow {
   speaker: string;
   text: string;
   state: "partial" | "final";
+}
+
+export interface LiveSuggestionCard {
+  id: string;
+  kind: string;
+  content: string;
+  state: "streaming" | "complete";
+  meta: string;
 }
 
 const statusLabels: Record<DesktopRealtimeStatus, LiveSessionStatusView> = {
@@ -71,5 +80,20 @@ export function toLiveTranscriptRows(
     speaker: transcript.speaker,
     text: transcript.text,
     state: transcript.final ? "final" : "partial",
+  }));
+}
+
+export function toLiveSuggestionCards(
+  suggestions: DesktopRealtimeSuggestion[],
+): LiveSuggestionCard[] {
+  return suggestions.map((suggestion) => ({
+    id: suggestion.suggestionId,
+    kind: suggestion.kind.replace(/_/g, " "),
+    content: suggestion.content.length === 0 ? "Waiting for suggestion" : suggestion.content,
+    state: suggestion.status,
+    meta:
+      suggestion.promptVersion === undefined || suggestion.model === undefined
+        ? suggestion.status
+        : `${suggestion.promptVersion} / ${suggestion.model}`,
   }));
 }

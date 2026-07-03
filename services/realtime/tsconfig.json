@@ -9,6 +9,7 @@
   "references": [
     { "path": "../../packages/auth" },
     { "path": "../../packages/authz" },
+    { "path": "../ai-orchestrator" },
     { "path": "../../packages/config" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/db" },

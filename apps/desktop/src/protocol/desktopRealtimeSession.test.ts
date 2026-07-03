@@ -245,6 +245,106 @@ describe("DesktopRealtimeSessionClient", () => {
     ]);
   });
 
+  it("requests live suggestions and accumulates streamed suggestion content", () => {
+    const { client, factory } = createClient();
+    client.startSyntheticSession();
+    factory.transport?.open();
+    factory.transport?.receive(authAccepted());
+
+    const requestId = client.requestLiveSuggestion({
+      kind: "answer_question",
+      userPrompt: "Suggest an answer",
+      includeSources: false,
+    });
+
+    expect(requestId).toBeDefined();
+    const request = sentJson(factory.transport!, 4);
+    expect(request.type).toBe("suggestion.request");
+    if (request.type === "suggestion.request") {
+      expect(request.payload).toMatchObject({
+        request_id: requestId,
+        kind: "answer_question",
+        user_prompt: "Suggest an answer",
+        include_sources: false,
+      });
+    }
+    expect(client.snapshot.suggestions).toMatchObject([
+      {
+        requestId,
+        kind: "answer_question",
+        content: "",
+        status: "streaming",
+      },
+    ]);
+
+    factory.transport?.receive({
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "suggestion.stream_token",
+      seq: 4,
+      session_id: "sess_1",
+      sent_at: new Date().toISOString(),
+      payload: {
+        suggestion_id: "sug_1",
+        request_id: requestId!,
+        token: "First ",
+        index: 0,
+      },
+    });
+    factory.transport?.receive({
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "suggestion.stream_token",
+      seq: 5,
+      session_id: "sess_1",
+      sent_at: new Date().toISOString(),
+      payload: {
+        suggestion_id: "sug_1",
+        request_id: requestId!,
+        token: "answer",
+        index: 1,
+      },
+    });
+
+    expect(client.snapshot.suggestions).toMatchObject([
+      {
+        suggestionId: "sug_1",
+        requestId,
+        content: "First answer",
+        status: "streaming",
+      },
+    ]);
+
+    factory.transport?.receive({
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "suggestion.complete",
+      seq: 6,
+      session_id: "sess_1",
+      sent_at: new Date().toISOString(),
+      payload: {
+        suggestion_id: "sug_1",
+        request_id: requestId!,
+        kind: "answer_question",
+        content: "First answer",
+        sources: [],
+        confidence: "medium",
+        prompt_version: "live.answer.v1",
+        model: "deterministic-live-v1",
+      },
+    });
+
+    expect(client.snapshot.suggestions).toEqual([
+      {
+        suggestionId: "sug_1",
+        requestId,
+        kind: "answer_question",
+        content: "First answer",
+        status: "complete",
+        confidence: "medium",
+        promptVersion: "live.answer.v1",
+        model: "deterministic-live-v1",
+      },
+    ]);
+  });
+
   it("keeps the session state available on recoverable errors", () => {
     const { client, factory } = createClient();
     client.startSyntheticSession();

@@ -9,8 +9,9 @@ import {
 } from "@dokeza/contracts";
 import { createHealthResponse } from "./index.js";
 import {
-  InMemoryMeetingReviewRepository,
+  createMeetingReviewPersistenceFromConfig,
   type MeetingExportFormat,
+  type MeetingReviewPersistence,
   type MeetingReviewRepository,
 } from "./meeting-review-repository.js";
 
@@ -176,6 +177,11 @@ function readMeetingExportFormat(url: URL): MeetingExportFormat | undefined {
   return format === "markdown" || format === "json" ? format : undefined;
 }
 
+function readMeetingSearchQuery(url: URL): string | undefined {
+  const query = url.searchParams.get("q")?.trim();
+  return query === undefined || query.length === 0 ? undefined : query;
+}
+
 function handleHealth(req: IncomingMessage, res: ServerResponse, env: NodeJS.ProcessEnv): void {
   if (req.method !== "GET") {
     methodNotAllowed(res);
@@ -193,7 +199,19 @@ function handleHealth(req: IncomingMessage, res: ServerResponse, env: NodeJS.Pro
 export function createHttpServer(options: HttpServerOptions = {}): HttpServerHandle {
   const env = options.env ?? process.env;
   const now = options.now ?? (() => new Date());
-  const meetingRepository = options.meetingRepository ?? new InMemoryMeetingReviewRepository();
+  let managedMeetingPersistence: MeetingReviewPersistence | undefined;
+
+  function getMeetingRepository(config: DokezaConfig): MeetingReviewRepository {
+    if (options.meetingRepository !== undefined) {
+      return options.meetingRepository;
+    }
+
+    if (managedMeetingPersistence === undefined) {
+      managedMeetingPersistence = createMeetingReviewPersistenceFromConfig(config);
+    }
+
+    return managedMeetingPersistence.repository;
+  }
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
@@ -359,8 +377,16 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
           return;
         }
 
+        const transcriptQuery = readMeetingSearchQuery(url);
+        const listOptions =
+          transcriptQuery === undefined
+            ? {}
+            : {
+                transcriptQuery,
+              };
+        const meetingRepository = getMeetingRepository(runtime.config);
         void meetingRepository
-          .listMeetings(meetingRoute.workspaceId)
+          .listMeetings(meetingRoute.workspaceId, listOptions)
           .then((body) => sendJson(res, 200, body))
           .catch(() => sendJson(res, 503, { error: "service_unavailable" }));
         return;
@@ -378,6 +404,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
           return;
         }
 
+        const meetingRepository = getMeetingRepository(runtime.config);
         void meetingRepository
           .exportMeeting(meetingRoute.workspaceId, meetingRoute.meetingId, format)
           .then((body) => {
@@ -393,6 +420,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
       }
 
       if (req.method === "GET") {
+        const meetingRepository = getMeetingRepository(runtime.config);
         void meetingRepository
           .getMeetingDetail(meetingRoute.workspaceId, meetingRoute.meetingId)
           .then((body) => {
@@ -408,6 +436,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
       }
 
       if (req.method === "DELETE") {
+        const meetingRepository = getMeetingRepository(runtime.config);
         void meetingRepository
           .deleteMeeting(meetingRoute.workspaceId, meetingRoute.meetingId)
           .then((body) => {
@@ -434,8 +463,14 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((err) => {
-          if (err) reject(err);
-          else resolve();
+          if (err) {
+            reject(err);
+            return;
+          }
+
+          void (managedMeetingPersistence?.close() ?? Promise.resolve())
+            .then(() => resolve())
+            .catch(reject);
         });
       }),
   };

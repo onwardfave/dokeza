@@ -111,6 +111,21 @@ describe("realtime contracts", () => {
     ).toBe(true);
   });
 
+  it("accepts recoverable LLM provider timeout errors", () => {
+    expect(
+      validateRealtimeJsonMessage({
+        ...base,
+        type: "error",
+        payload: {
+          code: "llm_provider_timeout",
+          message: "Live suggestions are temporarily unavailable.",
+          recoverable: true,
+          retry_after_ms: 2000,
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("reports schema errors without exposing message payload content", () => {
     const errors = realtimeJsonMessageErrors({
       ...base,

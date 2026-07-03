@@ -39,6 +39,7 @@ import {
 import {
   getLiveSessionDetail,
   getLiveSessionStatusView,
+  toLiveSuggestionCards,
   toLiveTranscriptRows,
 } from "./liveSessionViewModel.js";
 import { selectDesktopSurface } from "./surfaces.js";
@@ -48,6 +49,7 @@ const initialLiveSessionSnapshot: DesktopRealtimeSnapshot = {
   lastClientSeq: 0,
   lastServerSeq: 0,
   transcripts: [],
+  suggestions: [],
 };
 
 const initialMicrophoneCaptureSnapshot: MicrophoneCaptureSnapshot = {
@@ -110,6 +112,10 @@ function LiveSessionPanel() {
   const [captureSnapshot, setCaptureSnapshot] = useState<MicrophoneCaptureSnapshot>(
     initialMicrophoneCaptureSnapshot,
   );
+  const [suggestionKind, setSuggestionKind] = useState<
+    "answer_question" | "summarize_so_far" | "suggest_follow_up" | "objection_response"
+  >("answer_question");
+  const [suggestionPrompt, setSuggestionPrompt] = useState("Suggest an answer");
   const clientRef = useRef<DesktopRealtimeSessionClient | null>(null);
   const captureControllerRef = useRef<ContinuousMicrophoneCaptureController | null>(null);
   const refreshTimerRef = useRef<number | undefined>(undefined);
@@ -118,6 +124,7 @@ function LiveSessionPanel() {
   const status = getLiveSessionStatusView(snapshot.status);
   const detail = getLiveSessionDetail(snapshot);
   const transcriptRows = toLiveTranscriptRows(snapshot.transcripts);
+  const suggestionCards = toLiveSuggestionCards(snapshot.suggestions);
   const canStart =
     snapshot.status === "idle" || snapshot.status === "closed" || snapshot.status === "failed";
   const canStartWithToken = canStart && token.trim().length > 0;
@@ -128,6 +135,7 @@ function LiveSessionPanel() {
     snapshot.status === "degraded";
   const canPauseCapture = captureSnapshot.state === "capturing";
   const canResumeCapture = captureSnapshot.state === "paused";
+  const canRequestSuggestion = snapshot.status === "streaming" || snapshot.status === "degraded";
   const selectedMicrophoneDevice =
     microphoneDevices.find((device) => device.id === selectedMicrophoneDeviceId) ?? null;
   const captureLabel = getMicrophoneCaptureLabel(captureSnapshot);
@@ -268,6 +276,15 @@ function LiveSessionPanel() {
     refreshSnapshot();
   }
 
+  function requestLiveSuggestion() {
+    clientRef.current?.requestLiveSuggestion({
+      kind: suggestionKind,
+      userPrompt: suggestionPrompt,
+      includeSources: false,
+    });
+    refreshSnapshot();
+  }
+
   async function requestDevRealtimeToken() {
     setAuthMessage("Requesting token");
 
@@ -384,6 +401,40 @@ function LiveSessionPanel() {
             Resume mic
           </button>
         </div>
+        <label>
+          <span>Suggestion</span>
+          <select
+            value={suggestionKind}
+            onChange={(event) =>
+              setSuggestionKind(
+                event.currentTarget.value as
+                  | "answer_question"
+                  | "summarize_so_far"
+                  | "suggest_follow_up"
+                  | "objection_response",
+              )
+            }
+            disabled={!canRequestSuggestion}
+          >
+            <option value="answer_question">Answer question</option>
+            <option value="summarize_so_far">Summarize so far</option>
+            <option value="suggest_follow_up">Follow-up question</option>
+            <option value="objection_response">Objection response</option>
+          </select>
+        </label>
+        <label>
+          <span>Prompt</span>
+          <input
+            value={suggestionPrompt}
+            onChange={(event) => setSuggestionPrompt(event.currentTarget.value)}
+            disabled={!canRequestSuggestion}
+          />
+        </label>
+        <div className="live-session-buttons">
+          <button type="button" disabled={!canRequestSuggestion} onClick={requestLiveSuggestion}>
+            Suggest
+          </button>
+        </div>
       </div>
       <p className="live-session-detail">{authMessage}</p>
       <p className="live-session-detail">{detail}</p>
@@ -425,6 +476,21 @@ function LiveSessionPanel() {
           ))
         )}
       </div>
+      <div className="live-suggestions" aria-live="polite">
+        {suggestionCards.length === 0 ? (
+          <p className="live-transcript-empty">Suggestions waiting</p>
+        ) : (
+          suggestionCards.map((suggestion) => (
+            <article className={`suggestion-card ${suggestion.state}`} key={suggestion.id}>
+              <div>
+                <span>{suggestion.kind}</span>
+                <strong>{suggestion.meta}</strong>
+              </div>
+              <p>{suggestion.content}</p>
+            </article>
+          ))
+        )}
+      </div>
     </section>
   );
 }
@@ -434,6 +500,7 @@ function MeetingReviewPanel() {
   const [workspaceId, setWorkspaceId] = useState("ws_dev");
   const [apiToken, setApiToken] = useState("");
   const [message, setMessage] = useState("No meeting history loaded");
+  const [transcriptQuery, setTranscriptQuery] = useState("");
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState("");
   const [detail, setDetail] = useState<MeetingDetailResponse | null>(null);
@@ -471,6 +538,7 @@ function MeetingReviewPanel() {
         apiBaseUrl: apiEndpoint,
         apiToken,
         workspaceId,
+        transcriptQuery,
       });
       setMeetings(nextMeetings);
       const nextSelectedId = nextMeetings[0]?.meeting_id ?? "";
@@ -599,6 +667,13 @@ function MeetingReviewPanel() {
             type="password"
             value={apiToken}
             onChange={(event) => setApiToken(event.currentTarget.value)}
+          />
+        </label>
+        <label>
+          <span>Search</span>
+          <input
+            value={transcriptQuery}
+            onChange={(event) => setTranscriptQuery(event.currentTarget.value)}
           />
         </label>
         <label>

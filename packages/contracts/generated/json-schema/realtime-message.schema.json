@@ -1258,6 +1258,10 @@
                 {
                   "const": "feature_unavailable",
                   "type": "string"
+                },
+                {
+                  "const": "llm_provider_timeout",
+                  "type": "string"
                 }
               ]
             },

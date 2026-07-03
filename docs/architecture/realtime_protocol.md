@@ -161,7 +161,7 @@ Context updates are accepted by the protocol for forward compatibility. Until sc
 
 ### 5.6 `suggestion.request`
 
-Suggestion requests are accepted by the protocol for forward compatibility. Until Milestone 2 suggestion routing is available, the server returns a recoverable `feature_unavailable` error instead of emitting placeholder suggestion content.
+Suggestion requests are implemented for manual Milestone 2 live assistance. The server uses the authenticated session workspace, recent final transcript context, and AI orchestrator prompt routing; the client cannot provide a workspace override. Source metadata remains empty until Milestone 3 retrieval/source grounding is implemented.
 
 ```json
 {
@@ -331,6 +331,7 @@ Initial server error codes include:
 - `transcript_persistence_failed`
 - `session_not_resumable`
 - `feature_unavailable`
+- `llm_provider_timeout`
 
 ### 6.8 `session.closed`
 

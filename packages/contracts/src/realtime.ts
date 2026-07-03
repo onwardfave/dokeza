@@ -44,6 +44,7 @@ const ErrorCode = Type.Union([
   Type.Literal("transcript_persistence_failed"),
   Type.Literal("session_not_resumable"),
   Type.Literal("feature_unavailable"),
+  Type.Literal("llm_provider_timeout"),
 ]);
 
 const SessionMode = Type.Union([

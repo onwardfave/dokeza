@@ -253,31 +253,33 @@ Acceptance criteria:
 
 Goal: users can review and manage a completed meeting record.
 
-Status: partially implemented. `@dokeza/contracts` now defines meeting review REST schemas and generated JSON Schema artifacts. `services/api` exposes authenticated, workspace-authorized meeting history, meeting detail, export, and delete routes behind an injectable `MeetingReviewRepository`; the default implementation is in-memory for local/test while PostgreSQL repository wiring remains follow-up. The desktop now includes a first meeting review panel that can request a development API token, refresh history, inspect transcript segments and audio gaps, export Markdown/JSON, copy exports, and delete meeting records through the API.
+Status: partially implemented. `@dokeza/contracts` now defines meeting review REST schemas and generated JSON Schema artifacts. `services/api` exposes authenticated, workspace-authorized meeting history, transcript search, meeting detail, export, and delete routes behind an injectable `MeetingReviewRepository`; the default implementation remains in-memory for memory-configured local/test runs and switches to PostgreSQL when the existing database persistence config selects postgres. PostgreSQL repository coverage includes workspace-scoped meeting reads, transcript/gap detail, Markdown/JSON export, deletion through session cascade, and retention cleanup primitives with opt-in local PostgreSQL integration coverage. The desktop now includes a first meeting review panel that can request a development API token, refresh/search history, inspect transcript segments and audio gaps, export Markdown/JSON, copy exports, and delete meeting records through the API.
 
 Tasks:
 
-1. Add meeting history API. Done for authenticated workspace-scoped API repository routes; PostgreSQL repository wiring remains.
+1. Add meeting history API. Done for authenticated workspace-scoped API repository routes with memory and PostgreSQL repository implementations.
 2. Add meeting detail API with transcript and gaps. Done for repository-backed route and contracts.
 3. Add desktop review UI. Done for the first desktop review panel.
-4. Add transcript search.
+4. Add transcript search. Done for API history query and desktop review panel search.
 5. Add export to Markdown/JSON/clipboard. Done for API export and desktop copy flow; PDF remains later.
-6. Add delete meeting flow that respects policy. Partially done for workspace authorization and repository delete; retention/admin policy checks and audit are later.
-7. Add retention cleanup job.
+6. Add delete meeting flow that respects policy. Partially done for workspace authorization and repository delete; PostgreSQL delete cascades transcript rows, while role/admin policy checks and audit are later.
+7. Add retention cleanup job. Partially done as a workspace-scoped repository cleanup primitive; scheduling and audit are later.
 
 ### M2 - Live AI Suggestions
 
 Goal: manual suggestions stream from transcript context through a model gateway.
 
+Status: partially implemented. `@dokeza/ai-orchestrator` now provides a versioned live prompt registry, bounded final-transcript context assembly, deterministic credential-free local streaming, an OpenAI Responses streaming adapter boundary with injectable transport, metadata-only telemetry, and recoverable provider failure mapping. `services/realtime` handles manual `suggestion.request` messages with authenticated workspace/session context and emits `suggestion.stream_token` plus `suggestion.complete`. The desktop live session client and panel can request and display streaming suggestions. Durable suggestion persistence, production OpenAI configuration wiring, source grounding, automatic suggestion triggers, debounce/rate limits, cost ledger storage, and eval datasets remain follow-up work.
+
 Tasks:
 
-1. Prompt registry and prompt versions.
-2. OpenAI streaming adapter behind AI orchestrator.
-3. Rolling transcript context assembler.
-4. `suggestion.request` routing.
-5. `suggestion.stream_token` and `suggestion.complete` emission.
-6. Cost and latency telemetry.
-7. Suggestion UI.
+1. Prompt registry and prompt versions. Done for first live prompt pack.
+2. OpenAI streaming adapter behind AI orchestrator. Partially done as an injectable Responses streaming adapter boundary; production config wiring remains.
+3. Rolling transcript context assembler. Done for bounded final transcript context.
+4. `suggestion.request` routing. Done for manual realtime requests.
+5. `suggestion.stream_token` and `suggestion.complete` emission. Done.
+6. Cost and latency telemetry. Partially done for metadata-only route/latency/token-count events; durable usage ledger remains.
+7. Suggestion UI. Done for first desktop live-session panel display.
 
 ### M3 - Knowledge Base and Source Grounding
 

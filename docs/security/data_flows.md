@@ -89,6 +89,16 @@ Initial cloud STT implementation:
 - Adapter telemetry includes provider metadata, chunk timing, stream name, event counts, and failure categories only. It must not include transcript text, raw audio bytes, prompts, documents, suggestions, or API keys.
 - Automated tests use a fake provider transport and must not call the live Deepgram service.
 
+Initial cloud LLM implementation:
+
+- The realtime service routes manual `suggestion.request` messages to the AI orchestrator.
+- The AI orchestrator assembles a bounded recent transcript window and a versioned live prompt, then routes generation through an internal model gateway.
+- The first production provider path targets OpenAI through the server-side Responses streaming API when enabled by configuration and workspace policy.
+- OpenAI credentials are read from server-side configuration only and are never sent to desktop or browser clients.
+- Local and CI tests use deterministic or fake provider transports and must not call the live OpenAI service.
+- Adapter telemetry includes provider metadata, route, model, prompt template version, latency, token counts, status, and failure category only. It must not include transcript text, prompt text, generated suggestion content, raw audio bytes, document text, or API keys.
+- Suggestions from the M2 realtime path are transient unless a later governed persistence slice adds durable suggestion storage, retention, deletion, and export behavior.
+
 ## 4. Data Flow Table
 
 | Flow | Data | Sensitive Content | Protection | Opt-Out / Policy |
@@ -101,7 +111,7 @@ Initial cloud STT implementation:
 | STT provider to Dokeza | Transcript | Meeting content, PII | TLS, provider retention controls | Local STT |
 | Knowledge source to Dokeza | Documents and metadata | Company confidential data | OAuth scopes, TLS, encrypted storage | Connector disabled; document deletion |
 | Dokeza to embedding provider | Document chunks | Company confidential data | TLS, provider retention controls | Local embeddings or provider disabled |
-| Context service to LLM provider | Prompt, transcript excerpts, retrieved chunks | Meeting content, customer data, company data | TLS, context minimization, provider settings | Local LLM or provider disabled |
+| AI orchestrator to LLM provider | Prompt, transcript excerpts, retrieved chunks where available | Meeting content, customer data, company data | TLS, server-side credentials, context minimization, provider settings, metadata-only telemetry | Local LLM, provider disabled by policy, or deterministic local/test provider |
 | Workflow service to CRM/email | Summaries, drafts, structured updates | Meeting outcomes, customer data | OAuth, TLS, approval workflow | Integration disabled |
 | Backend to telemetry | Metrics and errors | Usually non-content | Content redaction, access controls | Debug telemetry disabled by default |
 

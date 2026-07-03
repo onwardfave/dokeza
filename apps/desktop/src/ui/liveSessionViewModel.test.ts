@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getLiveSessionDetail,
   getLiveSessionStatusView,
+  toLiveSuggestionCards,
   toLiveTranscriptRows,
 } from "./liveSessionViewModel.js";
 
@@ -30,6 +31,7 @@ describe("live session view model", () => {
         lastClientSeq: 4,
         lastServerSeq: 3,
         transcripts: [],
+        suggestions: [],
         lastError: {
           code: "stt_provider_timeout",
           message: "Transcription provider timed out.",
@@ -51,6 +53,7 @@ describe("live session view model", () => {
         pendingAudioGaps: 1,
         nextReconnectDelayMs: 1000,
         transcripts: [],
+        suggestions: [],
       }),
     ).toBe("Reconnect in 1000 ms / 2 audio chunks buffered / 1 gap pending");
   });
@@ -74,6 +77,31 @@ describe("live session view model", () => {
         speaker: "user",
         text: "hello",
         state: "final",
+      },
+    ]);
+  });
+
+  it("formats live suggestion cards without storing extra content", () => {
+    expect(
+      toLiveSuggestionCards([
+        {
+          suggestionId: "sug_1",
+          requestId: "sreq_1",
+          kind: "answer_question",
+          content: "First answer",
+          status: "complete",
+          confidence: "medium",
+          promptVersion: "live.answer.v1",
+          model: "deterministic-live-v1",
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "sug_1",
+        kind: "answer question",
+        content: "First answer",
+        state: "complete",
+        meta: "live.answer.v1 / deterministic-live-v1",
       },
     ]);
   });

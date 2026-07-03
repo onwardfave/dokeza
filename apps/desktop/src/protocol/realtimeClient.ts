@@ -32,6 +32,14 @@ export interface ResumeRequestInput {
   lastServerSeq: number;
 }
 
+export interface SuggestionRequestInput {
+  sessionId: string;
+  requestId: string;
+  kind: Extract<RealtimeJsonMessage, { type: "suggestion.request" }>["payload"]["kind"];
+  userPrompt?: string;
+  includeSources: boolean;
+}
+
 export interface SyntheticPcmChunk {
   meta: AudioChunkMetaMessage["payload"];
   bytes: Uint8Array;
@@ -171,6 +179,36 @@ export function createResumeRequestMessage(
 
   if (!validateRealtimeJsonMessage(message)) {
     throw new Error("invalid_resume_request_message");
+  }
+
+  return message;
+}
+
+export function createSuggestionRequestMessage(
+  state: RealtimeClientState,
+  input: SuggestionRequestInput,
+): RealtimeJsonMessage {
+  const payload =
+    input.userPrompt === undefined || input.userPrompt.trim().length === 0
+      ? {
+          request_id: input.requestId,
+          kind: input.kind,
+          include_sources: input.includeSources,
+        }
+      : {
+          request_id: input.requestId,
+          kind: input.kind,
+          user_prompt: input.userPrompt,
+          include_sources: input.includeSources,
+        };
+  const message = {
+    ...nextSessionEnvelope(state, input.sessionId),
+    type: "suggestion.request",
+    payload,
+  } satisfies RealtimeJsonMessage;
+
+  if (!validateRealtimeJsonMessage(message)) {
+    throw new Error("invalid_suggestion_request_message");
   }
 
   return message;

@@ -13,6 +13,7 @@
   "dependencies": {
     "@dokeza/auth": "workspace:*",
     "@dokeza/authz": "workspace:*",
+    "@dokeza/ai-orchestrator": "workspace:*",
     "@dokeza/config": "workspace:*",
     "@dokeza/contracts": "workspace:*",
     "@dokeza/db": "workspace:*",

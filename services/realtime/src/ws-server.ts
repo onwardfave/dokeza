@@ -5,6 +5,13 @@ import {
   validateRealtimeJsonMessage,
   type RealtimeJsonMessage,
 } from "@dokeza/contracts";
+import {
+  LiveSuggestionService,
+  ModelGatewayError,
+  type LiveSuggestionEvent,
+  type LiveSuggestionInput,
+  type TranscriptContextSegment,
+} from "@dokeza/ai-orchestrator";
 import type { Actor } from "@dokeza/authz";
 import { RealtimeFrameAssembler } from "./frame-assembler.js";
 import { SessionManager } from "./session-manager.js";
@@ -44,6 +51,9 @@ export interface RealtimeServerOptions {
   transcriptTimelineSink?: TranscriptTimelineSink;
   transcriptRetentionMode?: TranscriptRetentionMode;
   sessionStore?: SessionStore;
+  liveSuggestionService?: {
+    streamLiveSuggestion(input: LiveSuggestionInput): AsyncIterable<LiveSuggestionEvent>;
+  };
 }
 
 export interface RealtimeServerHandle {
@@ -90,7 +100,9 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     options.transcriptTimelineSink ?? new InMemoryTranscriptTimelineSink();
   const transcriptRetentionMode = options.transcriptRetentionMode ?? "7_days";
   const sessionStore = options.sessionStore;
+  const liveSuggestionService = options.liveSuggestionService ?? new LiveSuggestionService();
   const replayableTranscriptsBySession = new Map<string, ReplayableTranscriptMessage[]>();
+  const transcriptContextBySession = new Map<string, TranscriptContextSegment[]>();
   const httpServer = createServer((_req, res) => {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not_found" }));
@@ -158,7 +170,59 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           );
         }
         replayableTranscriptsBySession.set(sessionId, replayableMessages);
+
+        const transcriptContext = transcriptContextBySession.get(sessionId) ?? [];
+        transcriptContext.push({
+          segmentId: event.payload.segment_id,
+          speaker: event.payload.speaker,
+          text: event.payload.text,
+          startMs: event.payload.start_ms,
+          endMs: event.payload.end_ms,
+          final: true,
+        });
+        if (transcriptContext.length > 100) {
+          transcriptContext.splice(0, transcriptContext.length - 100);
+        }
+        transcriptContextBySession.set(sessionId, transcriptContext);
       }
+
+      sendJson(message);
+    };
+
+    const sendSuggestionEvent = (sessionId: string, event: LiveSuggestionEvent): void => {
+      const seq = sessionManager.nextServerSeq(sessionId);
+      const message =
+        event.type === "token"
+          ? ({
+              protocol_version: REALTIME_PROTOCOL_VERSION,
+              type: "suggestion.stream_token",
+              seq: seq ?? 0,
+              session_id: sessionId,
+              sent_at: new Date().toISOString(),
+              payload: {
+                suggestion_id: event.suggestionId,
+                request_id: event.requestId,
+                token: event.token,
+                index: event.index,
+              },
+            } satisfies RealtimeJsonMessage)
+          : ({
+              protocol_version: REALTIME_PROTOCOL_VERSION,
+              type: "suggestion.complete",
+              seq: seq ?? 0,
+              session_id: sessionId,
+              sent_at: new Date().toISOString(),
+              payload: {
+                suggestion_id: event.suggestionId,
+                request_id: event.requestId,
+                kind: event.kind,
+                content: event.content,
+                sources: event.sources,
+                confidence: event.confidence,
+                prompt_version: event.promptVersion,
+                model: event.model,
+              },
+            } satisfies RealtimeJsonMessage);
 
       sendJson(message);
     };
@@ -580,12 +644,34 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       if (frameResult.type === "json" && frameResult.message.type === "suggestion.request") {
-        sendError(
-          "feature_unavailable",
-          "Live suggestions are not available in this milestone.",
-          true,
-          session.sessionId,
-        );
+        try {
+          const transcriptSegments = transcriptContextBySession.get(session.sessionId) ?? [];
+          for await (const event of liveSuggestionService.streamLiveSuggestion({
+            workspaceId: session.workspaceId,
+            sessionId: session.sessionId,
+            requestId: frameResult.message.payload.request_id,
+            kind: frameResult.message.payload.kind,
+            ...(frameResult.message.payload.user_prompt === undefined
+              ? {}
+              : { userPrompt: frameResult.message.payload.user_prompt }),
+            includeSources: frameResult.message.payload.include_sources,
+            transcriptSegments,
+          })) {
+            sendSuggestionEvent(session.sessionId, event);
+          }
+        } catch (err) {
+          const code =
+            err instanceof ModelGatewayError && err.code === "invalid_model_response"
+              ? "feature_unavailable"
+              : "llm_provider_timeout";
+          sendError(
+            code,
+            "Live suggestions are temporarily unavailable.",
+            true,
+            session.sessionId,
+            2000,
+          );
+        }
         return;
       }
 
@@ -643,12 +729,20 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
 
     ws.on("close", () => {
       void closeSttSession("connection.closed").finally(() => {
+        const session = sessionManager.getSessionByConnection(connectionId);
+        if (session !== undefined && session.state === "ended") {
+          transcriptContextBySession.delete(session.sessionId);
+        }
         sessionManager.removeConnection(connectionId);
       });
     });
 
     ws.on("error", () => {
       void closeSttSession("connection.error").finally(() => {
+        const session = sessionManager.getSessionByConnection(connectionId);
+        if (session !== undefined && session.state === "ended") {
+          transcriptContextBySession.delete(session.sessionId);
+        }
         sessionManager.removeConnection(connectionId);
       });
     });

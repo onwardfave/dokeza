@@ -274,6 +274,7 @@ h2 {
 }
 
 .live-transcript,
+.live-suggestions,
 .meeting-review-transcript {
   display: grid;
   gap: 8px;
@@ -350,6 +351,35 @@ h2 {
 }
 
 .transcript-row p {
+  margin: 0;
+  color: #17202a;
+  line-height: 1.45;
+}
+
+.suggestion-card {
+  display: grid;
+  gap: 6px;
+  border-left: 3px solid #2563eb;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.suggestion-card.streaming {
+  border-left-color: #d8b451;
+}
+
+.suggestion-card > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.suggestion-card p {
   margin: 0;
   color: #17202a;
   line-height: 1.45;

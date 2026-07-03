@@ -7,6 +7,7 @@ import {
   createResumeRequestMessage,
   createSessionEndMessage,
   createSessionStartMessage,
+  createSuggestionRequestMessage,
   createSyntheticPcmChunks,
   type DesktopPlatform,
   type RealtimeClientState,
@@ -63,6 +64,17 @@ export interface DesktopRealtimeTranscript {
   final: boolean;
 }
 
+export interface DesktopRealtimeSuggestion {
+  suggestionId: string;
+  requestId: string;
+  kind: "answer_question" | "summarize_so_far" | "suggest_follow_up" | "objection_response";
+  content: string;
+  status: "streaming" | "complete";
+  confidence?: "low" | "medium" | "high";
+  promptVersion?: string;
+  model?: string;
+}
+
 export interface DesktopRealtimeError {
   code: string;
   message: string;
@@ -77,6 +89,7 @@ export interface DesktopRealtimeSnapshot {
   lastClientSeq: number;
   lastServerSeq: number;
   transcripts: DesktopRealtimeTranscript[];
+  suggestions: DesktopRealtimeSuggestion[];
   pendingAudioChunks?: number;
   pendingAudioBytes?: number;
   pendingAudioGaps?: number;
@@ -119,6 +132,7 @@ export class DesktopRealtimeSessionClient {
     lastClientSeq: 0,
     lastServerSeq: 0,
     transcripts: [],
+    suggestions: [],
   };
 
   constructor(private readonly options: DesktopRealtimeSessionClientOptions) {
@@ -139,6 +153,7 @@ export class DesktopRealtimeSessionClient {
     const snapshot: DesktopRealtimeSnapshot = {
       ...this.state,
       transcripts: [...this.state.transcripts],
+      suggestions: [...this.state.suggestions],
       pendingAudioChunks: buffer.pendingChunks,
       pendingAudioBytes: buffer.pendingBytes,
       pendingAudioGaps: buffer.pendingGaps,
@@ -165,6 +180,7 @@ export class DesktopRealtimeSessionClient {
       lastClientSeq: 0,
       lastServerSeq: 0,
       transcripts: [],
+      suggestions: [],
     };
     this.connect();
   }
@@ -190,6 +206,41 @@ export class DesktopRealtimeSessionClient {
     }
 
     this.sendJson(createSessionEndMessage(this.protocolState, this.state.sessionId, reason));
+  }
+
+  requestLiveSuggestion(input: {
+    kind: DesktopRealtimeSuggestion["kind"];
+    userPrompt?: string;
+    includeSources?: boolean;
+  }): string | undefined {
+    if (this.transport === undefined || this.state.sessionId === undefined) {
+      return undefined;
+    }
+
+    const requestId = `sreq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    this.sendJson(
+      createSuggestionRequestMessage(this.protocolState, {
+        sessionId: this.state.sessionId,
+        requestId,
+        kind: input.kind,
+        ...(input.userPrompt === undefined ? {} : { userPrompt: input.userPrompt }),
+        includeSources: input.includeSources ?? false,
+      }),
+    );
+    this.state = {
+      ...this.state,
+      suggestions: [
+        ...this.state.suggestions,
+        {
+          suggestionId: `pending_${requestId}`,
+          requestId,
+          kind: input.kind,
+          content: "",
+          status: "streaming",
+        },
+      ],
+    };
+    return requestId;
   }
 
   sendAudioChunk(chunk: SyntheticPcmChunk): void {
@@ -249,6 +300,12 @@ export class DesktopRealtimeSessionClient {
       case "transcript.partial":
       case "transcript.final":
         this.upsertTranscript(parsed);
+        break;
+      case "suggestion.stream_token":
+        this.appendSuggestionToken(parsed);
+        break;
+      case "suggestion.complete":
+        this.completeSuggestion(parsed);
         break;
       case "session.status":
         this.state = {
@@ -382,6 +439,53 @@ export class DesktopRealtimeSessionClient {
       ...this.state,
       status: this.state.status === "reconnecting" ? "streaming" : this.state.status,
       transcripts,
+    };
+  }
+
+  private appendSuggestionToken(
+    message: Extract<RealtimeJsonMessage, { type: "suggestion.stream_token" }>,
+  ): void {
+    const suggestions = this.state.suggestions.filter(
+      (suggestion) => suggestion.requestId !== message.payload.request_id,
+    );
+    const existing = this.state.suggestions.find(
+      (suggestion) => suggestion.requestId === message.payload.request_id,
+    );
+    suggestions.push({
+      suggestionId: message.payload.suggestion_id,
+      requestId: message.payload.request_id,
+      kind: existing?.kind ?? "answer_question",
+      content: `${existing?.content ?? ""}${message.payload.token}`,
+      status: "streaming",
+      ...(existing?.confidence === undefined ? {} : { confidence: existing.confidence }),
+      ...(existing?.promptVersion === undefined ? {} : { promptVersion: existing.promptVersion }),
+      ...(existing?.model === undefined ? {} : { model: existing.model }),
+    });
+    this.state = {
+      ...this.state,
+      suggestions,
+    };
+  }
+
+  private completeSuggestion(
+    message: Extract<RealtimeJsonMessage, { type: "suggestion.complete" }>,
+  ): void {
+    const suggestions = this.state.suggestions.filter(
+      (suggestion) => suggestion.requestId !== message.payload.request_id,
+    );
+    suggestions.push({
+      suggestionId: message.payload.suggestion_id,
+      requestId: message.payload.request_id,
+      kind: message.payload.kind,
+      content: message.payload.content,
+      status: "complete",
+      confidence: message.payload.confidence,
+      promptVersion: message.payload.prompt_version,
+      model: message.payload.model,
+    });
+    this.state = {
+      ...this.state,
+      suggestions,
     };
   }
 

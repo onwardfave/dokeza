@@ -314,6 +314,26 @@ describe("API HTTP Server", () => {
     expect(JSON.stringify(body)).not.toContain("follow up with pricing");
   });
 
+  it("filters meeting history by transcript search query without returning transcript content", async () => {
+    const apiToken = issueApiToken({
+      userId: "user_1",
+      memberships: [{ userId: "user_1", workspaceId: "ws_1", role: "member" }],
+    });
+    const port = await startServer();
+
+    const response = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings?q=pricing`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      workspace_id: "ws_1",
+      meetings: [{ meeting_id: "sess_ws_1" }],
+    });
+    expect(JSON.stringify(body)).not.toContain("follow up with pricing");
+  });
+
   it("returns meeting detail and export for authorized workspace members", async () => {
     const apiToken = issueApiToken({
       userId: "user_1",
