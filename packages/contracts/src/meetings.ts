@@ -110,9 +110,7 @@ export const meetingJsonSchemas = {
   "meeting-api-error-response": MeetingApiErrorResponseSchema,
 } satisfies Record<string, TSchema>;
 
-export function validateMeetingHistoryResponse(
-  value: unknown,
-): value is MeetingHistoryResponse {
+export function validateMeetingHistoryResponse(value: unknown): value is MeetingHistoryResponse {
   return Value.Check(MeetingHistoryResponseSchema, value);
 }
 

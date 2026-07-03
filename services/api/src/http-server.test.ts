@@ -321,12 +321,9 @@ describe("API HTTP Server", () => {
     });
     const port = await startServer();
 
-    const detail = await fetch(
-      `http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings/sess_ws_1`,
-      {
-        headers: { Authorization: `Bearer ${apiToken}` },
-      },
-    );
+    const detail = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings/sess_ws_1`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
 
     expect(detail.status).toBe(200);
     expect(await detail.json()).toMatchObject({
@@ -374,12 +371,9 @@ describe("API HTTP Server", () => {
     });
     const port = await startServer();
 
-    const response = await fetch(
-      `http://127.0.0.1:${port}/v1/workspaces/ws_2/meetings/sess_ws_2`,
-      {
-        headers: { Authorization: `Bearer ${apiToken}` },
-      },
-    );
+    const response = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_2/meetings/sess_ws_2`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "workspace_access_denied" });
@@ -392,12 +386,9 @@ describe("API HTTP Server", () => {
     });
     const port = await startServer();
 
-    const missing = await fetch(
-      `http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings/missing`,
-      {
-        headers: { Authorization: `Bearer ${apiToken}` },
-      },
-    );
+    const missing = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings/missing`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
     expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({ error: "meeting_not_found" });
 

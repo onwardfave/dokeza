@@ -84,7 +84,7 @@ describe("meeting review contracts", () => {
         workspace_id: "ws_1",
         format: "json",
         content_type: "application/json",
-        content: "{\"meeting_id\":\"sess_1\"}",
+        content: '{"meeting_id":"sess_1"}',
       }),
     ).toBe(true);
   });

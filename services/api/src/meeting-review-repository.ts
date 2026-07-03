@@ -166,9 +166,7 @@ function toMarkdownExport(detail: MeetingDetailResponse): string {
     lines.push("_No transcript segments._");
   } else {
     for (const segment of detail.transcript.segments) {
-      lines.push(
-        `- ${segment.start_ms}-${segment.end_ms} ms [${segment.speaker}] ${segment.text}`,
-      );
+      lines.push(`- ${segment.start_ms}-${segment.end_ms} ms [${segment.speaker}] ${segment.text}`);
     }
   }
 

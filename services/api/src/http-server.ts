@@ -193,8 +193,7 @@ function handleHealth(req: IncomingMessage, res: ServerResponse, env: NodeJS.Pro
 export function createHttpServer(options: HttpServerOptions = {}): HttpServerHandle {
   const env = options.env ?? process.env;
   const now = options.now ?? (() => new Date());
-  const meetingRepository =
-    options.meetingRepository ?? new InMemoryMeetingReviewRepository();
+  const meetingRepository = options.meetingRepository ?? new InMemoryMeetingReviewRepository();
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
