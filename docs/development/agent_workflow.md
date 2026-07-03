@@ -11,19 +11,24 @@ Sources reviewed:
 - Antithesis "skills for agents" blog: `https://antithesis.com/blog/2026/agent_skills/`
 - Antithesis skills repository: `https://github.com/antithesishq/antithesis-skills`
 - Superpowers repository: `https://github.com/obra/superpowers`
+- User-provided "LOOPS.md: Field Notes on Agents That Run for Days" image, reviewed 2026-07-03.
 
 ## 2. Operating Principles
 
 Agents should optimize for steady, verified progress over large unreviewable changes.
 
+- Treat the development process as a loop, not a one-off prompt. The loop is: gather, reason, act, verify, repeat.
 - Start from the roadmap, not from convenient code.
 - Load only the context needed for the slice, but load all required security and architecture context for that slice.
 - Keep each slice independently verifiable.
+- Keep durable loop state simple enough to recover after a crash or context reset.
 - Prefer contracts, repository interfaces, and adapters that make later production wiring possible without client churn.
+- Separate builder and evaluator mindsets. A change is not accepted because the author likes it; it is accepted because the agreed contract, tests, and review gates pass.
 - Use tests as the executable definition of behavior whenever practical.
 - Keep transcript, prompt, document, suggestion, token, and raw audio content out of logs, diagnostics, and telemetry by default.
 - Commit meaningful checkpoints as work progresses.
 - Update documentation in the same slice that changes behavior, contracts, data flows, or user workflows.
+- Watch the bottleneck. When coding gets easy, planning, verification, UX judgment, or documentation usually becomes the constraint.
 
 ## 3. Canonical Loop
 
@@ -39,53 +44,74 @@ Use this loop for every non-trivial feature.
    - Review recent commits when continuing after user changes.
    - Do not overwrite unrelated user changes.
 
-3. Load context.
+3. Reconstruct loop state.
+   - Confirm the current roadmap status.
+   - Read the active slice plan, if one exists.
+   - Review recent commits and `git status --short`.
+   - If the current state cannot be understood from roadmap, plan, and git state, simplify or document it before coding.
+
+4. Load context.
    - Read `AGENTS.md`.
    - Read the roadmap and the slice-specific plan if it exists.
    - Read the relevant SRS, architecture, security, DevOps, and testing docs.
    - Read relevant project-local skills under `.codex/skills/`.
 
-4. Select skills.
+5. Select skills.
    - Use `dokeza-implementation-planning` for multi-file, architecture-affecting, contract, security, or user-workflow changes.
    - Use `dokeza-tdd-execution` for implementation.
    - Use `dokeza-systematic-debugging` for any failing test, typecheck, build, or unexpected behavior.
    - Use `dokeza-verification-before-completion` before claiming completion.
    - Use domain skills such as `dokeza-data-governance`, `dokeza-provider-integration`, `dokeza-reliability-testing`, or `dokeza-desktop-realtime-client` when the slice touches those areas.
 
-5. Plan.
+6. Plan.
    - For substantial work, create or update a plan under `docs/development/plans/YYYY-MM-DD-<feature-name>.md`.
    - Include goal, requirements, affected architecture, contracts/data model, security/privacy, implementation tasks, tests, docs, rollback/degraded behavior, and open questions.
+   - Write the done contract as testable assertions before implementation begins.
    - Commit the plan before implementation when it is substantial.
 
-6. Implement in checkpoints.
+7. Implement in checkpoints.
    - Write or update tests first where practical.
    - Implement the smallest behavior that satisfies the tests.
    - Run targeted verification.
    - Commit a coherent checkpoint.
    - Repeat.
 
-7. Debug systematically.
+8. Debug systematically.
    - Read the full error.
    - Reproduce with the exact failing command.
    - Identify root cause before editing.
    - Fix at the source, not only at the symptom.
    - Add or update a regression test if the failure represents product behavior.
 
-8. Update docs.
+9. Update docs.
    - Update roadmap status after a slice lands.
    - Update architecture, protocol, failure-mode, data-flow, testing, or DevOps docs when their governed behavior changes.
    - Update this workflow when a repeated lesson should become standard practice.
 
-9. Verify.
+10. Verify.
    - Run targeted checks during development.
    - Run the final verification gate before completion.
    - Read outputs and report evidence, not guesses.
 
-10. Handoff.
+11. Handoff.
     - Ensure `git status --short` is clean unless explicitly handing off known work in progress.
     - Summarize commits, verification, remaining risks, and next slice.
 
-## 4. Context Matrix
+## 4. Durable Loop State
+
+The agent must be able to recover from a lost session by reading a small set of durable files and git state.
+
+For Dokeza, the canonical state is:
+
+1. The roadmap: `docs/development/plans/2026-06-25-production-vertical-roadmap.md`.
+2. The active slice plan under `docs/development/plans/`.
+3. Git history and worktree state.
+
+Use these instead of introducing ad hoc progress files by default. Add a temporary progress file only when a slice genuinely cannot be recovered from roadmap, plan, and git state.
+
+If state spreads across many chat messages, scratch notes, or implicit assumptions, write it down in the plan or roadmap before continuing.
+
+## 5. Context Matrix
 
 Use this matrix to decide which docs and skills to load.
 
@@ -103,7 +129,19 @@ Use this matrix to decide which docs and skills to load.
 
 If the user asks for a review rather than implementation, use a code-review stance: findings first, ordered by severity, with file and line references.
 
-## 5. Planning Gate
+## 6. Role Separation
+
+Longer loops work better when planning, generation, and evaluation are distinct activities even if one agent performs them.
+
+- Planner mode: defines the slice, done contract, risks, tests, and documentation gates. It should not touch implementation code.
+- Generator mode: implements the smallest change that satisfies the current contract. It should avoid grading its own work before tests and diffs exist.
+- Evaluator mode: reads diffs, runs checks, compares output to the done contract, and looks for regressions, security gaps, and missing docs.
+
+Use subagents or separate review passes when the slice is high risk, subjective, or broad. If no separate evaluator is available, explicitly switch to an evaluator pass before final verification.
+
+Subjective work needs a rubric. For UI, documentation, prompts, and product workflows, write the evaluation axes before implementation. Useful axes include clarity, functionality, security/privacy fit, consistency with existing patterns, and operational usefulness.
+
+## 7. Planning Gate
 
 Do not start coding substantial work until these are known:
 
@@ -116,6 +154,7 @@ Do not start coding substantial work until these are known:
 - External provider or new data-flow implications.
 - Failure/degraded behavior.
 - Tests that will prove the behavior.
+- Subjective evaluation rubric, when tests alone cannot judge quality.
 
 Stop and update the plan if:
 
@@ -126,7 +165,7 @@ Stop and update the plan if:
 - Failure behavior is unclear.
 - The implementation contradicts an ADR or roadmap decision.
 
-## 6. Implementation Checkpoints
+## 8. Implementation Checkpoints
 
 Prefer checkpoint commits in this order when applicable:
 
@@ -140,7 +179,9 @@ Prefer checkpoint commits in this order when applicable:
 
 Keep checkpoints coherent. Do not mix unrelated refactors into a feature commit.
 
-## 7. Testing Strategy During Work
+If a run goes sideways, restart from the last clean contract and commit rather than layering patches on uncertain state. Restarting is acceptable when the plan remains correct; ask for user input only when the contract itself is wrong.
+
+## 9. Testing Strategy During Work
 
 Use the narrowest useful tests first:
 
@@ -160,7 +201,7 @@ pnpm --filter @dokeza/desktop typecheck
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 ```
 
-## 8. Debugging Gate
+## 10. Debugging Gate
 
 When a command fails:
 
@@ -172,6 +213,17 @@ When a command fails:
 6. Re-run the original failing command.
 7. Run broader checks if the fix touched shared behavior.
 
+Read the traces before changing the harness or prompt. In Dokeza, traces include:
+
+- command output,
+- failing test names and assertions,
+- git diffs,
+- generated schema diffs,
+- telemetry event fields in tests,
+- logs from local services when they are already part of the verification path.
+
+When judgment diverges from expected behavior, find the exact command output, diff hunk, or assertion where the divergence began and update the contract, test, or implementation at that point.
+
 Common recurring Dokeza failures:
 
 - `exactOptionalPropertyTypes` rejects explicit `undefined`; omit optional fields instead.
@@ -181,7 +233,7 @@ Common recurring Dokeza failures:
 - New external data flow requires `docs/security/data_flows.md`.
 - Native desktop changes require Rust verification, not just TypeScript checks.
 
-## 9. Verification Gate
+## 11. Verification Gate
 
 Before claiming completion:
 
@@ -202,7 +254,7 @@ pnpm --filter @dokeza/desktop build
 5. Run `git status --short`.
 6. Report exact evidence: commands, pass/fail, test counts where visible, and any skipped tests or unverified risks.
 
-## 10. Documentation Gate
+## 12. Documentation Gate
 
 Update documentation in the same slice when:
 
@@ -222,7 +274,7 @@ Roadmap status updates should be concrete:
 - `Partially implemented` when contracts/UI/fakes exist but production storage, provider, policy, or operational wiring remains.
 - Follow-up gaps should be explicit enough to choose the next slice.
 
-## 11. Commit Discipline
+## 13. Commit Discipline
 
 Commit as work progresses:
 
@@ -243,7 +295,20 @@ Before each commit:
   - `feat(api): add meeting review endpoints`
   - `style(meetings): format review API files`
 
-## 12. Security and Privacy Guardrails
+## 14. Harness Maintenance
+
+The workflow exists to compensate for current model, repo, and product complexity. It should shrink or change when it becomes overhead.
+
+Review the harness when:
+
+- The same checklist item is never useful anymore.
+- A required step is routinely skipped because it is too broad.
+- The agent can now do safely what the workflow previously split into multiple manual steps.
+- A new bottleneck appears in planning, verification, docs, or review.
+
+Delete or simplify stale process. A harness that only grows becomes another source of bugs.
+
+## 15. Security and Privacy Guardrails
 
 Agents must not:
 
@@ -262,7 +327,7 @@ Workspace isolation rules:
 - PostgreSQL-backed tenant data should use `withWorkspaceTransaction` or an equivalent RLS-scoped path.
 - In-memory fakes are acceptable for local/test slices only when the production repository is explicitly tracked as follow-up.
 
-## 13. Living Lessons
+## 16. Living Lessons
 
 Record repeated process lessons here so future sessions start stronger.
 
@@ -273,8 +338,15 @@ Record repeated process lessons here so future sessions start stronger.
 - Keep roadmaps honest: "partially implemented" is better than implying production readiness when only local/test wiring exists.
 - Prettier failures are cheap to fix but should be committed explicitly when they touch already-committed behavioral files.
 - When exact optional property typing fails, prefer conditional object construction over weakening types.
+- Keep loop state recoverable from roadmap, active plan, and git state. If the agent needs chat memory to continue safely, write the missing state to disk.
+- Plan/generate/evaluate should be separate passes. Mixing them is where weak acceptance criteria and self-approval creep in.
+- When subjective quality matters, define the rubric before implementation rather than tuning by vibe after the fact.
+- If the implementation accumulates patches without converging, restart from the last clean commit and done contract.
+- Read failing traces before changing code. The useful clue is usually the first point where output diverged from the contract.
+- Periodically delete or simplify workflow rules that no longer buy safety or speed.
+- Always name the current bottleneck at handoff. The next slice should attack that bottleneck, not just the next convenient file.
 
-## 14. Updating This Workflow
+## 17. Updating This Workflow
 
 Update this file when:
 
@@ -284,3 +356,4 @@ Update this file when:
 - A verification command becomes mandatory.
 - A commit or documentation convention changes.
 - A roadmap slice exposes ambiguity in the existing process.
+- A harness rule becomes stale or too heavy.
