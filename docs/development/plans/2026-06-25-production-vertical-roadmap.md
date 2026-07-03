@@ -253,14 +253,16 @@ Acceptance criteria:
 
 Goal: users can review and manage a completed meeting record.
 
+Status: partially implemented. `@dokeza/contracts` now defines meeting review REST schemas and generated JSON Schema artifacts. `services/api` exposes authenticated, workspace-authorized meeting history, meeting detail, export, and delete routes behind an injectable `MeetingReviewRepository`; the default implementation is in-memory for local/test while PostgreSQL repository wiring remains follow-up. The desktop now includes a first meeting review panel that can request a development API token, refresh history, inspect transcript segments and audio gaps, export Markdown/JSON, copy exports, and delete meeting records through the API.
+
 Tasks:
 
-1. Add meeting history API.
-2. Add meeting detail API with transcript and gaps.
-3. Add desktop review UI.
+1. Add meeting history API. Done for authenticated workspace-scoped API repository routes; PostgreSQL repository wiring remains.
+2. Add meeting detail API with transcript and gaps. Done for repository-backed route and contracts.
+3. Add desktop review UI. Done for the first desktop review panel.
 4. Add transcript search.
-5. Add export to Markdown/JSON/clipboard.
-6. Add delete meeting flow that respects policy.
+5. Add export to Markdown/JSON/clipboard. Done for API export and desktop copy flow; PDF remains later.
+6. Add delete meeting flow that respects policy. Partially done for workspace authorization and repository delete; retention/admin policy checks and audit are later.
 7. Add retention cleanup job.
 
 ### M2 - Live AI Suggestions
