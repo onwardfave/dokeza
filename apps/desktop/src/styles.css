@@ -137,7 +137,22 @@ h2 {
   padding-top: 22px;
 }
 
+.meeting-review {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+  border-top: 1px solid #d8dee8;
+  padding-top: 22px;
+}
+
 .live-session-header {
+  display: flex;
+  gap: 16px;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.meeting-review-header {
   display: flex;
   gap: 16px;
   align-items: start;
@@ -150,7 +165,14 @@ h2 {
   gap: 10px;
 }
 
-.live-session-controls label {
+.meeting-review-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 180px);
+  gap: 10px;
+}
+
+.live-session-controls label,
+.meeting-review-controls label {
   display: grid;
   gap: 6px;
   color: #475569;
@@ -159,7 +181,9 @@ h2 {
 }
 
 .live-session-controls input,
-.live-session-controls select {
+.live-session-controls select,
+.meeting-review-controls input,
+.meeting-review-controls select {
   min-width: 0;
   min-height: 38px;
   border: 1px solid #94a3b8;
@@ -170,7 +194,9 @@ h2 {
 }
 
 .live-session-controls input:disabled,
-.live-session-controls select:disabled {
+.live-session-controls select:disabled,
+.meeting-review-controls input:disabled,
+.meeting-review-controls select:disabled {
   color: #7b8492;
   background: #edf1f6;
 }
@@ -182,7 +208,15 @@ h2 {
   gap: 10px;
 }
 
-.live-session-buttons button {
+.meeting-review-buttons {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.live-session-buttons button,
+.meeting-review-buttons button {
   min-height: 40px;
   border: 1px solid #94a3b8;
   border-radius: 8px;
@@ -192,19 +226,22 @@ h2 {
   cursor: pointer;
 }
 
-.live-session-buttons button:hover:not(:disabled) {
+.live-session-buttons button:hover:not(:disabled),
+.meeting-review-buttons button:hover:not(:disabled) {
   border-color: #2563eb;
   color: #174ea6;
   background: #eff6ff;
 }
 
-.live-session-buttons button:disabled {
+.live-session-buttons button:disabled,
+.meeting-review-buttons button:disabled {
   color: #7b8492;
   background: #edf1f6;
   cursor: not-allowed;
 }
 
-.live-session-detail {
+.live-session-detail,
+.meeting-review-detail {
   margin: 0;
   color: #475569;
   font-size: 13px;
@@ -212,7 +249,8 @@ h2 {
   overflow-wrap: anywhere;
 }
 
-.live-session-stats {
+.live-session-stats,
+.meeting-review-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 12px;
@@ -222,18 +260,21 @@ h2 {
   padding: 12px;
 }
 
-.live-session-stats > div {
+.live-session-stats > div,
+.meeting-review-stats > div {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
   gap: 8px;
   font-size: 13px;
 }
 
-.live-session-stats dd {
+.live-session-stats dd,
+.meeting-review-stats dd {
   overflow-wrap: anywhere;
 }
 
-.live-transcript {
+.live-transcript,
+.meeting-review-transcript {
   display: grid;
   gap: 8px;
   min-height: 112px;
@@ -243,11 +284,46 @@ h2 {
   padding: 14px;
 }
 
-.live-transcript-empty {
+.live-transcript-empty,
+.meeting-review-empty {
   margin: 0;
   color: #5b6472;
   font-size: 14px;
   font-weight: 700;
+}
+
+.meeting-gap-row {
+  display: grid;
+  gap: 4px;
+  border-left: 3px solid #d8b451;
+  background: #fffdf4;
+  padding: 10px 12px;
+}
+
+.meeting-gap-row span {
+  color: #755100;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.meeting-gap-row p {
+  margin: 0;
+  color: #17202a;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.meeting-review-export {
+  width: 100%;
+  min-height: 128px;
+  box-sizing: border-box;
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  color: #17202a;
+  background: #ffffff;
+  padding: 10px;
+  resize: vertical;
 }
 
 .transcript-row {
@@ -440,7 +516,9 @@ h2 {
   }
 
   .live-session-controls,
-  .live-session-buttons {
+  .live-session-buttons,
+  .meeting-review-controls,
+  .meeting-review-buttons {
     grid-template-columns: 1fr;
   }
 
@@ -450,12 +528,14 @@ h2 {
 
   dl > div,
   .live-session-stats,
+  .meeting-review-stats,
   .diagnostics-details > div {
     grid-template-columns: 1fr;
     gap: 4px;
   }
 
-  .live-session-stats > div {
+  .live-session-stats > div,
+  .meeting-review-stats > div {
     grid-template-columns: 1fr;
   }
 }

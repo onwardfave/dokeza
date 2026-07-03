@@ -1,4 +1,9 @@
-import { REALTIME_PROTOCOL_VERSION } from "@dokeza/contracts";
+import {
+  REALTIME_PROTOCOL_VERSION,
+  type MeetingDetailResponse,
+  type MeetingExportResponse,
+  type MeetingSummary,
+} from "@dokeza/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DesktopRealtimeSessionClient,
@@ -13,6 +18,12 @@ import {
   requestDevelopmentApiToken,
   requestRealtimeSessionToken,
 } from "../protocol/authApiClient.js";
+import {
+  deleteMeeting,
+  exportMeeting,
+  getMeetingDetail,
+  listMeetings,
+} from "../protocol/meetingReviewApiClient.js";
 import {
   captureMicrophonePcmChunks,
   listMicrophoneCaptureDevices,
@@ -80,6 +91,7 @@ export function App() {
           </div>
         </dl>
         <LiveSessionPanel />
+        <MeetingReviewPanel />
         <DiagnosticsPanel />
       </section>
     </main>
@@ -413,6 +425,287 @@ function LiveSessionPanel() {
           ))
         )}
       </div>
+    </section>
+  );
+}
+
+function MeetingReviewPanel() {
+  const [apiEndpoint, setApiEndpoint] = useState("http://127.0.0.1:3000");
+  const [workspaceId, setWorkspaceId] = useState("ws_dev");
+  const [apiToken, setApiToken] = useState("");
+  const [message, setMessage] = useState("No meeting history loaded");
+  const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
+  const [selectedMeetingId, setSelectedMeetingId] = useState("");
+  const [detail, setDetail] = useState<MeetingDetailResponse | null>(null);
+  const [exportFormat, setExportFormat] = useState<MeetingExportResponse["format"]>("markdown");
+  const [exportContent, setExportContent] = useState("");
+  const canCallApi = apiToken.trim().length > 0 && workspaceId.trim().length > 0;
+  const selectedMeeting =
+    meetings.find((meeting) => meeting.meeting_id === selectedMeetingId) ?? null;
+
+  async function requestReviewToken() {
+    setMessage("Requesting API token");
+
+    try {
+      const token = await requestDevelopmentApiToken({
+        apiBaseUrl: apiEndpoint,
+        workspaceId,
+        userId: "user_desktop_preview",
+      });
+      setApiToken(token.token);
+      setMessage(`API token ready for ${token.userId}`);
+    } catch {
+      setApiToken("");
+      setMessage("API token request failed");
+    }
+  }
+
+  async function refreshMeetings() {
+    if (!canCallApi) {
+      setMessage("API token required");
+      return;
+    }
+
+    try {
+      const nextMeetings = await listMeetings({
+        apiBaseUrl: apiEndpoint,
+        apiToken,
+        workspaceId,
+      });
+      setMeetings(nextMeetings);
+      const nextSelectedId = nextMeetings[0]?.meeting_id ?? "";
+      setSelectedMeetingId(nextSelectedId);
+      setDetail(null);
+      setExportContent("");
+      setMessage(`${nextMeetings.length} meetings loaded`);
+      if (nextSelectedId !== "") {
+        await loadMeeting(nextSelectedId);
+      }
+    } catch {
+      setMessage("Meeting history unavailable");
+    }
+  }
+
+  async function loadMeeting(meetingId: string) {
+    if (!canCallApi) {
+      setMessage("API token required");
+      return;
+    }
+
+    setSelectedMeetingId(meetingId);
+    setExportContent("");
+
+    try {
+      const nextDetail = await getMeetingDetail({
+        apiBaseUrl: apiEndpoint,
+        apiToken,
+        workspaceId,
+        meetingId,
+      });
+      setDetail(nextDetail);
+      setMessage(`Meeting ${meetingId} loaded`);
+    } catch {
+      setDetail(null);
+      setMessage("Meeting detail unavailable");
+    }
+  }
+
+  async function runExport() {
+    if (!canCallApi || selectedMeetingId === "") {
+      setMessage("Select a meeting first");
+      return;
+    }
+
+    try {
+      const exported = await exportMeeting({
+        apiBaseUrl: apiEndpoint,
+        apiToken,
+        workspaceId,
+        meetingId: selectedMeetingId,
+        format: exportFormat,
+      });
+      setExportContent(exported.content);
+      setMessage(`${exported.format} export ready`);
+    } catch {
+      setExportContent("");
+      setMessage("Meeting export failed");
+    }
+  }
+
+  async function copyExport() {
+    if (exportContent.length === 0 || navigator.clipboard === undefined) {
+      setMessage("Export content unavailable");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(exportContent);
+      setMessage("Export copied");
+    } catch {
+      setMessage("Clipboard copy failed");
+    }
+  }
+
+  async function deleteSelectedMeeting() {
+    if (!canCallApi || selectedMeetingId === "") {
+      setMessage("Select a meeting first");
+      return;
+    }
+
+    try {
+      await deleteMeeting({
+        apiBaseUrl: apiEndpoint,
+        apiToken,
+        workspaceId,
+        meetingId: selectedMeetingId,
+      });
+      setDetail(null);
+      setExportContent("");
+      setSelectedMeetingId("");
+      setMessage("Meeting deleted");
+      await refreshMeetings();
+    } catch {
+      setMessage("Meeting delete failed");
+    }
+  }
+
+  return (
+    <section className="meeting-review" aria-labelledby="meeting-review-title">
+      <div className="meeting-review-header">
+        <div>
+          <p className="eyebrow">Post Session</p>
+          <h2 id="meeting-review-title">Meeting review</h2>
+        </div>
+        <span className="status-pill muted">{meetings.length} records</span>
+      </div>
+      <div className="meeting-review-controls">
+        <label>
+          <span>API endpoint</span>
+          <input
+            value={apiEndpoint}
+            onChange={(event) => setApiEndpoint(event.currentTarget.value)}
+          />
+        </label>
+        <label>
+          <span>Workspace</span>
+          <input
+            value={workspaceId}
+            onChange={(event) => setWorkspaceId(event.currentTarget.value)}
+          />
+        </label>
+        <label>
+          <span>API token</span>
+          <input
+            type="password"
+            value={apiToken}
+            onChange={(event) => setApiToken(event.currentTarget.value)}
+          />
+        </label>
+        <label>
+          <span>Meeting</span>
+          <select
+            value={selectedMeetingId}
+            onChange={(event) => void loadMeeting(event.currentTarget.value)}
+            disabled={!canCallApi || meetings.length === 0}
+          >
+            {meetings.length === 0 ? (
+              <option value="">No meetings</option>
+            ) : (
+              meetings.map((meeting) => (
+                <option value={meeting.meeting_id} key={meeting.meeting_id}>
+                  {meeting.meeting_id}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+        <label>
+          <span>Export</span>
+          <select
+            value={exportFormat}
+            onChange={(event) =>
+              setExportFormat(event.currentTarget.value as MeetingExportResponse["format"])
+            }
+          >
+            <option value="markdown">Markdown</option>
+            <option value="json">JSON</option>
+          </select>
+        </label>
+        <div className="meeting-review-buttons">
+          <button type="button" onClick={() => void requestReviewToken()}>
+            Get API token
+          </button>
+          <button type="button" disabled={!canCallApi} onClick={() => void refreshMeetings()}>
+            Refresh history
+          </button>
+          <button
+            type="button"
+            disabled={!canCallApi || selectedMeetingId === ""}
+            onClick={() => void runExport()}
+          >
+            Export
+          </button>
+          <button
+            type="button"
+            disabled={exportContent.length === 0}
+            onClick={() => void copyExport()}
+          >
+            Copy export
+          </button>
+          <button
+            type="button"
+            disabled={!canCallApi || selectedMeetingId === ""}
+            onClick={() => void deleteSelectedMeeting()}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+      <p className="meeting-review-detail">{message}</p>
+      <dl className="meeting-review-stats">
+        <div>
+          <dt>Selected</dt>
+          <dd>{selectedMeeting?.meeting_id ?? "None"}</dd>
+        </div>
+        <div>
+          <dt>Status</dt>
+          <dd>{selectedMeeting?.status ?? "Unavailable"}</dd>
+        </div>
+        <div>
+          <dt>Segments</dt>
+          <dd>{detail?.transcript.segments.length ?? selectedMeeting?.segment_count ?? 0}</dd>
+        </div>
+        <div>
+          <dt>Gaps</dt>
+          <dd>{detail?.transcript.gaps.length ?? selectedMeeting?.gap_count ?? 0}</dd>
+        </div>
+      </dl>
+      <div className="meeting-review-transcript" aria-live="polite">
+        {detail === null ? (
+          <p className="meeting-review-empty">No meeting selected</p>
+        ) : detail.transcript.segments.length === 0 ? (
+          <p className="meeting-review-empty">Transcript empty</p>
+        ) : (
+          detail.transcript.segments.map((segment) => (
+            <article className="transcript-row final" key={segment.segment_id}>
+              <div>
+                <span>{segment.speaker}</span>
+                <strong>{`${segment.start_ms}-${segment.end_ms} ms`}</strong>
+              </div>
+              <p>{segment.text}</p>
+            </article>
+          ))
+        )}
+        {detail?.transcript.gaps.map((gap) => (
+          <article className="meeting-gap-row" key={`${gap.stream}-${gap.start_ms}`}>
+            <span>{gap.stream}</span>
+            <p>{`${gap.reason} / ${gap.start_ms}-${gap.end_ms} ms / ${gap.dropped_chunks} chunks`}</p>
+          </article>
+        ))}
+      </div>
+      {exportContent.length > 0 ? (
+        <textarea className="meeting-review-export" readOnly value={exportContent} />
+      ) : null}
     </section>
   );
 }

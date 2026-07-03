@@ -68,9 +68,7 @@ async function fetchJson(
   return response.json();
 }
 
-export async function listMeetings(
-  input: MeetingReviewApiRequest,
-): Promise<MeetingSummary[]> {
+export async function listMeetings(input: MeetingReviewApiRequest): Promise<MeetingSummary[]> {
   const workspaceId = encodeURIComponent(input.workspaceId);
   const body = await fetchJson(
     input,
