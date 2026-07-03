@@ -20,6 +20,8 @@ Read the relevant docs before changing code:
 - `docs/testing/testing_strategy.md`
 - `docs/development/agent_workflow.md`
 
+`docs/development/agent_workflow.md` is the controlling execution playbook for multi-step agent work. For implementation turns, follow its planning, checkpoint commit, verification, documentation, living-lessons, and handoff rules before final response.
+
 ## Project Skills
 
 Use the project-local skills in `.codex/skills/` when relevant:
@@ -48,4 +50,5 @@ Use the project-local skills in `.codex/skills/` when relevant:
 - Do not add a new external data flow without updating `docs/security/data_flows.md`.
 - Do not change realtime messages without updating `docs/architecture/realtime_protocol.md`.
 - Do not add a failure behavior without updating `docs/architecture/failure_modes.md`.
+- Do not finish an implementation turn with verified but uncommitted work when the user asked for commits; either commit coherent checkpoints or explicitly report the blocking reason.
 - Do not implement evasion-oriented undetectability features.

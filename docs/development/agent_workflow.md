@@ -97,6 +97,24 @@ Use this loop for every non-trivial feature.
     - Ensure `git status --short` is clean unless explicitly handing off known work in progress.
     - Summarize commits, verification, remaining risks, and next slice.
 
+## 3.1 Execution Contract
+
+For implementation requests, the default contract is not just "code compiles." The agent must leave durable, reviewable state.
+
+- If the user asks for commits, do not finish the turn with a large uncommitted implementation unless a blocking verification failure remains. Commit coherent checkpoints as the work lands.
+- If the user asks for several slices at once, split the batch into named slice boundaries before coding. Each boundary needs its own tests, docs, and commit or an explicit reason it is still work in progress.
+- Before the final response, run `git status --short`. A clean worktree is the expected result after committed implementation. If the worktree is dirty, name every remaining file group and why it is intentionally uncommitted.
+- The final response must identify the commits created in the turn, the verification commands that passed or failed, and any roadmap gaps left open.
+- Do not rely on chat memory as the handoff. If future work depends on a decision, limitation, or next step, write it to the roadmap, the active plan, or this workflow before finalizing.
+
+When inheriting another agent's uncommitted work:
+
+- Start with `git status --short`, recent commits, changed-file inventory, and `git diff --stat`.
+- Separate unrelated tracks before review or commit. Do not hide meeting-review, realtime, provider, or workflow changes in one catch-all commit.
+- Verify generated artifacts, contracts, docs, and tests fresh in the current session.
+- Fix process gaps in this workflow when the inherited work demonstrates that existing instructions were too easy to miss.
+- Commit verified inherited work in coherent checkpoints instead of leaving a correct but unauditable diff behind.
+
 ## 4. Durable Loop State
 
 The agent must be able to recover from a lost session by reading a small set of durable files and git state.
@@ -178,6 +196,8 @@ Prefer checkpoint commits in this order when applicable:
 7. Formatting-only cleanup when needed.
 
 Keep checkpoints coherent. Do not mix unrelated refactors into a feature commit.
+
+For broad requests such as "implement the next five slices," treat the phrase as permission to continue through several checkpoints, not as permission to create one oversized diff. The agent should still name each vertical, preserve roadmap order unless there is a documented reason to skip ahead, and commit after each independently reviewable slice.
 
 If a run goes sideways, restart from the last clean contract and commit rather than layering patches on uncertain state. Restarting is acceptable when the plan remains correct; ask for user input only when the contract itself is wrong.
 
@@ -283,17 +303,26 @@ Commit as work progresses:
 - Commit tests with the implementation they verify.
 - Commit docs/roadmap updates after the behavior lands.
 - Commit formatting cleanup separately if it is not part of the behavioral diff.
+- Commit workflow/process updates when the turn exposes a missed operating rule, such as skipped commits, missing living-document updates, weak handoff state, or ambiguous slice boundaries.
 
 Before each commit:
 
 - Run the targeted check for the touched package or service.
 - Review `git diff --stat` and relevant diffs.
 - Avoid staging unrelated user changes.
+- Confirm the staged diff belongs to one concern. Use multiple commits when feature tracks are interleaved.
 - Use concise conventional commit messages, such as:
   - `docs(meetings): plan review API desktop slice`
   - `feat(contracts): add meeting review schemas`
   - `feat(api): add meeting review endpoints`
   - `style(meetings): format review API files`
+
+Before final handoff after an implementation turn:
+
+- Run the verification gate appropriate to the touched surface.
+- Run `git status --short`.
+- If the user requested commits and verification passes, commit all intended changes before responding.
+- If unrelated user changes remain, leave them untouched and call them out explicitly.
 
 ## 14. Harness Maintenance
 
@@ -345,6 +374,9 @@ Record repeated process lessons here so future sessions start stronger.
 - Read failing traces before changing code. The useful clue is usually the first point where output diverged from the contract.
 - Periodically delete or simplify workflow rules that no longer buy safety or speed.
 - Always name the current bottleneck at handoff. The next slice should attack that bottleneck, not just the next convenient file.
+- A verified implementation without commits is still an incomplete agent handoff when commits were requested. Make the repository state durable before claiming the slice is done.
+- Broad multi-slice prompts need stricter, not looser, checkpoint discipline. Batch execution should produce a sequence of small reviewed commits and roadmap updates.
+- When an agent misses a process step, update this workflow in the same repair turn so the harness captures the lesson instead of relying on memory.
 
 ## 17. Updating This Workflow
 
