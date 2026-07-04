@@ -479,8 +479,7 @@ function compareMeetingSummaries(left: MeetingSummary, right: MeetingSummary): n
 
 function compareMeetingSuggestions(left: MeetingSuggestion, right: MeetingSuggestion): number {
   return (
-    (left.server_seq ?? Number.MAX_SAFE_INTEGER) -
-      (right.server_seq ?? Number.MAX_SAFE_INTEGER) ||
+    (left.server_seq ?? Number.MAX_SAFE_INTEGER) - (right.server_seq ?? Number.MAX_SAFE_INTEGER) ||
     (left.created_at ?? "").localeCompare(right.created_at ?? "") ||
     left.suggestion_id.localeCompare(right.suggestion_id)
   );

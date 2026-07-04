@@ -6,7 +6,11 @@ import {
   InMemoryTranscriptTimelineSink,
   type TranscriptTimelineSink,
 } from "./transcript-timeline.js";
-import { InMemorySuggestionSink, PgSuggestionSink, type SuggestionSink } from "./suggestion-sink.js";
+import {
+  InMemorySuggestionSink,
+  PgSuggestionSink,
+  type SuggestionSink,
+} from "./suggestion-sink.js";
 
 export interface RealtimePersistence {
   transcriptTimelineSink: TranscriptTimelineSink;

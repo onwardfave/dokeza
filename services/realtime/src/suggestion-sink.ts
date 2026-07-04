@@ -137,7 +137,10 @@ export class PgSuggestionSink implements SuggestionSink {
         })
         .from(suggestions)
         .where(
-          and(eq(suggestions.id, input.payload.suggestion_id), eq(suggestions.workspaceId, input.workspaceId)),
+          and(
+            eq(suggestions.id, input.payload.suggestion_id),
+            eq(suggestions.workspaceId, input.workspaceId),
+          ),
         );
 
       const values = {

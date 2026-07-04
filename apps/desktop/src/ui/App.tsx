@@ -799,7 +799,9 @@ function MeetingReviewPanel() {
               {suggestion.sources.length > 0 ? (
                 <ul className="suggestion-sources">
                   {suggestion.sources.map((source) => (
-                    <li key={`${suggestion.suggestion_id}-${source.document_id}-${source.chunk_id}`}>
+                    <li
+                      key={`${suggestion.suggestion_id}-${source.document_id}-${source.chunk_id}`}
+                    >
                       {source.title}
                     </li>
                   ))}
