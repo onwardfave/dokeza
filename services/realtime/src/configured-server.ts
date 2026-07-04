@@ -1,4 +1,5 @@
 import type { DokezaConfig } from "@dokeza/config";
+import { createKnowledgePersistenceFromConfig } from "@dokeza/knowledge";
 import { createDokezaRealtimeTokenValidator } from "./realtime-token-validator.js";
 import { createRealtimePersistenceFromConfig } from "./realtime-persistence-factory.js";
 import { createSttAdapterFromConfig } from "./stt-adapter-factory.js";
@@ -21,6 +22,7 @@ export function createConfiguredRealtimeServer(
   options: ConfiguredRealtimeServerOptions = {},
 ): RealtimeServerHandle {
   const persistence = createRealtimePersistenceFromConfig(config);
+  const knowledgePersistence = createKnowledgePersistenceFromConfig(config);
   const tokenValidator =
     options.tokenValidator ??
     createDokezaRealtimeTokenValidator({
@@ -36,6 +38,24 @@ export function createConfiguredRealtimeServer(
     liveSuggestionService: createLiveSuggestionServiceFromConfig(config, {
       ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
     }),
+    liveSuggestionSourceRetriever: {
+      async search(input) {
+        const response = await knowledgePersistence.repository.search({
+          workspaceId: input.workspaceId,
+          query: input.query,
+          topK: input.topK,
+        });
+        return {
+          results: response.results.map((result) => ({
+            document_id: result.document_id,
+            title: result.title,
+            chunk_id: result.chunk_id,
+            text: result.text,
+            score: result.score,
+          })),
+        };
+      },
+    },
     liveSuggestionExternalCallEnabled: config.providers.llm.provider === "openai",
   });
 
@@ -45,7 +65,7 @@ export function createConfiguredRealtimeServer(
       try {
         await handle.close();
       } finally {
-        await persistence.close();
+        await Promise.all([persistence.close(), knowledgePersistence.close()]);
       }
     },
   };

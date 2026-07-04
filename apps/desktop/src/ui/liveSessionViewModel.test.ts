@@ -90,6 +90,7 @@ describe("live session view model", () => {
           kind: "answer_question",
           content: "First answer",
           status: "complete",
+          sources: [{ documentId: "doc_1", title: "Refund Policy", chunkId: "chunk_1" }],
           confidence: "medium",
           promptVersion: "live.answer.v1",
           model: "deterministic-live-v1",
@@ -102,6 +103,7 @@ describe("live session view model", () => {
         content: "First answer",
         state: "complete",
         meta: "live.answer.v1 / deterministic-live-v1",
+        sources: ["Refund Policy (chunk_1)"],
       },
     ]);
   });

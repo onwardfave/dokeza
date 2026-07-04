@@ -487,6 +487,13 @@ function LiveSessionPanel() {
                 <strong>{suggestion.meta}</strong>
               </div>
               <p>{suggestion.content}</p>
+              {suggestion.sources.length > 0 ? (
+                <ul className="suggestion-sources">
+                  {suggestion.sources.map((source) => (
+                    <li key={source}>{source}</li>
+                  ))}
+                </ul>
+              ) : null}
             </article>
           ))
         )}

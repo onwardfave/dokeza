@@ -275,6 +275,7 @@ describe("DesktopRealtimeSessionClient", () => {
         kind: "answer_question",
         content: "",
         status: "streaming",
+        sources: [],
       },
     ]);
 
@@ -311,6 +312,7 @@ describe("DesktopRealtimeSessionClient", () => {
         requestId,
         content: "First answer",
         status: "streaming",
+        sources: [],
       },
     ]);
 
@@ -325,7 +327,13 @@ describe("DesktopRealtimeSessionClient", () => {
         request_id: requestId!,
         kind: "answer_question",
         content: "First answer",
-        sources: [],
+        sources: [
+          {
+            document_id: "doc_1",
+            title: "Refund Policy",
+            chunk_id: "chunk_1",
+          },
+        ],
         confidence: "medium",
         prompt_version: "live.answer.v1",
         model: "deterministic-live-v1",
@@ -339,6 +347,13 @@ describe("DesktopRealtimeSessionClient", () => {
         kind: "answer_question",
         content: "First answer",
         status: "complete",
+        sources: [
+          {
+            documentId: "doc_1",
+            title: "Refund Policy",
+            chunkId: "chunk_1",
+          },
+        ],
         confidence: "medium",
         promptVersion: "live.answer.v1",
         model: "deterministic-live-v1",

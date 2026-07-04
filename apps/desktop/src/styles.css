@@ -385,6 +385,27 @@ h2 {
   line-height: 1.45;
 }
 
+.suggestion-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.suggestion-sources li {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+  padding: 3px 6px;
+  color: #174ea6;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .diagnostics-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

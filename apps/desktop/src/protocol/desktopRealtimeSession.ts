@@ -70,6 +70,7 @@ export interface DesktopRealtimeSuggestion {
   kind: "answer_question" | "summarize_so_far" | "suggest_follow_up" | "objection_response";
   content: string;
   status: "streaming" | "complete";
+  sources: Array<{ documentId: string; title: string; chunkId: string }>;
   confidence?: "low" | "medium" | "high";
   promptVersion?: string;
   model?: string;
@@ -237,6 +238,7 @@ export class DesktopRealtimeSessionClient {
           kind: input.kind,
           content: "",
           status: "streaming",
+          sources: [],
         },
       ],
     };
@@ -457,6 +459,7 @@ export class DesktopRealtimeSessionClient {
       kind: existing?.kind ?? "answer_question",
       content: `${existing?.content ?? ""}${message.payload.token}`,
       status: "streaming",
+      sources: existing?.sources ?? [],
       ...(existing?.confidence === undefined ? {} : { confidence: existing.confidence }),
       ...(existing?.promptVersion === undefined ? {} : { promptVersion: existing.promptVersion }),
       ...(existing?.model === undefined ? {} : { model: existing.model }),
@@ -479,6 +482,11 @@ export class DesktopRealtimeSessionClient {
       kind: message.payload.kind,
       content: message.payload.content,
       status: "complete",
+      sources: message.payload.sources.map((source) => ({
+        documentId: source.document_id,
+        title: source.title,
+        chunkId: source.chunk_id,
+      })),
       confidence: message.payload.confidence,
       promptVersion: message.payload.prompt_version,
       model: message.payload.model,
