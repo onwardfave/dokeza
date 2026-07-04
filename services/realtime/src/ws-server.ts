@@ -35,6 +35,7 @@ import {
 } from "./transcript-retention-policy.js";
 import { TranscriptProcessor } from "./transcript-processor.js";
 import type { SessionStore } from "./session-store.js";
+import type { SuggestionSink } from "./suggestion-sink.js";
 
 export interface TokenValidator {
   validate(token: string): Promise<RealtimeAuthContext | undefined>;
@@ -54,6 +55,7 @@ export interface RealtimeServerOptions {
   sttAdapter?: SttAdapter;
   transcriptTimelineSink?: TranscriptTimelineSink;
   transcriptRetentionMode?: TranscriptRetentionMode;
+  suggestionSink?: SuggestionSink;
   sessionStore?: SessionStore;
   liveSuggestionService?: {
     streamLiveSuggestion(input: LiveSuggestionInput): AsyncIterable<LiveSuggestionEvent>;
@@ -162,6 +164,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   const transcriptTimelineSink =
     options.transcriptTimelineSink ?? new InMemoryTranscriptTimelineSink();
   const transcriptRetentionMode = options.transcriptRetentionMode ?? "7_days";
+  const suggestionSink = options.suggestionSink;
   const sessionStore = options.sessionStore;
   const liveSuggestionService = options.liveSuggestionService ?? new LiveSuggestionService();
   const liveSuggestionSourceRetriever = options.liveSuggestionSourceRetriever;
@@ -255,7 +258,13 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       sendJson(message);
     };
 
-    const sendSuggestionEvent = (sessionId: string, event: LiveSuggestionEvent): void => {
+    const sendSuggestionEvent = (
+      sessionId: string,
+      event: LiveSuggestionEvent,
+    ): Extract<
+      RealtimeJsonMessage,
+      { type: "suggestion.stream_token" | "suggestion.complete" }
+    > => {
       const seq = sessionManager.nextServerSeq(sessionId);
       const message =
         event.type === "token"
@@ -291,6 +300,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
             } satisfies RealtimeJsonMessage);
 
       sendJson(message);
+      return message;
     };
 
     const sendTranscriptPersistenceError = (sessionId: string) => {
@@ -300,6 +310,15 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       sendError("transcript_persistence_failed", "Transcript persistence failed.", true, sessionId);
+    };
+
+    const sendSuggestionPersistenceError = (sessionId: string) => {
+      const session = sessionManager.getSession(sessionId);
+      if (session === undefined || session.state !== "active") {
+        return;
+      }
+
+      sendError("suggestion_persistence_failed", "Suggestion persistence failed.", true, sessionId);
     };
 
     const sendSessionPersistenceError = (sessionId: string) => {
@@ -371,6 +390,32 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         });
       } catch {
         sendTranscriptPersistenceError(sessionId);
+      }
+    };
+
+    const persistSuggestionMessage = async (
+      sessionId: string,
+      message: Extract<RealtimeJsonMessage, { type: "suggestion.complete" }>,
+    ): Promise<void> => {
+      if (suggestionSink === undefined) {
+        return;
+      }
+
+      const session = sessionManager.getSession(sessionId);
+      if (session === undefined || session.state !== "active") {
+        return;
+      }
+
+      try {
+        await suggestionSink.recordSuggestion({
+          workspaceId: session.workspaceId,
+          sessionId,
+          actorUserId: session.actor.userId,
+          serverSeq: message.seq,
+          payload: message.payload,
+        });
+      } catch {
+        sendSuggestionPersistenceError(sessionId);
       }
     };
 
@@ -743,7 +788,10 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
             transcriptSegments,
             sourceChunks,
           })) {
-            sendSuggestionEvent(session.sessionId, event);
+            const sentMessage = sendSuggestionEvent(session.sessionId, event);
+            if (sentMessage.type === "suggestion.complete") {
+              await persistSuggestionMessage(session.sessionId, sentMessage);
+            }
           }
         } catch (err) {
           const code =

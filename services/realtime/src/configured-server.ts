@@ -34,6 +34,7 @@ export function createConfiguredRealtimeServer(
     tokenValidator,
     sttAdapter: createSttAdapterFromConfig(config),
     transcriptTimelineSink: persistence.transcriptTimelineSink,
+    suggestionSink: persistence.suggestionSink,
     ...(persistence.sessionStore === undefined ? {} : { sessionStore: persistence.sessionStore }),
     liveSuggestionService: createLiveSuggestionServiceFromConfig(config, {
       ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),

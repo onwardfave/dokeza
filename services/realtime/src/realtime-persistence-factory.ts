@@ -6,9 +6,11 @@ import {
   InMemoryTranscriptTimelineSink,
   type TranscriptTimelineSink,
 } from "./transcript-timeline.js";
+import { InMemorySuggestionSink, PgSuggestionSink, type SuggestionSink } from "./suggestion-sink.js";
 
 export interface RealtimePersistence {
   transcriptTimelineSink: TranscriptTimelineSink;
+  suggestionSink: SuggestionSink;
   sessionStore?: SessionStore;
   close(): Promise<void>;
 }
@@ -17,6 +19,9 @@ export function createRealtimePersistenceFromConfig(config: DokezaConfig): Realt
   if (config.database.realtimePersistence === "memory") {
     return {
       transcriptTimelineSink: new InMemoryTranscriptTimelineSink(),
+      suggestionSink: new InMemorySuggestionSink({
+        retentionMode: config.retentionDefaults.individual,
+      }),
       close: async () => undefined,
     };
   }
@@ -30,6 +35,10 @@ export function createRealtimePersistenceFromConfig(config: DokezaConfig): Realt
 
   return {
     transcriptTimelineSink: new PgTranscriptTimelineSink({
+      db,
+      retentionMode: config.retentionDefaults.individual,
+    }),
+    suggestionSink: new PgSuggestionSink({
       db,
       retentionMode: config.retentionDefaults.individual,
     }),

@@ -27,6 +27,8 @@ import type {
   SessionStore,
   UpdateSessionSeqInput,
 } from "./session-store.js";
+import { InMemorySuggestionSink } from "./suggestion-sink.js";
+import type { SuggestionSink, SuggestionWriteInput } from "./suggestion-sink.js";
 
 function createTestTokenValidator(): TokenValidator {
   return {
@@ -152,6 +154,7 @@ describe("createRealtimeServer", () => {
       sttAdapter?: SttAdapter;
       transcriptTimelineSink?: TranscriptTimelineSink;
       transcriptRetentionMode?: TranscriptRetentionMode;
+      suggestionSink?: SuggestionSink;
       sessionStore?: SessionStore;
       tokenValidator?: TokenValidator;
       liveSuggestionService?: RealtimeServerOptions["liveSuggestionService"];
@@ -170,6 +173,9 @@ describe("createRealtimeServer", () => {
     }
     if (options.transcriptRetentionMode !== undefined) {
       serverOptions.transcriptRetentionMode = options.transcriptRetentionMode;
+    }
+    if (options.suggestionSink !== undefined) {
+      serverOptions.suggestionSink = options.suggestionSink;
     }
     if (options.sessionStore !== undefined) {
       serverOptions.sessionStore = options.sessionStore;
@@ -216,6 +222,20 @@ describe("createRealtimeServer", () => {
           segments: [],
           gaps: [],
         };
+      },
+    };
+  }
+
+  function createRecordingSuggestionSink(): SuggestionSink & {
+    suggestionWrites: SuggestionWriteInput[];
+  } {
+    const suggestionWrites: SuggestionWriteInput[] = [];
+
+    return {
+      suggestionWrites,
+      async recordSuggestion(input) {
+        suggestionWrites.push(input);
+        return { status: "recorded", telemetry: [] };
       },
     };
   }
@@ -830,7 +850,9 @@ describe("createRealtimeServer", () => {
 
   it("streams live suggestion tokens and completion for manual requests", async () => {
     const requests: unknown[] = [];
+    const suggestionSink = createRecordingSuggestionSink();
     const { port } = await startServer({
+      suggestionSink,
       liveSuggestionService: {
         async *streamLiveSuggestion(input) {
           requests.push(input);
@@ -914,6 +936,15 @@ describe("createRealtimeServer", () => {
       includeSources: true,
       userPrompt: "content must not appear in telemetry",
     });
+    expect(suggestionSink.suggestionWrites).toEqual([
+      {
+        workspaceId: "ws_test_1",
+        sessionId,
+        actorUserId: "user_test_1",
+        serverSeq: responses[2]?.seq,
+        payload: responses[2]?.payload,
+      },
+    ]);
 
     const closedResponse = await sendAndReceive(ws, {
       protocol_version: REALTIME_PROTOCOL_VERSION,
@@ -940,6 +971,7 @@ describe("createRealtimeServer", () => {
       workspaceId: string;
       sourceChunks: Array<{ document_id: string; title: string; chunk_id: string; text: string }>;
     }> = [];
+    const suggestionSink = createRecordingSuggestionSink();
     const sttAdapter: SttAdapter = {
       async transcribeChunk(input) {
         return {
@@ -962,6 +994,7 @@ describe("createRealtimeServer", () => {
     };
     const { port } = await startServer({
       sttAdapter,
+      suggestionSink,
       liveSuggestionSourceRetriever: {
         async search(input) {
           retrievalInputs.push(input);
@@ -1070,6 +1103,22 @@ describe("createRealtimeServer", () => {
         score: 2,
       },
     ]);
+    expect(suggestionSink.suggestionWrites[0]).toMatchObject({
+      workspaceId: "ws_test_1",
+      sessionId,
+      actorUserId: "user_test_1",
+      payload: {
+        suggestion_id: "sug_sreq_sources",
+        request_id: "sreq_sources",
+        sources: [
+          {
+            document_id: "doc_refund",
+            title: "Refund Policy",
+            chunk_id: "chunk_refund_1",
+          },
+        ],
+      },
+    });
   });
 
   it("skips retrieval when source metadata is not requested", async () => {
@@ -1119,6 +1168,111 @@ describe("createRealtimeServer", () => {
     expect(response.type).toBe("suggestion.complete");
     expect(retrievalCalled).toBe(false);
     expect(requests[0]?.sourceChunks).toEqual([]);
+  });
+
+  it.each<TranscriptRetentionMode>(["live_only", "local_only"])(
+    "keeps live suggestions transient for %s retention",
+    async (transcriptRetentionMode) => {
+      const suggestionSink = new InMemorySuggestionSink({ retentionMode: transcriptRetentionMode });
+      const { port } = await startServer({
+        transcriptRetentionMode,
+        suggestionSink,
+        liveSuggestionService: {
+          async *streamLiveSuggestion(input) {
+            yield {
+              type: "complete",
+              requestId: input.requestId,
+              suggestionId: `sug_${input.requestId}`,
+              kind: input.kind,
+              content: "Transient answer.",
+              sources: [],
+              confidence: "medium",
+              promptVersion: "live.answer.v1",
+              model: "deterministic-live-v1",
+              telemetry: [],
+            };
+          },
+        },
+      });
+      const ws = await connect(port);
+      const sessionId = await authenticate(ws);
+
+      const response = await sendAndReceive(ws, {
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "suggestion.request",
+        seq: 2,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          request_id: "sreq_transient",
+          kind: "answer_question",
+          user_prompt: "do not persist this suggestion",
+          include_sources: false,
+        },
+      });
+
+      expect(response.type).toBe("suggestion.complete");
+      expect(suggestionSink.getSnapshot("ws_test_1", sessionId)).toEqual([]);
+    },
+  );
+
+  it("delivers live suggestions and emits a sanitized error when suggestion persistence fails", async () => {
+    const suggestionSink: SuggestionSink = {
+      async recordSuggestion() {
+        throw new Error("database unavailable with generated suggestion content");
+      },
+    };
+    const { port } = await startServer({
+      suggestionSink,
+      liveSuggestionService: {
+        async *streamLiveSuggestion(input) {
+          yield {
+            type: "complete",
+            requestId: input.requestId,
+            suggestionId: `sug_${input.requestId}`,
+            kind: input.kind,
+            content: "Sensitive generated suggestion.",
+            sources: [],
+            confidence: "medium",
+            promptVersion: "live.answer.v1",
+            model: "deterministic-live-v1",
+            telemetry: [],
+          };
+        },
+      },
+    });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "suggestion.request",
+        seq: 2,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          request_id: "sreq_persist_fail",
+          kind: "answer_question",
+          user_prompt: "content must not appear in persistence error",
+          include_sources: false,
+        },
+      }),
+    );
+
+    const responses = await receiveJsonMessages(ws, 2);
+    expect(responses.map((response) => response.type)).toEqual(["suggestion.complete", "error"]);
+    expect(responses[0]?.payload).toMatchObject({
+      suggestion_id: "sug_sreq_persist_fail",
+      content: "Sensitive generated suggestion.",
+    });
+    expect(responses[1]?.payload).toMatchObject({
+      code: "suggestion_persistence_failed",
+      recoverable: true,
+    });
+    expect(JSON.stringify(responses[1])).not.toContain("Sensitive generated suggestion");
+    expect(JSON.stringify(responses[1])).not.toContain("generated suggestion content");
+    expect(JSON.stringify(responses[1])).not.toContain("content must not appear");
   });
 
   it("falls back to transcript-only suggestions when retrieval fails without leaking source query content", async () => {
