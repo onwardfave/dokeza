@@ -1,0 +1,6 @@
+# Historical test-only signing secret fixtures. Keep these exact fingerprints
+# narrow so new or moved secret-like values still fail the scan.
+6774ed5c2bac0347536cf8066fecb423d85a7750:services/realtime/src/realtime-token-validator.test.ts:generic-api-key:10
+438b1609bedf1c3d1dc17303bb1c0c1d3c91c4ec:services/api/src/http-server.test.ts:generic-api-key:25
+438b1609bedf1c3d1dc17303bb1c0c1d3c91c4ec:services/api/src/http-server.test.ts:generic-api-key:32
+5a28c3d27f0f75007e80fbc428c8d0ed285ae68d:packages/auth/src/index.test.ts:generic-api-key:17
