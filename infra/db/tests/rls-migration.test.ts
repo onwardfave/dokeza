@@ -6,6 +6,10 @@ const migration = readFileSync(
   resolve("migrations/0001_workspace_rls_baseline.sql"),
   "utf8",
 ).toLowerCase();
+const vectorIndexMigration = readFileSync(
+  resolve("migrations/0003_document_chunk_vector_index.sql"),
+  "utf8",
+).toLowerCase();
 
 const highRiskTables = [
   "workspace_policies",
@@ -42,5 +46,13 @@ describe("workspace RLS migration baseline", () => {
   it("keeps direct provider STT disabled at policy level", () => {
     expect(migration).toContain("direct_provider_stt_allowed boolean not null default false");
     expect(migration).toContain("check (direct_provider_stt_allowed = false)");
+  });
+
+  it("stores and indexes document chunk embeddings for workspace-scoped vector search", () => {
+    expect(migration).toContain('create extension if not exists "vector"');
+    expect(migration).toContain("embedding vector(1536)");
+    expect(vectorIndexMigration).toContain("using hnsw (embedding vector_cosine_ops)");
+    expect(vectorIndexMigration).toContain("where embedding is not null");
+    expect(vectorIndexMigration).toContain("document_chunks_workspace_document_idx");
   });
 });

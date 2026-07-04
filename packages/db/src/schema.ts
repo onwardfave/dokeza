@@ -11,6 +11,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   integer,
   numeric,
   pgTable,
@@ -19,6 +20,15 @@ import {
   timestamp,
   unique,
 } from "drizzle-orm/pg-core";
+
+const vector1536 = customType<{ data: number[]; driverData: string }>({
+  dataType() {
+    return "vector(1536)";
+  },
+  toDriver(value: number[]): string {
+    return `[${value.map((entry) => Number(entry).toFixed(8)).join(",")}]`;
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Core identity
@@ -194,7 +204,7 @@ export const documentChunks = pgTable(
       .references(() => documents.id, { onDelete: "cascade" }),
     chunkIndex: integer("chunk_index").notNull(),
     text: text("text").notNull(),
-    // embedding: vector(1536) — pgvector column added via SQL migration, not modeled in Drizzle
+    embedding: vector1536("embedding"),
     permissionTags: text("permission_tags")
       .array()
       .notNull()

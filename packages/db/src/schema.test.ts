@@ -27,6 +27,10 @@ describe("database schema", () => {
   });
 
   it("models migration array fields for permissions and integration scopes", () => {
+    expect(column(documentChunks.embedding).columnType).toBe("PgCustomColumn");
+    expect(column(documentChunks.embedding).dataType).toBe("custom");
+    expect(column(documentChunks.embedding).notNull).toBe(false);
+
     expect(column(documentChunks.permissionTags).columnType).toBe("PgArray");
     expect(column(documentChunks.permissionTags).notNull).toBe(true);
     expect(column(documentChunks.permissionTags).hasDefault).toBe(true);

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { authorizeWorkspace, type Actor } from "@dokeza/authz";
 import type {
   KnowledgeDocumentChunk,
@@ -19,7 +19,7 @@ import {
   type Database,
 } from "@dokeza/db";
 import type { DokezaConfig } from "@dokeza/config";
-import { and, count, desc, eq, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 
 export type KnowledgeRetentionMode =
   | "live_only"
@@ -69,6 +69,148 @@ export class KnowledgeRepositoryError extends Error {
   constructor(code: KnowledgeRepositoryError["code"]) {
     super(code);
     this.code = code;
+  }
+}
+
+export type KnowledgeEmbeddingRoute = "document_chunk" | "search_query";
+
+export interface KnowledgeEmbeddingInput {
+  workspaceId: string;
+  route: KnowledgeEmbeddingRoute;
+  text: string;
+  documentId?: string;
+  chunkId?: string;
+}
+
+export interface KnowledgeEmbeddingResult {
+  vector: number[];
+  provider: "deterministic" | "openai";
+  model: string;
+  dimensions: number;
+}
+
+export interface KnowledgeEmbeddingProvider {
+  readonly provider: "deterministic" | "openai";
+  readonly model: string;
+  readonly dimensions: number;
+  embed(input: KnowledgeEmbeddingInput): Promise<KnowledgeEmbeddingResult>;
+}
+
+export class KnowledgeEmbeddingError extends Error {
+  readonly code:
+    | "embedding_provider_timeout"
+    | "embedding_provider_unavailable"
+    | "invalid_embedding_response";
+
+  constructor(code: KnowledgeEmbeddingError["code"]) {
+    super(code);
+    this.code = code;
+  }
+}
+
+export interface OpenAiEmbeddingTransportResponse {
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+}
+
+export type OpenAiEmbeddingTransport = (
+  url: string,
+  init: {
+    method: "POST";
+    headers: Record<string, string>;
+    body: string;
+    signal?: AbortSignal;
+  },
+) => Promise<OpenAiEmbeddingTransportResponse>;
+
+export class DeterministicKnowledgeEmbeddingProvider implements KnowledgeEmbeddingProvider {
+  readonly provider = "deterministic" as const;
+  readonly model = "deterministic-hash-v1";
+  readonly dimensions: number;
+
+  constructor(dimensions = 1536) {
+    this.dimensions = dimensions;
+  }
+
+  async embed(input: KnowledgeEmbeddingInput): Promise<KnowledgeEmbeddingResult> {
+    return {
+      vector: createDeterministicVector(input.text, this.dimensions),
+      provider: this.provider,
+      model: this.model,
+      dimensions: this.dimensions,
+    };
+  }
+}
+
+export interface OpenAiKnowledgeEmbeddingProviderOptions {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  timeoutMs: number;
+  dimensions: number;
+  transport?: OpenAiEmbeddingTransport;
+}
+
+export class OpenAiKnowledgeEmbeddingProvider implements KnowledgeEmbeddingProvider {
+  readonly provider = "openai" as const;
+  readonly model: string;
+  readonly dimensions: number;
+  private readonly apiKey: string;
+  private readonly endpoint: string;
+  private readonly timeoutMs: number;
+  private readonly transport: OpenAiEmbeddingTransport;
+
+  constructor(options: OpenAiKnowledgeEmbeddingProviderOptions) {
+    this.apiKey = options.apiKey;
+    this.endpoint = `${options.baseUrl.replace(/\/+$/, "")}/embeddings`;
+    this.model = options.model;
+    this.timeoutMs = options.timeoutMs;
+    this.dimensions = options.dimensions;
+    this.transport = options.transport ?? defaultOpenAiEmbeddingTransport;
+  }
+
+  async embed(input: KnowledgeEmbeddingInput): Promise<KnowledgeEmbeddingResult> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const response = await this.transport(this.endpoint, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${this.apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: this.model,
+          input: input.text,
+          dimensions: this.dimensions,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new KnowledgeEmbeddingError("embedding_provider_unavailable");
+      }
+
+      const vector = readOpenAiEmbeddingVector(await response.json(), this.dimensions);
+      return {
+        vector,
+        provider: this.provider,
+        model: this.model,
+        dimensions: this.dimensions,
+      };
+    } catch (err) {
+      if (err instanceof KnowledgeEmbeddingError) {
+        throw err;
+      }
+      if (isAbortError(err)) {
+        throw new KnowledgeEmbeddingError("embedding_provider_timeout");
+      }
+      throw new KnowledgeEmbeddingError("embedding_provider_unavailable");
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }
 
@@ -142,6 +284,7 @@ export function chunkDocumentText(text: string, maxChunkChars = 900): string[] {
 export interface InMemoryKnowledgeRepositoryOptions {
   seeds?: KnowledgeDocumentDetailResponse[];
   retentionMode?: KnowledgeRetentionMode;
+  embeddingProvider?: KnowledgeEmbeddingProvider;
   now?: () => Date;
   idGenerator?: () => string;
 }
@@ -149,16 +292,19 @@ export interface InMemoryKnowledgeRepositoryOptions {
 interface StoredKnowledgeDocument {
   document: KnowledgeDocumentSummary;
   chunks: KnowledgeDocumentChunk[];
+  embeddingsByChunkId: Map<string, number[]>;
 }
 
 export class InMemoryKnowledgeRepository implements KnowledgeRepository {
   private readonly documentsByKey = new Map<string, StoredKnowledgeDocument>();
   private readonly retentionMode: KnowledgeRetentionMode;
+  private readonly embeddingProvider: KnowledgeEmbeddingProvider | undefined;
   private readonly now: () => Date;
   private readonly idGenerator: () => string;
 
   constructor(options: InMemoryKnowledgeRepositoryOptions = {}) {
     this.retentionMode = options.retentionMode ?? "30_days";
+    this.embeddingProvider = options.embeddingProvider;
     this.now = options.now ?? (() => new Date());
     this.idGenerator = options.idGenerator ?? (() => randomUUID());
 
@@ -175,6 +321,7 @@ export class InMemoryKnowledgeRepository implements KnowledgeRepository {
     this.documentsByKey.set(key(document.workspace_id, document.document_id), {
       document,
       chunks: [...seed.chunks].sort(compareChunks),
+      embeddingsByChunkId: new Map(),
     });
   }
 
@@ -212,9 +359,19 @@ export class InMemoryKnowledgeRepository implements KnowledgeRepository {
       text,
       permission_tags: permissionTags,
     }));
+    const embeddingsByChunkId = await createChunkEmbeddings({
+      embeddingProvider: this.embeddingProvider,
+      workspaceId: input.workspaceId,
+      documentId,
+      chunks: storedChunks.map((chunk) => ({ id: chunk.chunk_id, text: chunk.text })),
+    });
 
     const detail = { document, chunks: storedChunks };
-    this.upsert(detail);
+    this.documentsByKey.set(key(document.workspace_id, document.document_id), {
+      document,
+      chunks: storedChunks,
+      embeddingsByChunkId,
+    });
     return detail;
   }
 
@@ -248,6 +405,11 @@ export class InMemoryKnowledgeRepository implements KnowledgeRepository {
       throw new KnowledgeRepositoryError("invalid_request");
     }
 
+    const queryVector = await createSearchEmbedding({
+      embeddingProvider: this.embeddingProvider,
+      workspaceId: input.workspaceId,
+      query: input.query,
+    });
     const allowedDocumentIds =
       input.allowedDocumentIds === undefined ? undefined : new Set(input.allowedDocumentIds);
     const results = [...this.documentsByKey.values()]
@@ -265,7 +427,9 @@ export class InMemoryKnowledgeRepository implements KnowledgeRepository {
           chunk_id: chunk.chunk_id,
           chunk_index: chunk.chunk_index,
           text: chunk.text,
-          score: scoreChunk(chunk.text, terms),
+          score:
+            scoreChunk(chunk.text, terms) +
+            scoreVector(stored.embeddingsByChunkId.get(chunk.chunk_id), queryVector),
         })),
       )
       .filter((result) => result.score > 0)
@@ -279,6 +443,7 @@ export class InMemoryKnowledgeRepository implements KnowledgeRepository {
 export interface PgKnowledgeRepositoryOptions {
   db: Database;
   defaultRetentionMode?: KnowledgeRetentionMode;
+  embeddingProvider?: KnowledgeEmbeddingProvider;
   now?: () => Date;
   idGenerator?: () => string;
 }
@@ -286,12 +451,14 @@ export interface PgKnowledgeRepositoryOptions {
 export class PgKnowledgeRepository implements KnowledgeRepository {
   private readonly db: Database;
   private readonly defaultRetentionMode: KnowledgeRetentionMode;
+  private readonly embeddingProvider: KnowledgeEmbeddingProvider | undefined;
   private readonly now: () => Date;
   private readonly idGenerator: () => string;
 
   constructor(options: PgKnowledgeRepositoryOptions) {
     this.db = options.db;
     this.defaultRetentionMode = options.defaultRetentionMode ?? "30_days";
+    this.embeddingProvider = options.embeddingProvider;
     this.now = options.now ?? (() => new Date());
     this.idGenerator = options.idGenerator ?? (() => randomUUID());
   }
@@ -342,7 +509,18 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
         createdAt: timestamp,
         updatedAt: timestamp,
       }));
-      await tx.insert(documentChunks).values(chunkRows);
+      const embeddingsByChunkId = await createChunkEmbeddings({
+        embeddingProvider: this.embeddingProvider,
+        workspaceId: input.workspaceId,
+        documentId,
+        chunks: chunkRows.map((chunk) => ({ id: chunk.id, text: chunk.text })),
+      });
+      await tx.insert(documentChunks).values(
+        chunkRows.map((row) => ({
+          ...row,
+          embedding: embeddingsByChunkId.get(row.id) ?? null,
+        })),
+      );
 
       return {
         document: {
@@ -428,9 +606,14 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
     }
 
     return withWorkspaceTransaction(this.db, input.workspaceId, async (tx) => {
+      const queryVector = await createSearchEmbedding({
+        embeddingProvider: this.embeddingProvider,
+        workspaceId: input.workspaceId,
+        query: input.query,
+      });
       const predicates = terms.map((term) => ilike(documentChunks.text, `%${term}%`));
       const textPredicate = or(...predicates);
-      const rows = await tx
+      const keywordRows = await tx
         .select({
           documentId: documents.id,
           title: documents.title,
@@ -453,14 +636,46 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
             eq(documents.workspaceId, input.workspaceId),
             eq(documents.status, "active"),
             textPredicate,
+            createAllowedDocumentPredicate(input.allowedDocumentIds),
           ),
         );
 
-      const allowedDocumentIds =
-        input.allowedDocumentIds === undefined ? undefined : new Set(input.allowedDocumentIds);
-      const results = rows
-        .filter((row) => allowedDocumentIds === undefined || allowedDocumentIds.has(row.documentId))
-        .map((row) => ({
+      const vectorRows =
+        queryVector === undefined
+          ? []
+          : await tx
+              .select({
+                documentId: documents.id,
+                title: documents.title,
+                source: documents.source,
+                chunkId: documentChunks.id,
+                chunkIndex: documentChunks.chunkIndex,
+                text: documentChunks.text,
+                distance: sql<number>`${documentChunks.embedding} <=> ${toPgVectorLiteral(queryVector)}::vector`,
+              })
+              .from(documentChunks)
+              .innerJoin(
+                documents,
+                and(
+                  eq(documents.id, documentChunks.documentId),
+                  eq(documents.workspaceId, documentChunks.workspaceId),
+                ),
+              )
+              .where(
+                and(
+                  eq(documentChunks.workspaceId, input.workspaceId),
+                  eq(documents.workspaceId, input.workspaceId),
+                  eq(documents.status, "active"),
+                  sql`${documentChunks.embedding} is not null`,
+                  createAllowedDocumentPredicate(input.allowedDocumentIds),
+                ),
+              )
+              .orderBy(sql`${documentChunks.embedding} <=> ${toPgVectorLiteral(queryVector)}::vector`)
+              .limit(clampTopK(input.topK) * 3);
+
+      const mergedResults = new Map<string, KnowledgeSearchResponse["results"][number]>();
+      for (const row of keywordRows) {
+        mergedResults.set(row.chunkId, {
           document_id: row.documentId,
           title: row.title,
           source: row.source,
@@ -468,7 +683,27 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
           chunk_index: row.chunkIndex,
           text: row.text,
           score: scoreChunk(row.text, terms),
-        }))
+        });
+      }
+      for (const row of vectorRows) {
+        const current = mergedResults.get(row.chunkId);
+        const vectorScore = scoreVectorDistance(row.distance);
+        if (current === undefined) {
+          mergedResults.set(row.chunkId, {
+            document_id: row.documentId,
+            title: row.title,
+            source: row.source,
+            chunk_id: row.chunkId,
+            chunk_index: row.chunkIndex,
+            text: row.text,
+            score: vectorScore,
+          });
+          continue;
+        }
+        current.score += vectorScore;
+      }
+
+      const results = [...mergedResults.values()]
         .filter((result) => result.score > 0)
         .sort(compareSearchResults)
         .slice(0, clampTopK(input.topK));
@@ -483,10 +718,33 @@ export interface KnowledgePersistence {
   close(): Promise<void>;
 }
 
+export function createKnowledgeEmbeddingProviderFromConfig(
+  config: DokezaConfig,
+): KnowledgeEmbeddingProvider {
+  if (config.providers.embeddings.provider === "deterministic") {
+    return new DeterministicKnowledgeEmbeddingProvider(config.providers.embeddings.openai.dimensions);
+  }
+
+  const apiKey = config.providers.embeddings.openai.apiKey;
+  if (apiKey === undefined || apiKey.length === 0) {
+    throw new Error("OPENAI_API_KEY is required for OpenAI embedding provider.");
+  }
+
+  return new OpenAiKnowledgeEmbeddingProvider({
+    apiKey,
+    baseUrl: config.providers.embeddings.openai.baseUrl,
+    model: config.providers.embeddings.openai.model,
+    timeoutMs: config.providers.embeddings.openai.timeoutMs,
+    dimensions: config.providers.embeddings.openai.dimensions,
+  });
+}
+
 export function createKnowledgePersistenceFromConfig(config: DokezaConfig): KnowledgePersistence {
+  const embeddingProvider = createKnowledgeEmbeddingProviderFromConfig(config);
+
   if (config.database.realtimePersistence === "memory") {
     return {
-      repository: new InMemoryKnowledgeRepository(),
+      repository: new InMemoryKnowledgeRepository({ embeddingProvider }),
       close: async () => undefined,
     };
   }
@@ -502,6 +760,7 @@ export function createKnowledgePersistenceFromConfig(config: DokezaConfig): Know
     repository: new PgKnowledgeRepository({
       db,
       defaultRetentionMode: config.retentionDefaults.individual,
+      embeddingProvider,
     }),
     close: async () => {
       await closePool(pool);
@@ -567,6 +826,168 @@ function scoreChunk(text: string, terms: readonly string[]): number {
     const matches = lower.match(new RegExp(escapeRegExp(term), "g"));
     return score + (matches?.length ?? 0);
   }, 0);
+}
+
+function createDeterministicVector(text: string, dimensions: number): number[] {
+  const vector = Array.from({ length: dimensions }, () => 0);
+  const terms = tokenizeQuery(text);
+  for (const term of terms.length > 0 ? terms : [text.trim().toLowerCase()]) {
+    if (term.length === 0) {
+      continue;
+    }
+    const hash = createHash("sha256").update(term).digest();
+    const index = hash.readUInt32BE(0) % dimensions;
+    vector[index] = (vector[index] ?? 0) + 1;
+  }
+
+  return normalizeVector(vector);
+}
+
+function normalizeVector(vector: number[]): number[] {
+  const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+  if (magnitude === 0) {
+    return vector;
+  }
+  return vector.map((value) => value / magnitude);
+}
+
+async function createChunkEmbeddings(input: {
+  embeddingProvider: KnowledgeEmbeddingProvider | undefined;
+  workspaceId: string;
+  documentId: string;
+  chunks: readonly { id: string; text: string }[];
+}): Promise<Map<string, number[]>> {
+  if (input.embeddingProvider === undefined) {
+    return new Map();
+  }
+
+  try {
+    const embeddings = await Promise.all(
+      input.chunks.map(async (chunk) => ({
+        chunkId: chunk.id,
+        result: await input.embeddingProvider?.embed({
+          workspaceId: input.workspaceId,
+          documentId: input.documentId,
+          chunkId: chunk.id,
+          route: "document_chunk",
+          text: chunk.text,
+        }),
+      })),
+    );
+    return new Map(
+      embeddings.flatMap((embedding) =>
+        embedding.result === undefined ? [] : [[embedding.chunkId, embedding.result.vector]],
+      ),
+    );
+  } catch {
+    return new Map();
+  }
+}
+
+async function createSearchEmbedding(input: {
+  embeddingProvider: KnowledgeEmbeddingProvider | undefined;
+  workspaceId: string;
+  query: string;
+}): Promise<number[] | undefined> {
+  if (input.embeddingProvider === undefined) {
+    return undefined;
+  }
+
+  try {
+    const result = await input.embeddingProvider.embed({
+      workspaceId: input.workspaceId,
+      route: "search_query",
+      text: input.query,
+    });
+    return result.vector;
+  } catch {
+    return undefined;
+  }
+}
+
+function scoreVector(chunkVector: number[] | undefined, queryVector: number[] | undefined): number {
+  if (chunkVector === undefined || queryVector === undefined) {
+    return 0;
+  }
+
+  const length = Math.min(chunkVector.length, queryVector.length);
+  let score = 0;
+  for (let index = 0; index < length; index += 1) {
+    score += (chunkVector[index] ?? 0) * (queryVector[index] ?? 0);
+  }
+
+  return Math.max(0, score);
+}
+
+function scoreVectorDistance(distance: number): number {
+  if (!Number.isFinite(distance)) {
+    return 0;
+  }
+
+  return Math.max(0, 1 - distance);
+}
+
+function toPgVectorLiteral(vector: readonly number[]): string {
+  return `[${vector.map((value) => Number(value).toFixed(8)).join(",")}]`;
+}
+
+function createAllowedDocumentPredicate(allowedDocumentIds: readonly string[] | undefined) {
+  if (allowedDocumentIds === undefined) {
+    return undefined;
+  }
+  if (allowedDocumentIds.length === 0) {
+    return sql`false`;
+  }
+  return inArray(documents.id, [...allowedDocumentIds]);
+}
+
+async function defaultOpenAiEmbeddingTransport(
+  url: string,
+  init: {
+    method: "POST";
+    headers: Record<string, string>;
+    body: string;
+    signal?: AbortSignal;
+  },
+): Promise<OpenAiEmbeddingTransportResponse> {
+  return fetch(url, init);
+}
+
+function readOpenAiEmbeddingVector(payload: unknown, dimensions: number): number[] {
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    !("data" in payload) ||
+    !Array.isArray(payload.data)
+  ) {
+    throw new KnowledgeEmbeddingError("invalid_embedding_response");
+  }
+
+  const first = payload.data[0] as unknown;
+  if (
+    typeof first !== "object" ||
+    first === null ||
+    !("embedding" in first) ||
+    !Array.isArray(first.embedding)
+  ) {
+    throw new KnowledgeEmbeddingError("invalid_embedding_response");
+  }
+
+  const vector = first.embedding;
+  if (vector.length !== dimensions || !vector.every((value) => typeof value === "number")) {
+    throw new KnowledgeEmbeddingError("invalid_embedding_response");
+  }
+
+  return vector;
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "name" in err &&
+    (err as { name: unknown }).name === "AbortError"
+  );
 }
 
 function escapeRegExp(value: string): string {
