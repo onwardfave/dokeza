@@ -92,12 +92,12 @@ Initial cloud STT implementation:
 Initial cloud LLM implementation:
 
 - The realtime service routes manual `suggestion.request` messages to the AI orchestrator.
-- The AI orchestrator assembles a bounded recent transcript window and a versioned live prompt, then routes generation through an internal model gateway.
+- The AI orchestrator assembles a bounded recent transcript window, optional server-retrieved source chunks labeled as untrusted source material, and a versioned live prompt, then routes generation through an internal model gateway.
 - The first production provider path targets OpenAI through the server-side Responses streaming API when `DOKEZA_LLM_PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_MODEL`, and workspace policy allow cloud LLM processing.
 - OpenAI credentials are read from server-side configuration only and are never sent to desktop or browser clients.
 - Realtime advertises `cloud_llm_allowed` in `auth.accepted` and blocks external live suggestion calls when the authenticated workspace policy disables cloud LLM.
 - Local and CI tests use deterministic or fake provider transports and must not call the live OpenAI service.
-- Adapter telemetry includes provider metadata, route, model, prompt template version, latency, token counts, status, and failure category only. It must not include transcript text, prompt text, generated suggestion content, raw audio bytes, document text, or API keys.
+- Adapter telemetry includes provider metadata, route, model, prompt template version, latency, token counts, status, and failure category only. It must not include transcript text, prompt text, retrieved chunk text, generated suggestion content, raw audio bytes, document text, or API keys.
 - Suggestions from the M2 realtime path are transient unless a later governed persistence slice adds durable suggestion storage, retention, deletion, and export behavior.
 
 Initial knowledge-base implementation:
@@ -106,7 +106,7 @@ Initial knowledge-base implementation:
 - Document text is chunked inside Dokeza Cloud and stored as workspace-scoped `documents` and `document_chunks` records when retention policy permits cloud persistence.
 - `live_only` and `local_only` retention modes block cloud document and chunk persistence.
 - List responses return document metadata only; authorized detail and search responses can return chunk text and source metadata.
-- Search is deterministic keyword retrieval in Dokeza Cloud for this slice. No embedding provider, reranker, object storage, or third-party knowledge provider data flow is introduced yet.
+- Search is deterministic keyword retrieval in Dokeza Cloud for this slice. Manual live suggestions can request top matching chunks through the realtime service for source-grounded prompt context and citation metadata. No embedding provider, reranker, object storage, or third-party knowledge provider data flow is introduced yet.
 
 ## 4. Data Flow Table
 

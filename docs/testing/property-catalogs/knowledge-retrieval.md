@@ -18,6 +18,8 @@ The M3 knowledge foundation spans API workspace authorization, `services/knowled
 - Search with `allowedDocumentIds` returns only those document IDs.
 - List responses do not include raw document or chunk text.
 - Detail and search responses include content only through authorized workspace-scoped routes.
+- Live suggestions can only cite chunks returned by server-side retrieval for the authenticated session workspace.
+- If source retrieval fails or returns no authorized chunks, live suggestions continue with empty citations rather than leaking query or chunk content in errors.
 - `live_only` and `local_only` retention modes block cloud document and chunk persistence.
 - Empty or invalid queries fail without echoing document text.
 
@@ -34,6 +36,8 @@ The M3 knowledge foundation spans API workspace authorization, `services/knowled
 - Fetch authorized document detail.
 - Search matching chunks in one workspace while another workspace has matching content.
 - Search with an explicit allowed-document filter.
+- Request a live suggestion with `include_sources=true` and verify retrieved citations come from the authenticated workspace.
+- Request a live suggestion with retrieval failure and verify transcript-only fallback with no leaked source query or chunk text.
 - Attempt upload under no-storage retention.
 
 ## Faults to Inject
@@ -52,4 +56,4 @@ Future production telemetry should include metadata-only counts and latency for 
 
 - Document-level permissions are currently represented only by metadata and allowed-document filters; full permission evaluation is a later M3 slice.
 - Search is deterministic keyword matching; embedding provider, vector search, and reranking remain later slices.
-- Source-grounded live suggestions are not yet wired to retrieval results.
+- Source-grounded live suggestions are wired to keyword retrieval only; embedding-backed grounding and reranking remain later slices.
