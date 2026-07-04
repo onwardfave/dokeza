@@ -670,7 +670,9 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
                   createAllowedDocumentPredicate(input.allowedDocumentIds),
                 ),
               )
-              .orderBy(sql`${documentChunks.embedding} <=> ${toPgVectorLiteral(queryVector)}::vector`)
+              .orderBy(
+                sql`${documentChunks.embedding} <=> ${toPgVectorLiteral(queryVector)}::vector`,
+              )
               .limit(clampTopK(input.topK) * 3);
 
       const mergedResults = new Map<string, KnowledgeSearchResponse["results"][number]>();
@@ -722,7 +724,9 @@ export function createKnowledgeEmbeddingProviderFromConfig(
   config: DokezaConfig,
 ): KnowledgeEmbeddingProvider {
   if (config.providers.embeddings.provider === "deterministic") {
-    return new DeterministicKnowledgeEmbeddingProvider(config.providers.embeddings.openai.dimensions);
+    return new DeterministicKnowledgeEmbeddingProvider(
+      config.providers.embeddings.openai.dimensions,
+    );
   }
 
   const apiKey = config.providers.embeddings.openai.apiKey;

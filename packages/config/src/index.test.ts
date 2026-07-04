@@ -255,9 +255,7 @@ describe("parseConfig", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.errors).toContain(
-      "OPENAI_EMBEDDING_TIMEOUT_MS must be a positive integer.",
-    );
+    expect(result.errors).toContain("OPENAI_EMBEDDING_TIMEOUT_MS must be a positive integer.");
     expect(result.errors).toContain(
       "OPENAI_EMBEDDING_DIMENSIONS must be 1536 for the current pgvector schema.",
     );

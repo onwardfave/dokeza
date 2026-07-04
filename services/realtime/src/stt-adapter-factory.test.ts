@@ -31,6 +31,7 @@ describe("createSttAdapterFromConfig", () => {
           DEEPGRAM_API_KEY: "dg_test_secret",
           DEEPGRAM_ENDPOINT: "wss://api.deepgram.com/v1/listen",
           DOKEZA_LLM_PROVIDER: "deterministic",
+          DOKEZA_EMBEDDING_PROVIDER: "deterministic",
           DATABASE_URL: "postgres://dokeza:secret@db.example.com:5432/dokeza",
         },
         "realtime",

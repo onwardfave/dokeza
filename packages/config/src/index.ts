@@ -499,10 +499,7 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   if (embeddingProvider === undefined) {
     errors.push("DOKEZA_EMBEDDING_PROVIDER must be deterministic or openai.");
   }
-  if (
-    embeddingProvider === "openai" &&
-    (openAiApiKey === undefined || openAiApiKey.length === 0)
-  ) {
+  if (embeddingProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) {
     errors.push("OPENAI_API_KEY is required when DOKEZA_EMBEDDING_PROVIDER is openai.");
   }
   if (openAiBaseUrl === undefined) {
@@ -581,8 +578,7 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     realtimePersistence === undefined ||
     databasePoolMax === undefined ||
     (llmProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
-    (embeddingProvider === "openai" &&
-      (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
+    (embeddingProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
     (realtimePersistence === "postgres" && databaseUrl === undefined)
   ) {
     return { ok: false, errors };
