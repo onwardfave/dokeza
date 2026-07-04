@@ -206,6 +206,7 @@ export const AuthAcceptedMessageSchema = Type.Object({
     policy: Type.Object({
       screen_context_allowed: Type.Boolean(),
       cloud_stt_allowed: Type.Boolean(),
+      cloud_llm_allowed: Type.Boolean(),
       direct_provider_stt_allowed: Type.Literal(false),
       retention_mode: RetentionMode,
       max_local_audio_buffer_ms: Type.Number({ minimum: 0 }),

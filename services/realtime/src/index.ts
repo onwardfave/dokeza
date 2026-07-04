@@ -15,6 +15,8 @@ export type {
   RealtimeServerHandle,
   TokenValidator,
 } from "./ws-server.js";
+export { createConfiguredRealtimeServer } from "./configured-server.js";
+export type { ConfiguredRealtimeServerOptions } from "./configured-server.js";
 
 export {
   DokezaRealtimeTokenValidator,
@@ -35,6 +37,8 @@ export type {
 } from "./stt-adapter.js";
 
 export { createSttAdapterFromConfig } from "./stt-adapter-factory.js";
+export { createLiveSuggestionServiceFromConfig } from "./live-suggestion-service-factory.js";
+export type { LiveSuggestionServiceFactoryOptions } from "./live-suggestion-service-factory.js";
 export { createRealtimePersistenceFromConfig } from "./realtime-persistence-factory.js";
 export type { RealtimePersistence } from "./realtime-persistence-factory.js";
 

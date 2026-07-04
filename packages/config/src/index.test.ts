@@ -36,7 +36,14 @@ describe("parseConfig", () => {
           timeoutMs: 5000,
         },
       },
-      llm: "openai",
+      llm: {
+        provider: "deterministic",
+        openai: {
+          baseUrl: "https://api.openai.com/v1",
+          model: "gpt-4.1-mini",
+          timeoutMs: 10000,
+        },
+      },
       embeddings: "openai",
     });
     expect(result.config?.retentionDefaults).toEqual({
@@ -134,11 +141,78 @@ describe("parseConfig", () => {
     });
   });
 
+  it("accepts explicit OpenAI LLM settings without echoing credentials", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_LLM_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-test-secret",
+        OPENAI_BASE_URL: "https://llm.example.com/v1",
+        OPENAI_MODEL: "gpt-live-test",
+        OPENAI_TIMEOUT_MS: "12000",
+      },
+      "realtime",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.config?.providers.llm).toEqual({
+      provider: "openai",
+      openai: {
+        apiKey: "sk-test-secret",
+        baseUrl: "https://llm.example.com/v1",
+        model: "gpt-live-test",
+        timeoutMs: 12000,
+      },
+    });
+  });
+
+  it("defaults production LLM routing to OpenAI and fails closed without credentials", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_ENV: "production",
+        DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
+        DEEPGRAM_API_KEY: "dg_real_secret",
+        DATABASE_URL: "postgres://dokeza:secret@db.example.com:5432/dokeza",
+      },
+      "realtime",
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      "OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai.",
+    );
+    expect(result.errors.join(" ")).not.toContain("dg_real_secret");
+  });
+
+  it("rejects unsafe OpenAI LLM configuration without echoing values", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_ENV: "production",
+        DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
+        DEEPGRAM_API_KEY: "dg_real_secret",
+        DOKEZA_LLM_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-real-secret",
+        OPENAI_BASE_URL: "http://llm.example.com/v1",
+        OPENAI_TIMEOUT_MS: "0",
+        DATABASE_URL: "postgres://dokeza:secret@db.example.com:5432/dokeza",
+      },
+      "realtime",
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("OPENAI_BASE_URL must use https in production.");
+    expect(result.errors).toContain("OPENAI_TIMEOUT_MS must be a positive integer.");
+    expect(result.errors.join(" ")).not.toContain("sk-real-secret");
+    expect(result.errors.join(" ")).not.toContain("dg_real_secret");
+  });
+
   it("requires a Deepgram API key in production without echoing the key", () => {
     const missingKey = parseConfig({ DOKEZA_ENV: "production" }, "realtime");
 
     expect(missingKey.ok).toBe(false);
     expect(missingKey.errors).toContain("DEEPGRAM_API_KEY is required in production.");
+    expect(missingKey.errors).toContain(
+      "OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai.",
+    );
     expect(missingKey.errors).toContain(
       "DOKEZA_AUTH_SIGNING_SECRET must be at least 32 characters outside local/test.",
     );
@@ -149,6 +223,7 @@ describe("parseConfig", () => {
         DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
         DEEPGRAM_API_KEY: "dg_real_secret",
         DEEPGRAM_ENDPOINT: "not-a-url",
+        DOKEZA_LLM_PROVIDER: "deterministic",
       },
       "realtime",
     );
@@ -165,6 +240,7 @@ describe("parseConfig", () => {
         DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
         DEEPGRAM_API_KEY: "dg_real_secret",
         DEEPGRAM_ENDPOINT: "ws://stt.example.com/v1/listen",
+        DOKEZA_LLM_PROVIDER: "deterministic",
       },
       "realtime",
     );

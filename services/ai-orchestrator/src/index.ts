@@ -385,35 +385,47 @@ export function createOpenAiResponsesFetchTransport(options: {
   apiKey: string;
   baseUrl?: string;
   fetchFn?: typeof fetch;
+  timeoutMs?: number;
 }): OpenAiResponsesTransport {
   const baseUrl = options.baseUrl ?? "https://api.openai.com/v1";
   const fetchFn = options.fetchFn ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 10000;
 
   return {
     async *createStream(request) {
-      const response = await fetchFn(`${baseUrl}/responses`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${options.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: request.model,
-          input: [
-            {
-              role: "developer",
-              content: request.developerInstruction,
-            },
-            {
-              role: "user",
-              content: request.userInput,
-            },
-          ],
-          stream: true,
-          store: false,
-          max_output_tokens: Math.max(16, Math.ceil(request.maxOutputChars / 4)),
-        }),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      let response: Response;
+      try {
+        response = await fetchFn(`${baseUrl}/responses`, {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${options.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: request.model,
+            input: [
+              {
+                role: "developer",
+                content: request.developerInstruction,
+              },
+              {
+                role: "user",
+                content: request.userInput,
+              },
+            ],
+            stream: true,
+            store: false,
+            max_output_tokens: Math.max(16, Math.ceil(request.maxOutputChars / 4)),
+          }),
+        });
+      } catch {
+        throw new ModelGatewayError("OpenAI streaming request failed.", "llm_provider_timeout");
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!response.ok || response.body === null) {
         throw new ModelGatewayError("OpenAI streaming request failed.", "llm_provider_timeout");

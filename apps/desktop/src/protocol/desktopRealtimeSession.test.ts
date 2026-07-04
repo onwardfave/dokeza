@@ -85,6 +85,7 @@ function authAccepted(sessionId = "sess_1", connectionId = "conn_1"): RealtimeJs
       policy: {
         screen_context_allowed: true,
         cloud_stt_allowed: true,
+        cloud_llm_allowed: true,
         direct_provider_stt_allowed: false,
         retention_mode: "7_days",
         max_local_audio_buffer_ms: 300000,

@@ -43,6 +43,8 @@ Implement the first production-oriented M2 live suggestions vertical: a user can
 - Governed content classes: transcript segments, prompt context, generated suggestions, telemetry.
 - Workspace isolation: request routing uses the authenticated realtime session workspace; clients cannot provide arbitrary workspace IDs in suggestion requests.
 - Provider boundary: the OpenAI path is behind an internal adapter interface with server-side credentials only. Default local/test execution uses a deterministic fake provider and makes no external calls.
+- Production OpenAI routing is wired through typed config: `DOKEZA_LLM_PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, and `OPENAI_TIMEOUT_MS`. Production fails closed if OpenAI is selected without credentials.
+- Realtime advertises `cloud_llm_allowed` and blocks external live suggestion calls before provider submission when workspace policy disables cloud LLM.
 - Telemetry is metadata-only: workspace ID, session ID, request kind, prompt version, provider/model route, latency, token counts, and failure category. It must not include transcript, prompt, generated suggestion, token text, document text, or raw audio.
 - `live_only` and `local_only` retention modes do not persist suggestions in this slice.
 - New external data-flow documentation covers Dokeza Cloud to OpenAI LLM provider for prompt/transcript excerpts when enabled by production configuration and policy.
@@ -52,8 +54,9 @@ Implement the first production-oriented M2 live suggestions vertical: a user can
 1. Add prompt registry and live suggestion prompt selection in `@dokeza/ai-orchestrator`.
 2. Add rolling transcript context assembly with a bounded window and prompt-size guard.
 3. Add model gateway/provider interface with deterministic fake streaming implementation and OpenAI-compatible adapter boundary.
-4. Wire `suggestion.request` in realtime to stream tokens and completion messages.
-5. Add desktop protocol helpers, session-client state, and UI controls for manual suggestion requests.
+4. Wire production OpenAI live suggestion config into realtime startup while keeping local/test deterministic.
+5. Wire `suggestion.request` in realtime to stream tokens and completion messages.
+6. Add desktop protocol helpers, session-client state, and UI controls for manual suggestion requests.
 
 ## Tests and Verification
 
@@ -67,6 +70,7 @@ Implement the first production-oriented M2 live suggestions vertical: a user can
   - `suggestion.request` emits `suggestion.stream_token` and `suggestion.complete`,
   - request uses authenticated workspace/session context,
   - provider failure emits recoverable `llm_provider_timeout`,
+  - cloud provider submission is blocked when workspace policy disables cloud LLM,
   - no transcript text appears in telemetry/error payloads.
 - Desktop tests:
   - client creates valid `suggestion.request`,
@@ -89,7 +93,7 @@ Implement the first production-oriented M2 live suggestions vertical: a user can
 
 - If AI orchestration is unavailable, realtime returns a recoverable `llm_provider_timeout` or `feature_unavailable` error and keeps the live session active.
 - If streaming fails after partial tokens, the desktop keeps the partial draft visible with degraded/error status.
-- If provider configuration is unavailable, production must fail closed for external provider use while local/test can use the fake provider.
+- If provider configuration is unavailable, production fails closed for external provider use while local/test can use the fake provider.
 
 ## Open Questions
 

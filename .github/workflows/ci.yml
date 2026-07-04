@@ -62,6 +62,64 @@ jobs:
       - name: Dependency audit
         run: pnpm security:audit
 
+  postgres-integration:
+    name: PostgreSQL integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: dokeza
+          POSTGRES_PASSWORD: dokeza_local
+          POSTGRES_DB: dokeza
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dokeza -d dokeza"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://dokeza:dokeza_local@127.0.0.1:5432/dokeza
+      DOKEZA_PG_INTEGRATION: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.22.0 --activate
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply database migrations
+        env:
+          PGPASSWORD: dokeza_local
+        run: |
+          for migration in infra/db/migrations/*.sql; do
+            psql -h 127.0.0.1 -U dokeza -d dokeza -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Realtime PostgreSQL integration
+        run: pnpm --filter @dokeza/realtime test -- postgres-persistence.integration.test.ts
+
+      - name: API meeting review PostgreSQL integration
+        run: pnpm --filter @dokeza/api test -- meeting-review-postgres.integration.test.ts
+
   desktop-native:
     name: Desktop native smoke
     runs-on: windows-2025

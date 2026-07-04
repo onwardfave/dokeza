@@ -44,6 +44,7 @@ describe("realtime contracts", () => {
           policy: {
             screen_context_allowed: true,
             cloud_stt_allowed: true,
+            cloud_llm_allowed: true,
             direct_provider_stt_allowed: true,
             retention_mode: "30_days",
             max_local_audio_buffer_ms: 300000,

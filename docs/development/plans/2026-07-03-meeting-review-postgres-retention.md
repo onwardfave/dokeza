@@ -38,7 +38,7 @@ Move the M1B meeting review slice from local/test-only repository behavior towar
 2. Add in-memory repository coverage for search and retention behavior.
 3. Add a PostgreSQL meeting review repository using workspace-scoped DB transactions.
 4. Wire the API default repository to PostgreSQL when the existing database persistence config selects postgres.
-5. Add an opt-in PostgreSQL integration test for meeting review storage and cleanup.
+5. Add PostgreSQL integration test coverage for meeting review storage and cleanup. Done for opt-in local execution and CI.
 6. Add desktop client/query UI support for transcript search.
 7. Update roadmap status after targeted verification.
 
@@ -48,12 +48,14 @@ Move the M1B meeting review slice from local/test-only repository behavior towar
 - `pnpm --filter @dokeza/desktop test`
 - `pnpm --filter @dokeza/api typecheck`
 - `pnpm --filter @dokeza/desktop typecheck`
-- Optional local PostgreSQL: `DOKEZA_PG_INTEGRATION=1 pnpm --filter @dokeza/api test -- meeting-review-postgres.integration.test.ts`
+- Local PostgreSQL: `DOKEZA_PG_INTEGRATION=1 pnpm --filter @dokeza/api test -- meeting-review-postgres.integration.test.ts`
+- CI PostgreSQL: `.github/workflows/ci.yml` runs the API meeting-review integration suite against `pgvector/pgvector:pg17` after applying SQL migrations.
 - Final gate: `pnpm check`
 
 ## Documentation Updates
 
 - Update `docs/development/plans/2026-06-25-production-vertical-roadmap.md` with the new M1B status.
+- Update `docs/development/local_environment.md` and `docs/devops/ci_cd_release.md` with the PostgreSQL integration path.
 - No realtime protocol update is expected.
 - No new external data flow is expected.
 

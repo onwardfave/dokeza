@@ -30,6 +30,7 @@ describe("createSttAdapterFromConfig", () => {
           DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
           DEEPGRAM_API_KEY: "dg_test_secret",
           DEEPGRAM_ENDPOINT: "wss://api.deepgram.com/v1/listen",
+          DOKEZA_LLM_PROVIDER: "deterministic",
           DATABASE_URL: "postgres://dokeza:secret@db.example.com:5432/dokeza",
         },
         "realtime",

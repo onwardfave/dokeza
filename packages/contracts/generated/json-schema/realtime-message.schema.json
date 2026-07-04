@@ -691,6 +691,7 @@
               "required": [
                 "screen_context_allowed",
                 "cloud_stt_allowed",
+                "cloud_llm_allowed",
                 "direct_provider_stt_allowed",
                 "retention_mode",
                 "max_local_audio_buffer_ms"
@@ -700,6 +701,9 @@
                   "type": "boolean"
                 },
                 "cloud_stt_allowed": {
+                  "type": "boolean"
+                },
+                "cloud_llm_allowed": {
                   "type": "boolean"
                 },
                 "direct_provider_stt_allowed": {

@@ -38,7 +38,7 @@ Implemented foundation:
 - Telemetry redaction package.
 - Database RLS baseline migration for workspace-owned tables.
 - Workspace-scoped database package with Drizzle schema and RLS transaction helper.
-- PostgreSQL session store and transcript timeline sink interfaces/implementations with component tests, typed config factory wiring, realtime session lifecycle persistence hooks, and opt-in local PostgreSQL integration coverage.
+- PostgreSQL session store and transcript timeline sink interfaces/implementations with component tests, typed config factory wiring, realtime session lifecycle persistence hooks, and local/CI PostgreSQL integration coverage.
 - Desktop Tauri capability probes for audio, cache, crash diagnostics, realtime, shortcuts, and update policy.
 - Desktop webview synthetic realtime client with protocol sequencing, deterministic PCM chunk generation, transcript/error/status handling, reconnect backoff, in-memory audio buffering, `audio.gap` emission for dropped buffered audio, resume request construction, and a visible live-session panel.
 - Bounded native default-microphone capture can produce protocol-compatible mono 16 kHz PCM chunks and feed them into the desktop realtime client.
@@ -48,12 +48,11 @@ Implemented foundation:
 
 Key gaps:
 
-- No continuous desktop audio capture pipeline with device selection, pause/resume, and device-failure handling.
+- Continuous desktop audio capture still uses repeated bounded native capture windows; long-lived native streaming and system-audio capture remain.
 - No implemented hosted auth provider, durable user/workspace provisioning, or production onboarding flow.
-- PostgreSQL-backed session and timeline persistence still needs automated CI execution against PostgreSQL.
 - Reconnect/resume is implemented for in-process realtime recovery with original session reattachment, final-transcript replay by server sequence, and safe invalid-resume failure behavior; durable replay after realtime process restart still needs persisted server-sequence metadata.
-- No live transcript product UI.
-- No suggestion engine, prompt assembly, or LLM provider path.
+- Live transcript and meeting review UI exist for local/dev verticals but need production onboarding, hosted auth, and product polish.
+- Manual live suggestion streaming exists; durable suggestion persistence, source grounding, automatic triggers, debounce/rate limits, cost ledger storage, and eval datasets remain.
 - No knowledge ingestion or retrieval pipeline.
 - No post-call processing, admin policy management, billing, production deployment, or cross-service E2E tests.
 
@@ -130,7 +129,7 @@ Acceptance criteria:
 
 Goal: replace in-memory-only meeting timeline persistence with workspace-scoped PostgreSQL implementations.
 
-Status: partially implemented. `PgSessionStore` and `PgTranscriptTimelineSink` exist with component tests, typed config can construct PostgreSQL-backed realtime persistence, the realtime server can persist session start/end lifecycle through `SessionStore`, and opt-in local PostgreSQL integration tests cover the store/sink path; automated CI execution against PostgreSQL remains.
+Status: implemented for the current production foundation. `PgSessionStore` and `PgTranscriptTimelineSink` exist with component tests, typed config can construct PostgreSQL-backed realtime persistence, the realtime server can persist session start/end lifecycle through `SessionStore`, opt-in local PostgreSQL integration tests cover the store/sink path, and CI now runs the PostgreSQL integration suite against `pgvector/pgvector:pg17` with SQL migrations applied.
 
 Tasks:
 
@@ -138,7 +137,7 @@ Tasks:
 2. Add `PgTranscriptTimelineSink`.
 3. Store final transcript segments and audio gaps with idempotency rules.
 4. Preserve `live_only` and `local_only` no-storage behavior before any PG write.
-5. Add integration tests against local PostgreSQL where possible, with RLS enabled.
+5. Add integration tests against local PostgreSQL where possible, with RLS enabled. Done for local opt-in and CI execution.
 
 Acceptance criteria:
 
@@ -253,7 +252,7 @@ Acceptance criteria:
 
 Goal: users can review and manage a completed meeting record.
 
-Status: partially implemented. `@dokeza/contracts` now defines meeting review REST schemas and generated JSON Schema artifacts. `services/api` exposes authenticated, workspace-authorized meeting history, transcript search, meeting detail, export, and delete routes behind an injectable `MeetingReviewRepository`; the default implementation remains in-memory for memory-configured local/test runs and switches to PostgreSQL when the existing database persistence config selects postgres. PostgreSQL repository coverage includes workspace-scoped meeting reads, transcript/gap detail, Markdown/JSON export, deletion through session cascade, and retention cleanup primitives with opt-in local PostgreSQL integration coverage. The desktop now includes a first meeting review panel that can request a development API token, refresh/search history, inspect transcript segments and audio gaps, export Markdown/JSON, copy exports, and delete meeting records through the API.
+Status: partially implemented. `@dokeza/contracts` now defines meeting review REST schemas and generated JSON Schema artifacts. `services/api` exposes authenticated, workspace-authorized meeting history, transcript search, meeting detail, export, and delete routes behind an injectable `MeetingReviewRepository`; the default implementation remains in-memory for memory-configured local/test runs and switches to PostgreSQL when the existing database persistence config selects postgres. PostgreSQL repository coverage includes workspace-scoped meeting reads, transcript/gap detail, Markdown/JSON export, deletion through session cascade, and retention cleanup primitives with local and CI PostgreSQL integration coverage. The desktop now includes a first meeting review panel that can request a development API token, refresh/search history, inspect transcript segments and audio gaps, export Markdown/JSON, copy exports, and delete meeting records through the API.
 
 Tasks:
 
@@ -269,12 +268,12 @@ Tasks:
 
 Goal: manual suggestions stream from transcript context through a model gateway.
 
-Status: partially implemented. `@dokeza/ai-orchestrator` now provides a versioned live prompt registry, bounded final-transcript context assembly, deterministic credential-free local streaming, an OpenAI Responses streaming adapter boundary with injectable transport, metadata-only telemetry, and recoverable provider failure mapping. `services/realtime` handles manual `suggestion.request` messages with authenticated workspace/session context and emits `suggestion.stream_token` plus `suggestion.complete`. The desktop live session client and panel can request and display streaming suggestions. Durable suggestion persistence, production OpenAI configuration wiring, source grounding, automatic suggestion triggers, debounce/rate limits, cost ledger storage, and eval datasets remain follow-up work.
+Status: partially implemented. `@dokeza/ai-orchestrator` now provides a versioned live prompt registry, bounded final-transcript context assembly, deterministic credential-free local streaming, an OpenAI Responses streaming adapter boundary with injectable transport, metadata-only telemetry, and recoverable provider failure mapping. `services/realtime` handles manual `suggestion.request` messages with authenticated workspace/session context and emits `suggestion.stream_token` plus `suggestion.complete`; configured realtime startup wires deterministic local mode or OpenAI streaming mode from typed config and fails closed when OpenAI is selected without server-side credentials. Realtime advertises `cloud_llm_allowed` and blocks external live suggestion calls when workspace policy disables cloud LLM. The desktop live session client and panel can request and display streaming suggestions. Durable suggestion persistence, source grounding, automatic suggestion triggers, debounce/rate limits, cost ledger storage, and eval datasets remain follow-up work.
 
 Tasks:
 
 1. Prompt registry and prompt versions. Done for first live prompt pack.
-2. OpenAI streaming adapter behind AI orchestrator. Partially done as an injectable Responses streaming adapter boundary; production config wiring remains.
+2. OpenAI streaming adapter behind AI orchestrator. Done for injectable Responses streaming adapter boundary and typed realtime startup config wiring; live provider calls remain disabled in tests through fake transports.
 3. Rolling transcript context assembler. Done for bounded final transcript context.
 4. `suggestion.request` routing. Done for manual realtime requests.
 5. `suggestion.stream_token` and `suggestion.complete` emission. Done.

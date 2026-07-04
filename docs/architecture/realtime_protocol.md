@@ -161,7 +161,7 @@ Context updates are accepted by the protocol for forward compatibility. Until sc
 
 ### 5.6 `suggestion.request`
 
-Suggestion requests are implemented for manual Milestone 2 live assistance. The server uses the authenticated session workspace, recent final transcript context, and AI orchestrator prompt routing; the client cannot provide a workspace override. Source metadata remains empty until Milestone 3 retrieval/source grounding is implemented.
+Suggestion requests are implemented for manual Milestone 2 live assistance. The server uses the authenticated session workspace, recent final transcript context, workspace cloud LLM policy, and AI orchestrator prompt routing; the client cannot provide a workspace override. If configured live suggestions require an external model provider and `cloud_llm_allowed` is false, the server returns a recoverable `feature_unavailable` error before provider submission. Source metadata remains empty until Milestone 3 retrieval/source grounding is implemented.
 
 ```json
 {
@@ -212,6 +212,7 @@ The server maps these client reasons to `session.closed` reasons:
     "policy": {
       "screen_context_allowed": true,
       "cloud_stt_allowed": true,
+      "cloud_llm_allowed": true,
       "direct_provider_stt_allowed": false,
       "retention_mode": "30_days",
       "max_local_audio_buffer_ms": 300000

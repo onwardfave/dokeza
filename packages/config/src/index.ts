@@ -2,6 +2,7 @@ export type EnvironmentName = "local" | "test" | "preview" | "staging" | "produc
 export type RetentionDefault = "7_days" | "30_days" | "1_year";
 export type DeepgramEncoding = "linear16";
 export type RealtimePersistenceMode = "memory" | "postgres";
+export type LlmProvider = "deterministic" | "openai";
 
 export interface DeepgramSttConfig {
   apiKey?: string;
@@ -14,6 +15,13 @@ export interface DeepgramSttConfig {
   encoding: DeepgramEncoding;
   sampleRateHz: number;
   channels: number;
+  timeoutMs: number;
+}
+
+export interface OpenAiLlmConfig {
+  apiKey?: string;
+  baseUrl: string;
+  model: string;
   timeoutMs: number;
 }
 
@@ -41,7 +49,10 @@ export interface DokezaConfig {
       provider: "deepgram";
       deepgram: DeepgramSttConfig;
     };
-    llm: "openai";
+    llm: {
+      provider: LlmProvider;
+      openai: OpenAiLlmConfig;
+    };
     embeddings: "openai";
   };
   retentionDefaults: {
@@ -122,7 +133,11 @@ function readSampleRate(value: string | undefined): number | undefined {
 }
 
 function readOtlpEndpoint(value: string | undefined): string | undefined {
-  const endpoint = value ?? "http://localhost:4318";
+  return readHttpEndpoint(value, "http://localhost:4318");
+}
+
+function readHttpEndpoint(value: string | undefined, defaultValue: string): string | undefined {
+  const endpoint = value ?? defaultValue;
 
   try {
     const parsed = new URL(endpoint);
@@ -132,6 +147,17 @@ function readOtlpEndpoint(value: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function readLlmProvider(
+  value: string | undefined,
+  environment: EnvironmentName | undefined,
+): LlmProvider | undefined {
+  if (value === undefined) {
+    return environment === "production" ? "openai" : "deterministic";
+  }
+
+  return value === "deterministic" || value === "openai" ? value : undefined;
 }
 
 function readWebSocketEndpoint(value: string | undefined): string | undefined {
@@ -253,6 +279,25 @@ function createDeepgramConfig(input: {
   return config;
 }
 
+function createOpenAiLlmConfig(input: {
+  apiKey: string | undefined;
+  baseUrl: string;
+  model: string;
+  timeoutMs: number;
+}): OpenAiLlmConfig {
+  const config: OpenAiLlmConfig = {
+    baseUrl: input.baseUrl,
+    model: input.model,
+    timeoutMs: input.timeoutMs,
+  };
+
+  if (input.apiKey !== undefined) {
+    config.apiKey = input.apiKey;
+  }
+
+  return config;
+}
+
 export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): ConfigParseResult {
   const errors: string[] = [];
   const environment = readEnvironment(env.DOKEZA_ENV);
@@ -285,6 +330,11 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   const deepgramSampleRateHz = readPositiveInteger(env.DEEPGRAM_SAMPLE_RATE_HZ, 16000);
   const deepgramChannels = readPositiveInteger(env.DEEPGRAM_CHANNELS, 1);
   const deepgramTimeoutMs = readPositiveInteger(env.DEEPGRAM_TIMEOUT_MS, 5000);
+  const llmProvider = readLlmProvider(env.DOKEZA_LLM_PROVIDER, environment);
+  const openAiApiKey = env.OPENAI_API_KEY?.trim();
+  const openAiBaseUrl = readHttpEndpoint(env.OPENAI_BASE_URL, "https://api.openai.com/v1");
+  const openAiModel = readRequiredString(env.OPENAI_MODEL, "gpt-4.1-mini");
+  const openAiTimeoutMs = readPositiveInteger(env.OPENAI_TIMEOUT_MS, 10000);
   const realtimePersistence = readRealtimePersistenceMode(
     env.DOKEZA_REALTIME_PERSISTENCE,
     environment,
@@ -384,6 +434,27 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   if (deepgramTimeoutMs === undefined) {
     errors.push("DEEPGRAM_TIMEOUT_MS must be a positive integer.");
   }
+  if (llmProvider === undefined) {
+    errors.push("DOKEZA_LLM_PROVIDER must be deterministic or openai.");
+  }
+  if (llmProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) {
+    errors.push("OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai.");
+  }
+  if (openAiBaseUrl === undefined) {
+    errors.push("OPENAI_BASE_URL must be an absolute http or https URL.");
+  }
+  if (environment === "production" && openAiBaseUrl !== undefined) {
+    const parsedOpenAiBaseUrl = new URL(openAiBaseUrl);
+    if (parsedOpenAiBaseUrl.protocol !== "https:") {
+      errors.push("OPENAI_BASE_URL must use https in production.");
+    }
+  }
+  if (openAiModel === undefined) {
+    errors.push("OPENAI_MODEL is required.");
+  }
+  if (openAiTimeoutMs === undefined) {
+    errors.push("OPENAI_TIMEOUT_MS must be a positive integer.");
+  }
   if (realtimePersistence === undefined) {
     errors.push("DOKEZA_REALTIME_PERSISTENCE must be memory or postgres.");
   }
@@ -425,8 +496,13 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     deepgramSampleRateHz === undefined ||
     deepgramChannels === undefined ||
     deepgramTimeoutMs === undefined ||
+    llmProvider === undefined ||
+    openAiBaseUrl === undefined ||
+    openAiModel === undefined ||
+    openAiTimeoutMs === undefined ||
     realtimePersistence === undefined ||
     databasePoolMax === undefined ||
+    (llmProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
     (realtimePersistence === "postgres" && databaseUrl === undefined)
   ) {
     return { ok: false, errors };
@@ -473,7 +549,16 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
             timeoutMs: deepgramTimeoutMs,
           }),
         },
-        llm: "openai",
+        llm: {
+          provider: llmProvider,
+          openai: createOpenAiLlmConfig({
+            apiKey:
+              openAiApiKey !== undefined && openAiApiKey.length > 0 ? openAiApiKey : undefined,
+            baseUrl: openAiBaseUrl,
+            model: openAiModel,
+            timeoutMs: openAiTimeoutMs,
+          }),
+        },
         embeddings: "openai",
       },
       retentionDefaults: {

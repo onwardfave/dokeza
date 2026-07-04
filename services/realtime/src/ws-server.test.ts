@@ -155,6 +155,7 @@ describe("createRealtimeServer", () => {
       sessionStore?: SessionStore;
       tokenValidator?: TokenValidator;
       liveSuggestionService?: RealtimeServerOptions["liveSuggestionService"];
+      liveSuggestionExternalCallEnabled?: boolean;
     } = {},
   ): Promise<{ port: number }> {
     const serverOptions: RealtimeServerOptions = {
@@ -174,6 +175,9 @@ describe("createRealtimeServer", () => {
     }
     if (options.liveSuggestionService !== undefined) {
       serverOptions.liveSuggestionService = options.liveSuggestionService;
+    }
+    if (options.liveSuggestionExternalCallEnabled !== undefined) {
+      serverOptions.liveSuggestionExternalCallEnabled = options.liveSuggestionExternalCallEnabled;
     }
 
     handle = createRealtimeServer(serverOptions);
@@ -976,6 +980,65 @@ describe("createRealtimeServer", () => {
     });
 
     expect(closedResponse.type).toBe("session.closed");
+  });
+
+  it("blocks cloud live suggestions when workspace policy disables cloud LLM", async () => {
+    let called = false;
+    const { port } = await startServer({
+      liveSuggestionExternalCallEnabled: true,
+      tokenValidator: {
+        async validate() {
+          return {
+            actor: createTestActor({ workspaceId: "ws_test_1" }),
+            workspaceId: "ws_test_1",
+            deviceId: "dev_test_1",
+            policy: {
+              cloudLlmAllowed: false,
+            },
+          };
+        },
+      },
+      liveSuggestionService: {
+        streamLiveSuggestion() {
+          called = true;
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield {
+                type: "token" as const,
+                requestId: "unreachable",
+                suggestionId: "unreachable",
+                token: "unreachable",
+                index: 0,
+              };
+            },
+          };
+        },
+      },
+    });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const response = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "suggestion.request",
+      seq: 2,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        request_id: "sreq_blocked",
+        kind: "answer_question",
+        user_prompt: "content must not reach provider",
+        include_sources: false,
+      },
+    });
+
+    expect(response.type).toBe("error");
+    expect(response.payload).toMatchObject({
+      code: "feature_unavailable",
+      recoverable: true,
+    });
+    expect(called).toBe(false);
+    expect(JSON.stringify(response)).not.toContain("content must not reach provider");
   });
 
   it("returns an explicit error for unprocessed context updates", async () => {

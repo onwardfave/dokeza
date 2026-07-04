@@ -36,6 +36,25 @@ pnpm check
 pnpm --filter @dokeza/desktop build
 ```
 
+## PostgreSQL Integration Tests
+
+Start the local PostgreSQL/pgvector stack:
+
+```powershell
+pnpm dev:infra
+```
+
+Run the opt-in PostgreSQL integration suites:
+
+```powershell
+$env:DOKEZA_PG_INTEGRATION = "1"
+$env:DATABASE_URL = "postgres://dokeza:dokeza_local@localhost:5432/dokeza"
+pnpm --filter @dokeza/realtime test -- postgres-persistence.integration.test.ts
+pnpm --filter @dokeza/api test -- meeting-review-postgres.integration.test.ts
+```
+
+CI runs the same integration suites against a fresh `pgvector/pgvector:pg17` service after applying `infra/db/migrations/*.sql`.
+
 ## Local Development Auth
 
 Local and test environments enable a development-only auth issuer so the API, realtime service, and desktop can exercise workspace-scoped tokens before a hosted identity provider is selected.

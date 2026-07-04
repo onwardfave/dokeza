@@ -43,6 +43,9 @@ export interface RealtimeAuthContext {
   actor: Actor;
   workspaceId: string;
   deviceId?: string;
+  policy?: {
+    cloudLlmAllowed?: boolean;
+  };
 }
 
 export interface RealtimeServerOptions {
@@ -54,6 +57,7 @@ export interface RealtimeServerOptions {
   liveSuggestionService?: {
     streamLiveSuggestion(input: LiveSuggestionInput): AsyncIterable<LiveSuggestionEvent>;
   };
+  liveSuggestionExternalCallEnabled?: boolean;
 }
 
 export interface RealtimeServerHandle {
@@ -101,6 +105,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   const transcriptRetentionMode = options.transcriptRetentionMode ?? "7_days";
   const sessionStore = options.sessionStore;
   const liveSuggestionService = options.liveSuggestionService ?? new LiveSuggestionService();
+  const liveSuggestionExternalCallEnabled = options.liveSuggestionExternalCallEnabled ?? false;
   const replayableTranscriptsBySession = new Map<string, ReplayableTranscriptMessage[]>();
   const transcriptContextBySession = new Map<string, TranscriptContextSegment[]>();
   const httpServer = createServer((_req, res) => {
@@ -118,6 +123,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     let sttSession: SttSession | undefined;
     let authenticated = false;
     let sessionPersisted = false;
+    let cloudLlmAllowed = true;
 
     const sendJson = (message: Record<string, unknown>) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -483,6 +489,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         }
 
         authenticated = true;
+        cloudLlmAllowed = authContext.policy?.cloudLlmAllowed ?? true;
         transcriptProcessor = new TranscriptProcessor({
           sessionId: authResult.session.sessionId,
           workspaceId: authResult.session.workspaceId,
@@ -500,6 +507,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
             policy: {
               screen_context_allowed: true,
               cloud_stt_allowed: true,
+              cloud_llm_allowed: cloudLlmAllowed,
               direct_provider_stt_allowed: false,
               retention_mode: transcriptRetentionMode,
               max_local_audio_buffer_ms: 300000,
@@ -644,6 +652,16 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       if (frameResult.type === "json" && frameResult.message.type === "suggestion.request") {
+        if (liveSuggestionExternalCallEnabled && !cloudLlmAllowed) {
+          sendError(
+            "feature_unavailable",
+            "Cloud live suggestions are disabled by workspace policy.",
+            true,
+            session.sessionId,
+          );
+          return;
+        }
+
         try {
           const transcriptSegments = transcriptContextBySession.get(session.sessionId) ?? [];
           for await (const event of liveSuggestionService.streamLiveSuggestion({
