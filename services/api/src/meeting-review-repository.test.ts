@@ -25,6 +25,26 @@ describe("MeetingReviewRepository", () => {
             confidence: 0.94,
           },
         ],
+        suggestions: [
+          {
+            suggestion_id: "sug_pricing",
+            request_id: "sreq_pricing",
+            kind: "answer_question",
+            content: "Send the pricing recap.",
+            sources: [
+              {
+                document_id: "doc_pricing",
+                title: "Pricing Guide",
+                chunk_id: "chunk_pricing",
+              },
+            ],
+            confidence: "medium",
+            prompt_version: "live.answer.v1",
+            model: "deterministic-live-v1",
+            server_seq: 8,
+            created_at: "2026-07-02T00:03:00.000Z",
+          },
+        ],
       },
       {
         meeting: {
@@ -54,6 +74,34 @@ describe("MeetingReviewRepository", () => {
 
     expect(body.meetings.map((meeting) => meeting.meeting_id)).toEqual(["sess_pricing"]);
     expect(JSON.stringify(body)).not.toContain("pricing recap");
+    expect(JSON.stringify(body)).not.toContain("Send the pricing recap");
+
+    const detail = await repository.getMeetingDetail("ws_1", "sess_pricing");
+    expect(detail?.suggestions).toEqual([
+      {
+        suggestion_id: "sug_pricing",
+        request_id: "sreq_pricing",
+        kind: "answer_question",
+        content: "Send the pricing recap.",
+        sources: [
+          {
+            document_id: "doc_pricing",
+            title: "Pricing Guide",
+            chunk_id: "chunk_pricing",
+          },
+        ],
+        confidence: "medium",
+        prompt_version: "live.answer.v1",
+        model: "deterministic-live-v1",
+        server_seq: 8,
+        created_at: "2026-07-02T00:03:00.000Z",
+      },
+    ]);
+
+    const exported = await repository.exportMeeting("ws_1", "sess_pricing", "markdown");
+    expect(exported?.content).toContain("## Suggestions");
+    expect(exported?.content).toContain("Send the pricing recap.");
+    expect(exported?.content).toContain("Pricing Guide (doc_pricing/chunk_pricing)");
   });
 
   it("cleans up expired meetings according to retention mode and workspace scope", async () => {

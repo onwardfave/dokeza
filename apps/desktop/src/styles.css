@@ -275,7 +275,8 @@ h2 {
 
 .live-transcript,
 .live-suggestions,
-.meeting-review-transcript {
+.meeting-review-transcript,
+.meeting-review-suggestions {
   display: grid;
   gap: 8px;
   min-height: 112px;

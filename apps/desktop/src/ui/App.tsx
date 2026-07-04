@@ -785,6 +785,30 @@ function MeetingReviewPanel() {
           </article>
         ))}
       </div>
+      <div className="meeting-review-suggestions" aria-live="polite">
+        {detail === null ? null : detail.suggestions.length === 0 ? (
+          <p className="meeting-review-empty">Suggestions empty</p>
+        ) : (
+          detail.suggestions.map((suggestion) => (
+            <article className="suggestion-card" key={suggestion.suggestion_id}>
+              <div>
+                <span>{suggestion.kind.replace(/_/g, " ")}</span>
+                <strong>{suggestion.confidence}</strong>
+              </div>
+              <p>{suggestion.content}</p>
+              {suggestion.sources.length > 0 ? (
+                <ul className="suggestion-sources">
+                  {suggestion.sources.map((source) => (
+                    <li key={`${suggestion.suggestion_id}-${source.document_id}-${source.chunk_id}`}>
+                      {source.title}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </article>
+          ))
+        )}
+      </div>
       {exportContent.length > 0 ? (
         <textarea className="meeting-review-export" readOnly value={exportContent} />
       ) : null}
