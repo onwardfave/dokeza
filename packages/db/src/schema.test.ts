@@ -3,6 +3,7 @@ import {
   documentChunks,
   integrationConnections,
   meetingSessions,
+  suggestions,
   workspacePolicies,
 } from "./schema.js";
 
@@ -44,6 +45,14 @@ describe("database schema", () => {
     expect(column(meetingSessions.lastClientSeq).columnType).toBe("PgInteger");
     expect(column(meetingSessions.lastServerSeq).columnType).toBe("PgInteger");
     expect(column(meetingSessions.connectionId).columnType).toBe("PgText");
+  });
+
+  it("includes suggestion persistence metadata columns", () => {
+    expect(column(suggestions.requestId).columnType).toBe("PgText");
+    expect(column(suggestions.sourcesJson).columnType).toBe("PgText");
+    expect(column(suggestions.sourcesJson).notNull).toBe(true);
+    expect(column(suggestions.sourcesJson).hasDefault).toBe(true);
+    expect(column(suggestions.serverSeq).columnType).toBe("PgInteger");
   });
 
   it("keeps generated-id defaults where the SQL migration defines them", () => {

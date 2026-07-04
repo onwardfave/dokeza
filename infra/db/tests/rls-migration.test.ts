@@ -10,6 +10,10 @@ const vectorIndexMigration = readFileSync(
   resolve("migrations/0003_document_chunk_vector_index.sql"),
   "utf8",
 ).toLowerCase();
+const suggestionPersistenceMigration = readFileSync(
+  resolve("migrations/0004_suggestion_persistence_metadata.sql"),
+  "utf8",
+).toLowerCase();
 
 const highRiskTables = [
   "workspace_policies",
@@ -54,5 +58,13 @@ describe("workspace RLS migration baseline", () => {
     expect(vectorIndexMigration).toContain("using hnsw (embedding vector_cosine_ops)");
     expect(vectorIndexMigration).toContain("where embedding is not null");
     expect(vectorIndexMigration).toContain("document_chunks_workspace_document_idx");
+  });
+
+  it("adds suggestion metadata for meeting review persistence", () => {
+    expect(suggestionPersistenceMigration).toContain("alter table suggestions");
+    expect(suggestionPersistenceMigration).toContain("request_id text");
+    expect(suggestionPersistenceMigration).toContain("sources_json text not null default '[]'");
+    expect(suggestionPersistenceMigration).toContain("server_seq integer");
+    expect(suggestionPersistenceMigration).toContain("suggestions_workspace_meeting_seq_idx");
   });
 });

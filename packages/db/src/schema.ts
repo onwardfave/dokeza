@@ -164,11 +164,14 @@ export const suggestions = pgTable("suggestions", {
   meetingSessionId: text("meeting_session_id")
     .notNull()
     .references(() => meetingSessions.id, { onDelete: "cascade" }),
+  requestId: text("request_id"),
   kind: text("kind").notNull(),
   content: text("content").notNull(),
+  sourcesJson: text("sources_json").notNull().default("[]"),
   confidence: text("confidence").notNull(),
   promptVersion: text("prompt_version").notNull(),
   model: text("model").notNull(),
+  serverSeq: integer("server_seq"),
   createdBy: text("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
