@@ -145,6 +145,9 @@ importers:
       '@dokeza/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@dokeza/knowledge':
+        specifier: workspace:*
+        version: link:../knowledge
       '@dokeza/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
@@ -157,6 +160,18 @@ importers:
       '@dokeza/authz':
         specifier: workspace:*
         version: link:../../packages/authz
+      '@dokeza/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@dokeza/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@dokeza/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      drizzle-orm:
+        specifier: ^0.44.0
+        version: 0.44.7(postgres@3.4.9)
 
   services/realtime:
     dependencies:

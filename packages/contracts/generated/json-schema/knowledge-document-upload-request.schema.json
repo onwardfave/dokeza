@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "required": [
+    "title",
+    "source",
+    "text"
+  ],
+  "properties": {
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "source": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "text": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "permission_tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "type": "object",
+  "required": [
+    "workspace_id",
+    "documents"
+  ],
+  "properties": {
+    "workspace_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "document_id",
+          "workspace_id",
+          "title",
+          "source",
+          "status",
+          "chunk_count"
+        ],
+        "properties": {
+          "document_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "workspace_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "source": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "active",
+                "type": "string"
+              },
+              {
+                "const": "disabled",
+                "type": "string"
+              },
+              {
+                "const": "deleted",
+                "type": "string"
+              }
+            ]
+          },
+          "chunk_count": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "created_by": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "created_at": {
+            "description": "ISO 8601 timestamp",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "ISO 8601 timestamp",
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

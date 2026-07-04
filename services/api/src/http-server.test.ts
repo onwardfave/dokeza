@@ -1,6 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
 import { createDokezaAuthTokenService } from "@dokeza/auth";
 import type { Actor } from "@dokeza/authz";
+import { InMemoryKnowledgeRepository } from "@dokeza/knowledge";
 import { createHttpServer, type HttpServerHandle } from "./http-server.js";
 import { InMemoryMeetingReviewRepository } from "./meeting-review-repository.js";
 
@@ -91,12 +92,39 @@ describe("API HTTP Server", () => {
       },
     },
   ]);
+  const knowledgeRepository = new InMemoryKnowledgeRepository({
+    now: () => fixedNow,
+    idGenerator: createSequenceIds("api_doc", "api_chunk", "extra"),
+    seeds: [
+      {
+        document: {
+          document_id: "doc_ws_2",
+          workspace_id: "ws_2",
+          title: "Other Workspace FAQ",
+          source: "manual_upload",
+          status: "active",
+          chunk_count: 1,
+          created_by: "user_2",
+        },
+        chunks: [
+          {
+            chunk_id: "chunk_ws_2",
+            document_id: "doc_ws_2",
+            chunk_index: 0,
+            text: "Workspace two confidential pricing.",
+            permission_tags: [],
+          },
+        ],
+      },
+    ],
+  });
 
   async function startServer(env?: NodeJS.ProcessEnv): Promise<number> {
     handle = createHttpServer({
       env: env ?? defaultEnv,
       now: () => fixedNow,
       meetingRepository,
+      knowledgeRepository,
     });
     await new Promise<void>((resolve) => {
       handle!.server.listen(0, "127.0.0.1", () => resolve());
@@ -467,4 +495,133 @@ describe("API HTTP Server", () => {
 
     await expect(deleteRepository.getMeetingDetail("ws_1", "sess_delete")).resolves.toBeUndefined();
   });
+
+  it("uploads, lists, details, and searches knowledge documents for authorized workspace members", async () => {
+    const apiToken = issueApiToken({
+      userId: "user_1",
+      memberships: [{ userId: "user_1", workspaceId: "ws_1", role: "member" }],
+    });
+    const port = await startServer();
+
+    const uploaded = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/documents`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}` },
+      body: JSON.stringify({
+        title: "Security FAQ",
+        source: "manual_upload",
+        text: "Provider credentials stay server-side.",
+      }),
+    });
+
+    expect(uploaded.status).toBe(201);
+    const uploadBody = await uploaded.json();
+    expect(uploadBody).toMatchObject({
+      document: {
+        document_id: "doc_api_doc",
+        workspace_id: "ws_1",
+        title: "Security FAQ",
+        chunk_count: 1,
+      },
+      chunks: [
+        {
+          chunk_id: "chunk_api_chunk",
+          text: "Provider credentials stay server-side.",
+        },
+      ],
+    });
+
+    const list = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/documents`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+    expect(list.status).toBe(200);
+    const listBody = await list.json();
+    expect(listBody).toMatchObject({
+      workspace_id: "ws_1",
+      documents: [{ document_id: "doc_api_doc", title: "Security FAQ" }],
+    });
+    expect(JSON.stringify(listBody)).not.toContain("Provider credentials");
+
+    const detail = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/documents/doc_api_doc`,
+      {
+        headers: { Authorization: `Bearer ${apiToken}` },
+      },
+    );
+    expect(detail.status).toBe(200);
+    expect(await detail.json()).toMatchObject({
+      document: { document_id: "doc_api_doc" },
+      chunks: [{ text: "Provider credentials stay server-side." }],
+    });
+
+    const search = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/knowledge/search?q=credentials&top_k=1`,
+      {
+        headers: { Authorization: `Bearer ${apiToken}` },
+      },
+    );
+    expect(search.status).toBe(200);
+    expect(await search.json()).toMatchObject({
+      workspace_id: "ws_1",
+      query: "credentials",
+      results: [
+        {
+          document_id: "doc_api_doc",
+          title: "Security FAQ",
+          source: "manual_upload",
+          chunk_id: "chunk_api_chunk",
+        },
+      ],
+    });
+  });
+
+  it("denies cross-workspace knowledge access before repository reads", async () => {
+    const apiToken = issueApiToken({
+      userId: "user_1",
+      memberships: [{ userId: "user_1", workspaceId: "ws_1", role: "member" }],
+    });
+    const port = await startServer();
+
+    const response = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_2/documents/doc_ws_2`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "workspace_access_denied" });
+  });
+
+  it("returns stable knowledge errors without document text", async () => {
+    const apiToken = issueApiToken({
+      userId: "user_1",
+      memberships: [{ userId: "user_1", workspaceId: "ws_1", role: "member" }],
+    });
+    const port = await startServer();
+
+    const invalidUpload = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/documents`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}` },
+      body: JSON.stringify({ title: "Invalid", source: "manual_upload", text: "" }),
+    });
+    expect(invalidUpload.status).toBe(400);
+    expect(await invalidUpload.json()).toEqual({ error: "invalid_request" });
+
+    const missing = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/documents/missing`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ error: "document_not_found" });
+
+    const badSearch = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/knowledge/search?q=`,
+      {
+        headers: { Authorization: `Bearer ${apiToken}` },
+      },
+    );
+    expect(badSearch.status).toBe(400);
+    expect(await badSearch.json()).toEqual({ error: "invalid_request" });
+  });
 });
+
+function createSequenceIds(...ids: string[]): () => string {
+  let index = 0;
+  return () => ids[index++] ?? `extra_${index}`;
+}

@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { authJsonSchemas } from "../src/auth.js";
+import { knowledgeJsonSchemas } from "../src/knowledge.js";
 import { meetingJsonSchemas } from "../src/meetings.js";
 import { realtimeJsonSchemas } from "../src/realtime.js";
 
@@ -14,6 +15,7 @@ for (const [name, schema] of Object.entries({
   ...realtimeJsonSchemas,
   ...authJsonSchemas,
   ...meetingJsonSchemas,
+  ...knowledgeJsonSchemas,
 })) {
   await writeFile(join(outputDir, `${name}.schema.json`), `${JSON.stringify(schema, null, 2)}\n`);
 }

@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "required": [
+    "chunk_id",
+    "document_id",
+    "chunk_index",
+    "text",
+    "permission_tags"
+  ],
+  "properties": {
+    "chunk_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "document_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "chunk_index": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "text": {
+      "type": "string"
+    },
+    "permission_tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

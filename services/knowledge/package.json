@@ -11,6 +11,10 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@dokeza/authz": "workspace:*"
+    "@dokeza/authz": "workspace:*",
+    "@dokeza/config": "workspace:*",
+    "@dokeza/contracts": "workspace:*",
+    "@dokeza/db": "workspace:*",
+    "drizzle-orm": "^0.44.0"
   }
 }

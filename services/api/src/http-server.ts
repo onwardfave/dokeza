@@ -4,9 +4,16 @@ import { authorizeWorkspace, type Actor, type WorkspaceRole } from "@dokeza/auth
 import { parseConfig, type DokezaConfig } from "@dokeza/config";
 import {
   validateDevAuthTokenRequest,
+  validateKnowledgeDocumentUploadRequest,
   validateRealtimeTokenRequest,
   type DevAuthTokenRequest,
 } from "@dokeza/contracts";
+import {
+  createKnowledgePersistenceFromConfig,
+  KnowledgeRepositoryError,
+  type KnowledgePersistence,
+  type KnowledgeRepository,
+} from "@dokeza/knowledge";
 import { createHealthResponse } from "./index.js";
 import {
   createMeetingReviewPersistenceFromConfig,
@@ -19,6 +26,7 @@ export interface HttpServerOptions {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
   meetingRepository?: MeetingReviewRepository;
+  knowledgeRepository?: KnowledgeRepository;
 }
 
 export interface HttpServerHandle {
@@ -141,6 +149,12 @@ interface MeetingRouteMatch {
   action?: "export";
 }
 
+interface KnowledgeRouteMatch {
+  workspaceId: string;
+  documentId?: string;
+  action?: "search";
+}
+
 function matchMeetingRoute(pathname: string): MeetingRouteMatch | undefined {
   const parts = pathname.split("/").filter((part) => part.length > 0);
   if (parts[0] !== "v1" || parts[1] !== "workspaces" || parts[3] !== "meetings") {
@@ -172,14 +186,64 @@ function matchMeetingRoute(pathname: string): MeetingRouteMatch | undefined {
   return undefined;
 }
 
+function matchKnowledgeRoute(pathname: string): KnowledgeRouteMatch | undefined {
+  const parts = pathname.split("/").filter((part) => part.length > 0);
+  if (parts[0] !== "v1" || parts[1] !== "workspaces") {
+    return undefined;
+  }
+
+  const workspaceId = decodeURIComponent(parts[2] ?? "");
+  if (workspaceId.length === 0) {
+    return undefined;
+  }
+
+  if (parts[3] === "documents") {
+    if (parts.length === 4) {
+      return { workspaceId };
+    }
+
+    if (parts.length === 5) {
+      const documentId = decodeURIComponent(parts[4] ?? "");
+      return documentId.length === 0 ? undefined : { workspaceId, documentId };
+    }
+
+    return undefined;
+  }
+
+  if (parts[3] === "knowledge" && parts[4] === "search" && parts.length === 5) {
+    return { workspaceId, action: "search" };
+  }
+
+  return undefined;
+}
+
 function readMeetingExportFormat(url: URL): MeetingExportFormat | undefined {
   const format = url.searchParams.get("format") ?? "markdown";
   return format === "markdown" || format === "json" ? format : undefined;
 }
 
+function readTopK(url: URL): number | undefined {
+  const raw = url.searchParams.get("top_k");
+  if (raw === null) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function readMeetingSearchQuery(url: URL): string | undefined {
   const query = url.searchParams.get("q")?.trim();
   return query === undefined || query.length === 0 ? undefined : query;
+}
+
+function sendKnowledgeError(res: ServerResponse, err: unknown): void {
+  if (err instanceof KnowledgeRepositoryError) {
+    sendJson(res, err.code === "invalid_request" ? 400 : 403, { error: err.code });
+    return;
+  }
+
+  sendJson(res, 503, { error: "service_unavailable" });
 }
 
 function handleHealth(req: IncomingMessage, res: ServerResponse, env: NodeJS.ProcessEnv): void {
@@ -200,6 +264,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
   const env = options.env ?? process.env;
   const now = options.now ?? (() => new Date());
   let managedMeetingPersistence: MeetingReviewPersistence | undefined;
+  let managedKnowledgePersistence: KnowledgePersistence | undefined;
 
   function getMeetingRepository(config: DokezaConfig): MeetingReviewRepository {
     if (options.meetingRepository !== undefined) {
@@ -211,6 +276,18 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
     }
 
     return managedMeetingPersistence.repository;
+  }
+
+  function getKnowledgeRepository(config: DokezaConfig): KnowledgeRepository {
+    if (options.knowledgeRepository !== undefined) {
+      return options.knowledgeRepository;
+    }
+
+    if (managedKnowledgePersistence === undefined) {
+      managedKnowledgePersistence = createKnowledgePersistenceFromConfig(config);
+    }
+
+    return managedKnowledgePersistence.repository;
   }
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -357,6 +434,104 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
       return;
     }
 
+    const knowledgeRoute = matchKnowledgeRoute(url.pathname);
+    if (knowledgeRoute !== undefined) {
+      const auth = authenticateApiRequest(req, runtime.tokenService);
+      if ("error" in auth) {
+        sendJson(res, 401, { error: auth.error });
+        return;
+      }
+
+      const authorization = authorizeWorkspace(auth.actor, knowledgeRoute.workspaceId);
+      if (!authorization.allowed) {
+        sendJson(res, 403, { error: "workspace_access_denied" });
+        return;
+      }
+
+      const knowledgeRepository = getKnowledgeRepository(runtime.config);
+
+      if (knowledgeRoute.action === "search") {
+        if (req.method !== "GET") {
+          methodNotAllowed(res);
+          return;
+        }
+
+        const query = url.searchParams.get("q")?.trim();
+        if (query === undefined || query.length === 0) {
+          sendJson(res, 400, { error: "invalid_request" });
+          return;
+        }
+
+        const topK = readTopK(url);
+        const searchInput =
+          topK === undefined
+            ? { workspaceId: knowledgeRoute.workspaceId, query }
+            : { workspaceId: knowledgeRoute.workspaceId, query, topK };
+
+        void knowledgeRepository
+          .search(searchInput)
+          .then((body) => sendJson(res, 200, body))
+          .catch((err: unknown) => sendKnowledgeError(res, err));
+        return;
+      }
+
+      if (knowledgeRoute.documentId === undefined) {
+        if (req.method === "GET") {
+          void knowledgeRepository
+            .listDocuments(knowledgeRoute.workspaceId)
+            .then((body) => sendJson(res, 200, body))
+            .catch((err: unknown) => sendKnowledgeError(res, err));
+          return;
+        }
+
+        if (req.method === "POST") {
+          void readJsonBody(req)
+            .then((body) => {
+              if (!validateKnowledgeDocumentUploadRequest(body)) {
+                sendJson(res, 400, { error: "invalid_request" });
+                return;
+              }
+
+              return knowledgeRepository
+                .uploadDocument({
+                  workspaceId: knowledgeRoute.workspaceId,
+                  actorUserId: auth.actor.userId,
+                  title: body.title,
+                  source: body.source,
+                  text: body.text,
+                  ...(body.permission_tags === undefined
+                    ? {}
+                    : { permissionTags: body.permission_tags }),
+                })
+                .then((created) => sendJson(res, 201, created));
+            })
+            .catch((err: unknown) => sendKnowledgeError(res, err));
+          return;
+        }
+
+        methodNotAllowed(res);
+        return;
+      }
+
+      if (req.method === "GET") {
+        void knowledgeRepository
+          .getDocumentDetail(knowledgeRoute.workspaceId, knowledgeRoute.documentId)
+          .then((body) => {
+            if (body === undefined) {
+              sendJson(res, 404, { error: "document_not_found" });
+              return;
+            }
+
+            sendJson(res, 200, body);
+          })
+          .catch((err: unknown) => sendKnowledgeError(res, err));
+        return;
+      }
+
+      methodNotAllowed(res);
+      return;
+    }
+
     const meetingRoute = matchMeetingRoute(url.pathname);
     if (meetingRoute !== undefined) {
       const auth = authenticateApiRequest(req, runtime.tokenService);
@@ -468,7 +643,10 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
             return;
           }
 
-          void (managedMeetingPersistence?.close() ?? Promise.resolve())
+          void Promise.all([
+            managedMeetingPersistence?.close() ?? Promise.resolve(),
+            managedKnowledgePersistence?.close() ?? Promise.resolve(),
+          ])
             .then(() => resolve())
             .catch(reject);
         });

@@ -1,0 +1,44 @@
+{
+  "type": "object",
+  "required": [
+    "error"
+  ],
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "const": "auth_required",
+          "type": "string"
+        },
+        {
+          "const": "auth_invalid",
+          "type": "string"
+        },
+        {
+          "const": "workspace_access_denied",
+          "type": "string"
+        },
+        {
+          "const": "document_not_found",
+          "type": "string"
+        },
+        {
+          "const": "knowledge_storage_blocked",
+          "type": "string"
+        },
+        {
+          "const": "method_not_allowed",
+          "type": "string"
+        },
+        {
+          "const": "invalid_request",
+          "type": "string"
+        },
+        {
+          "const": "service_unavailable",
+          "type": "string"
+        }
+      ]
+    }
+  }
+}
