@@ -4,6 +4,8 @@
 
 Add embedding generation and pgvector-backed retrieval to the M3 knowledge service so uploaded knowledge can be retrieved semantically and cited by the existing live-suggestion source-grounding bridge.
 
+Status: implemented for deterministic local/test embeddings, OpenAI provider adapter boundary, pgvector storage/indexing, and hybrid keyword/vector retrieval. Reranking, eval-backed thresholds, and richer document-permission policy remain follow-up slices.
+
 ## Requirements and Milestone
 
 - Milestone: M3 - Knowledge Base and Source Grounding.

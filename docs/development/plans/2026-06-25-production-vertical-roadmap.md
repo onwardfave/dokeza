@@ -52,8 +52,8 @@ Key gaps:
 - No implemented hosted auth provider, durable user/workspace provisioning, or production onboarding flow.
 - Reconnect/resume is implemented for in-process realtime recovery with original session reattachment, final-transcript replay by server sequence, and safe invalid-resume failure behavior; durable replay after realtime process restart still needs persisted server-sequence metadata.
 - Live transcript and meeting review UI exist for local/dev verticals but need production onboarding, hosted auth, and product polish.
-- Manual live suggestion streaming exists; keyword source grounding for manual requests exists, while durable suggestion persistence, automatic triggers, debounce/rate limits, cost ledger storage, embedding-backed retrieval, reranking, and eval datasets remain.
-- Knowledge text upload, chunking, and keyword retrieval exist; embeddings, hybrid retrieval, reranking, document upload UI, and richer permission policy remain follow-up work.
+- Manual live suggestion streaming exists; source grounding for manual requests can now use hybrid keyword/vector retrieval, while durable suggestion persistence, automatic triggers, debounce/rate limits, cost ledger storage, reranking, and eval datasets remain.
+- Knowledge text upload, chunking, keyword retrieval, embedding generation, and pgvector-backed retrieval exist; reranking, document upload UI, and richer permission policy remain follow-up work.
 - No post-call processing, admin policy management, billing, production deployment, or cross-service E2E tests.
 
 ## Affected Architecture
@@ -284,16 +284,16 @@ Tasks:
 
 Goal: uploaded knowledge can be retrieved and cited in live suggestions.
 
-Status: partially implemented for the foundation and first source-grounding bridge slices. `@dokeza/contracts` defines knowledge document upload/list/detail/search schemas with generated JSON Schema artifacts; `services/knowledge` owns deterministic text chunking plus in-memory and PostgreSQL repositories over existing workspace-scoped `documents` and `document_chunks`; `services/api` exposes authenticated workspace-authorized document and keyword-search routes. Search returns source metadata for matching chunks, list responses omit document content, and `live_only` / `local_only` retention modes block cloud document persistence. Manual live suggestions can now request keyword source retrieval through the realtime service and show source cues in the desktop live panel. Embeddings, hybrid retrieval, reranking, full document permission evaluation, desktop/web upload UI, and retrieval eval sets remain follow-up work.
+Status: partially implemented for the foundation, source-grounding bridge, and embeddings slices. `@dokeza/contracts` defines knowledge document upload/list/detail/search schemas with generated JSON Schema artifacts; `services/knowledge` owns deterministic text chunking plus in-memory and PostgreSQL repositories over existing workspace-scoped `documents` and `document_chunks`; `services/api` exposes authenticated workspace-authorized document and search routes. Search returns source metadata for matching chunks, list responses omit document content, and `live_only` / `local_only` retention modes block cloud document persistence and derived embedding persistence. The knowledge service now has deterministic local/test embeddings, an OpenAI embedding adapter boundary, pgvector storage/indexing, hybrid keyword/vector search, and keyword-only fallback when embedding generation fails. Manual live suggestions can request source retrieval through the realtime service and show source cues in the desktop live panel. Reranking, full document permission evaluation, desktop/web upload UI, and retrieval eval sets remain follow-up work.
 
 Tasks:
 
 1. Document upload and storage. Partially done for text upload through workspace-scoped API repositories; binary file/object storage remains later.
 2. Parsing and chunking. Partially done for deterministic plain-text chunking; PDF/DOCX/HTML parsers remain later.
-3. Embeddings and pgvector storage.
-4. Hybrid retrieval and reranking.
+3. Embeddings and pgvector storage. Done for deterministic local/test embeddings, OpenAI provider adapter boundary, pgvector column wiring, and vector index migration.
+4. Hybrid retrieval and reranking. Partially done for hybrid keyword/vector retrieval; reranking remains later.
 5. Permission-aware retrieval. Partially done for workspace isolation and explicit allowed-document filtering; document-level permission policy remains later.
-6. Source metadata in suggestions. Done for manual live suggestions using keyword retrieval and existing `suggestion.complete.sources`; embedding-backed grounding remains later.
+6. Source metadata in suggestions. Done for manual live suggestions using repository retrieval and existing `suggestion.complete.sources`; embedding-backed repository results can now feed that path.
 7. Retrieval eval set.
 
 ### Later Milestones

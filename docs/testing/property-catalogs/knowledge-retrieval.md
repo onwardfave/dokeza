@@ -8,8 +8,9 @@ The M3 knowledge foundation spans API workspace authorization, `services/knowled
 
 - Documents and chunks are workspace-owned records.
 - Upload writes one document plus deterministic chunks in a single repository operation.
-- Keyword search reads active chunks and returns source metadata for matching chunks.
+- Hybrid search reads active chunks and returns source metadata for matching keyword or vector chunks.
 - PostgreSQL operations run inside `withWorkspaceTransaction`, relying on RLS plus explicit workspace predicates.
+- Embedding generation is optional per repository and must degrade to keyword-only behavior on provider failure.
 
 ## Properties
 
@@ -20,12 +21,16 @@ The M3 knowledge foundation spans API workspace authorization, `services/knowled
 - Detail and search responses include content only through authorized workspace-scoped routes.
 - Live suggestions can only cite chunks returned by server-side retrieval for the authenticated session workspace.
 - If source retrieval fails or returns no authorized chunks, live suggestions continue with empty citations rather than leaking query or chunk content in errors.
+- Vector retrieval cannot return chunks from another workspace, even when embeddings are similar.
+- Embedding provider failures during upload do not block document/chunk persistence after retention policy allows storage.
+- Embedding provider failures during search fall back to keyword retrieval without leaking query text, chunk text, provider payloads, or credentials in errors.
+- `live_only` and `local_only` retention modes block embedding generation and persistence because they block cloud document/chunk persistence.
 - `live_only` and `local_only` retention modes block cloud document and chunk persistence.
 - Empty or invalid queries fail without echoing document text.
 
 ## Minimal Test Topology
 
-- Component tests use `InMemoryKnowledgeRepository`.
+- Component tests use `InMemoryKnowledgeRepository` with deterministic or fake embedding providers.
 - API tests use an injected memory repository and Dokeza auth tokens.
 - PostgreSQL integration tests use local/CI PostgreSQL with migrations applied and `DOKEZA_PG_INTEGRATION=1`.
 
@@ -35,6 +40,7 @@ The M3 knowledge foundation spans API workspace authorization, `services/knowled
 - List document summaries and assert document content is absent.
 - Fetch authorized document detail.
 - Search matching chunks in one workspace while another workspace has matching content.
+- Search a vector-only match where keyword search misses.
 - Search with an explicit allowed-document filter.
 - Request a live suggestion with `include_sources=true` and verify retrieved citations come from the authenticated workspace.
 - Request a live suggestion with retrieval failure and verify transcript-only fallback with no leaked source query or chunk text.
@@ -43,6 +49,9 @@ The M3 knowledge foundation spans API workspace authorization, `services/knowled
 ## Faults to Inject
 
 - Repository unavailable.
+- Embedding provider timeout or 503 during upload.
+- Embedding provider timeout or 503 during search.
+- Invalid embedding provider response shape.
 - Blank document body.
 - Blank search query.
 - Cross-workspace route access.
@@ -55,5 +64,5 @@ Future production telemetry should include metadata-only counts and latency for 
 ## Open Risks
 
 - Document-level permissions are currently represented only by metadata and allowed-document filters; full permission evaluation is a later M3 slice.
-- Search is deterministic keyword matching; embedding provider, vector search, and reranking remain later slices.
-- Source-grounded live suggestions are wired to keyword retrieval only; embedding-backed grounding and reranking remain later slices.
+- Search is now hybrid keyword plus embeddings; reranking remains a later slice.
+- Source-grounded live suggestions can use embedding-backed repository results, but reranking and eval-backed quality thresholds remain later slices.

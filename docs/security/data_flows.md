@@ -106,7 +106,11 @@ Initial knowledge-base implementation:
 - Document text is chunked inside Dokeza Cloud and stored as workspace-scoped `documents` and `document_chunks` records when retention policy permits cloud persistence.
 - `live_only` and `local_only` retention modes block cloud document and chunk persistence.
 - List responses return document metadata only; authorized detail and search responses can return chunk text and source metadata.
-- Search is deterministic keyword retrieval in Dokeza Cloud for this slice. Manual live suggestions can request top matching chunks through the realtime service for source-grounded prompt context and citation metadata. No embedding provider, reranker, object storage, or third-party knowledge provider data flow is introduced yet.
+- Search is hybrid keyword plus embedding-backed retrieval in Dokeza Cloud. Local and CI defaults use deterministic credential-free embeddings. Production embedding generation routes through OpenAI when `DOKEZA_EMBEDDING_PROVIDER=openai`, `OPENAI_API_KEY`, configured model settings, and workspace retention policy permit cloud processing.
+- OpenAI embedding credentials are read from server-side configuration only and are never sent to desktop or browser clients.
+- Upload indexing sends retained document chunks to the embedding provider. Search sends the search query to the embedding provider when semantic retrieval is enabled. Provider failures fall back to keyword-only retrieval.
+- Manual live suggestions can request top matching chunks through the realtime service for source-grounded prompt context and citation metadata.
+- No reranker, object storage, or third-party knowledge connector data flow is introduced yet.
 
 ## 4. Data Flow Table
 
@@ -119,7 +123,7 @@ Initial knowledge-base implementation:
 | Realtime service to STT provider | Audio or audio stream | Voice, meeting content | TLS, provider DPA, Dokeza-managed provider credentials, retention settings | Local STT or provider disabled by policy |
 | STT provider to Dokeza | Transcript | Meeting content, PII | TLS, provider retention controls | Local STT |
 | Knowledge source to Dokeza | Documents and metadata | Company confidential data | OAuth scopes, TLS, encrypted storage | Connector disabled; document deletion |
-| Dokeza to embedding provider | Document chunks | Company confidential data | TLS, provider retention controls | Local embeddings or provider disabled |
+| Dokeza to embedding provider | Document chunks and search queries | Company confidential data, query intent | TLS, server-side credentials, provider retention controls, metadata-only telemetry, keyword fallback on failure | Local deterministic embeddings or provider disabled |
 | AI orchestrator to LLM provider | Prompt, transcript excerpts, retrieved chunks where available | Meeting content, customer data, company data | TLS, server-side credentials, context minimization, provider settings, metadata-only telemetry | Local LLM, provider disabled by policy, or deterministic local/test provider |
 | Workflow service to CRM/email | Summaries, drafts, structured updates | Meeting outcomes, customer data | OAuth, TLS, approval workflow | Integration disabled |
 | Backend to telemetry | Metrics and errors | Usually non-content | Content redaction, access controls | Debug telemetry disabled by default |
