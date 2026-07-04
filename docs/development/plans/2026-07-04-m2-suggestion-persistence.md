@@ -4,6 +4,8 @@
 
 Persist completed live suggestions and their citation metadata so meeting review can show and export the AI assistance that occurred during a session.
 
+Status: implemented for completed manual live suggestions, retention-gated realtime persistence, citation metadata, meeting detail/export, and desktop meeting review display. Cost ledger storage, normalized citation rows, replay-after-process-restart semantics, and automatic trigger persistence remain follow-up slices.
+
 ## Requirements and Milestone
 
 - Milestone: M2 - Live AI Suggestions, with M1B meeting review integration.

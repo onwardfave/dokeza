@@ -330,9 +330,12 @@ Initial server error codes include:
 - `stt_provider_timeout`
 - `session_persistence_failed`
 - `transcript_persistence_failed`
+- `suggestion_persistence_failed`
 - `session_not_resumable`
 - `feature_unavailable`
 - `llm_provider_timeout`
+
+`suggestion_persistence_failed` is recoverable. The server may emit it after a `suggestion.complete` has already been delivered when durable meeting-review storage fails; clients should keep the live suggestion visible and allow normal session continuation.
 
 ### 6.8 `session.closed`
 
