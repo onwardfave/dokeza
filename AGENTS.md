@@ -33,6 +33,7 @@ Use the project-local skills in `.codex/skills/` when relevant:
 - `dokeza-verification-before-completion` for evidence-based completion claims.
 - `dokeza-provider-integration` for external provider adapters, credentials, telemetry, retries, and data-flow updates.
 - `dokeza-data-governance` for retention, deletion, no-storage, export, and sensitive-content persistence changes.
+- `dokeza-rag-source-grounding` for embeddings, retrieval, source injection, citations, retrieval evals, and source-grounded suggestion safety.
 
 ## Current Technology Decisions
 

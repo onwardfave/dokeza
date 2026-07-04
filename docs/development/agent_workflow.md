@@ -142,7 +142,7 @@ Use this matrix to decide which docs and skills to load.
 | Database, retention, deletion, export, transcript persistence | `docs/security/data_flows.md`, `docs/security/threat_model.md`, `docs/architecture/multi_tenancy.md`, `docs/architecture/failure_modes.md` | `dokeza-data-governance`, `dokeza-tdd-execution` |
 | External providers | `docs/security/data_flows.md`, `docs/security/threat_model.md`, provider ADRs, affected architecture docs | `dokeza-provider-integration`, `dokeza-data-governance` when customer content crosses provider boundary |
 | Reliability, reconnect, queues, distributed state | `docs/architecture/failure_modes.md`, `docs/testing/testing_strategy.md`, relevant property catalogs | `dokeza-reliability-testing`, `dokeza-systematic-debugging` |
-| AI prompts, retrieval, suggestions | `docs/security/threat_model.md`, `docs/testing/testing_strategy.md`, AI/retrieval architecture docs | `dokeza-data-governance`, `dokeza-provider-integration` when model providers are used |
+| AI prompts, retrieval, suggestions | `docs/security/threat_model.md`, `docs/testing/testing_strategy.md`, AI/retrieval architecture docs | `dokeza-rag-source-grounding`, `dokeza-data-governance`, `dokeza-provider-integration` when model providers are used |
 | Infrastructure, CI, release | `docs/devops/infrastructure_architecture.md`, `docs/devops/ci_cd_release.md`, `docs/security/threat_model.md` | `dokeza-implementation-planning`, provider/security skills as needed |
 
 If the user asks for a review rather than implementation, use a code-review stance: findings first, ordered by severity, with file and line references.
@@ -377,6 +377,7 @@ Record repeated process lessons here so future sessions start stronger.
 - A verified implementation without commits is still an incomplete agent handoff when commits were requested. Make the repository state durable before claiming the slice is done.
 - Broad multi-slice prompts need stricter, not looser, checkpoint discipline. Batch execution should produce a sequence of small reviewed commits and roadmap updates.
 - When an agent misses a process step, update this workflow in the same repair turn so the harness captures the lesson instead of relying on memory.
+- Source-grounded retrieval work needs one explicit checklist that couples authorization, retrieval quality, prompt safety, citations, evals, provider data flow, and retention behavior; use `dokeza-rag-source-grounding` for those slices.
 
 ## 17. Updating This Workflow
 
