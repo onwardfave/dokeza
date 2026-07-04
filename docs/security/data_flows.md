@@ -100,6 +100,14 @@ Initial cloud LLM implementation:
 - Adapter telemetry includes provider metadata, route, model, prompt template version, latency, token counts, status, and failure category only. It must not include transcript text, prompt text, generated suggestion content, raw audio bytes, document text, or API keys.
 - Suggestions from the M2 realtime path are transient unless a later governed persistence slice adds durable suggestion storage, retention, deletion, and export behavior.
 
+Initial knowledge-base implementation:
+
+- The API accepts authenticated, workspace-authorized plain-text document uploads for the M3 foundation slice.
+- Document text is chunked inside Dokeza Cloud and stored as workspace-scoped `documents` and `document_chunks` records when retention policy permits cloud persistence.
+- `live_only` and `local_only` retention modes block cloud document and chunk persistence.
+- List responses return document metadata only; authorized detail and search responses can return chunk text and source metadata.
+- Search is deterministic keyword retrieval in Dokeza Cloud for this slice. No embedding provider, reranker, object storage, or third-party knowledge provider data flow is introduced yet.
+
 ## 4. Data Flow Table
 
 | Flow | Data | Sensitive Content | Protection | Opt-Out / Policy |

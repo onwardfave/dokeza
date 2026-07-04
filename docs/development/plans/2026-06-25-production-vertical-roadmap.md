@@ -284,14 +284,16 @@ Tasks:
 
 Goal: uploaded knowledge can be retrieved and cited in live suggestions.
 
+Status: partially implemented for the foundation slice. `@dokeza/contracts` defines knowledge document upload/list/detail/search schemas with generated JSON Schema artifacts; `services/knowledge` owns deterministic text chunking plus in-memory and PostgreSQL repositories over existing workspace-scoped `documents` and `document_chunks`; `services/api` exposes authenticated workspace-authorized document and keyword-search routes. Search returns source metadata for matching chunks, list responses omit document content, and `live_only` / `local_only` retention modes block cloud document persistence. Embeddings, hybrid retrieval, reranking, full document permission evaluation, desktop/web upload UI, and source injection into live suggestions remain follow-up work.
+
 Tasks:
 
-1. Document upload and storage.
-2. Parsing and chunking.
+1. Document upload and storage. Partially done for text upload through workspace-scoped API repositories; binary file/object storage remains later.
+2. Parsing and chunking. Partially done for deterministic plain-text chunking; PDF/DOCX/HTML parsers remain later.
 3. Embeddings and pgvector storage.
 4. Hybrid retrieval and reranking.
-5. Permission-aware retrieval.
-6. Source metadata in suggestions.
+5. Permission-aware retrieval. Partially done for workspace isolation and explicit allowed-document filtering; document-level permission policy remains later.
+6. Source metadata in suggestions. Source metadata exists in knowledge search results; realtime suggestion grounding remains later.
 7. Retrieval eval set.
 
 ### Later Milestones
