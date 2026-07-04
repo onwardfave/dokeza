@@ -44,7 +44,15 @@ describe("parseConfig", () => {
           timeoutMs: 10000,
         },
       },
-      embeddings: "openai",
+      embeddings: {
+        provider: "deterministic",
+        openai: {
+          baseUrl: "https://api.openai.com/v1",
+          model: "text-embedding-3-small",
+          timeoutMs: 10000,
+          dimensions: 1536,
+        },
+      },
     });
     expect(result.config?.retentionDefaults).toEqual({
       individual: "7_days",
@@ -165,7 +173,33 @@ describe("parseConfig", () => {
     });
   });
 
-  it("defaults production LLM routing to OpenAI and fails closed without credentials", () => {
+  it("accepts explicit OpenAI embedding settings without echoing credentials", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_EMBEDDING_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-test-secret",
+        OPENAI_BASE_URL: "https://llm.example.com/v1",
+        OPENAI_EMBEDDING_MODEL: "embedding-test",
+        OPENAI_EMBEDDING_TIMEOUT_MS: "15000",
+        OPENAI_EMBEDDING_DIMENSIONS: "1536",
+      },
+      "knowledge",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.config?.providers.embeddings).toEqual({
+      provider: "openai",
+      openai: {
+        apiKey: "sk-test-secret",
+        baseUrl: "https://llm.example.com/v1",
+        model: "embedding-test",
+        timeoutMs: 15000,
+        dimensions: 1536,
+      },
+    });
+  });
+
+  it("defaults production AI routing to OpenAI and fails closed without credentials", () => {
     const result = parseConfig(
       {
         DOKEZA_ENV: "production",
@@ -180,6 +214,9 @@ describe("parseConfig", () => {
     expect(result.errors).toContain(
       "OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai.",
     );
+    expect(result.errors).toContain(
+      "OPENAI_API_KEY is required when DOKEZA_EMBEDDING_PROVIDER is openai.",
+    );
     expect(result.errors.join(" ")).not.toContain("dg_real_secret");
   });
 
@@ -193,6 +230,7 @@ describe("parseConfig", () => {
         OPENAI_API_KEY: "sk-real-secret",
         OPENAI_BASE_URL: "http://llm.example.com/v1",
         OPENAI_TIMEOUT_MS: "0",
+        DOKEZA_EMBEDDING_PROVIDER: "deterministic",
         DATABASE_URL: "postgres://dokeza:secret@db.example.com:5432/dokeza",
       },
       "realtime",
@@ -203,6 +241,27 @@ describe("parseConfig", () => {
     expect(result.errors).toContain("OPENAI_TIMEOUT_MS must be a positive integer.");
     expect(result.errors.join(" ")).not.toContain("sk-real-secret");
     expect(result.errors.join(" ")).not.toContain("dg_real_secret");
+  });
+
+  it("rejects unsafe OpenAI embedding configuration without echoing values", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_EMBEDDING_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-real-secret",
+        OPENAI_EMBEDDING_TIMEOUT_MS: "0",
+        OPENAI_EMBEDDING_DIMENSIONS: "1024",
+      },
+      "knowledge",
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      "OPENAI_EMBEDDING_TIMEOUT_MS must be a positive integer.",
+    );
+    expect(result.errors).toContain(
+      "OPENAI_EMBEDDING_DIMENSIONS must be 1536 for the current pgvector schema.",
+    );
+    expect(result.errors.join(" ")).not.toContain("sk-real-secret");
   });
 
   it("requires a Deepgram API key in production without echoing the key", () => {
@@ -224,6 +283,7 @@ describe("parseConfig", () => {
         DEEPGRAM_API_KEY: "dg_real_secret",
         DEEPGRAM_ENDPOINT: "not-a-url",
         DOKEZA_LLM_PROVIDER: "deterministic",
+        DOKEZA_EMBEDDING_PROVIDER: "deterministic",
       },
       "realtime",
     );
@@ -241,6 +301,7 @@ describe("parseConfig", () => {
         DEEPGRAM_API_KEY: "dg_real_secret",
         DEEPGRAM_ENDPOINT: "ws://stt.example.com/v1/listen",
         DOKEZA_LLM_PROVIDER: "deterministic",
+        DOKEZA_EMBEDDING_PROVIDER: "deterministic",
       },
       "realtime",
     );

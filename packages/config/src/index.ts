@@ -3,6 +3,7 @@ export type RetentionDefault = "7_days" | "30_days" | "1_year";
 export type DeepgramEncoding = "linear16";
 export type RealtimePersistenceMode = "memory" | "postgres";
 export type LlmProvider = "deterministic" | "openai";
+export type EmbeddingProvider = "deterministic" | "openai";
 
 export interface DeepgramSttConfig {
   apiKey?: string;
@@ -23,6 +24,14 @@ export interface OpenAiLlmConfig {
   baseUrl: string;
   model: string;
   timeoutMs: number;
+}
+
+export interface OpenAiEmbeddingConfig {
+  apiKey?: string;
+  baseUrl: string;
+  model: string;
+  timeoutMs: number;
+  dimensions: number;
 }
 
 export interface DokezaConfig {
@@ -53,7 +62,10 @@ export interface DokezaConfig {
       provider: LlmProvider;
       openai: OpenAiLlmConfig;
     };
-    embeddings: "openai";
+    embeddings: {
+      provider: EmbeddingProvider;
+      openai: OpenAiEmbeddingConfig;
+    };
   };
   retentionDefaults: {
     individual: RetentionDefault;
@@ -160,6 +172,17 @@ function readLlmProvider(
   return value === "deterministic" || value === "openai" ? value : undefined;
 }
 
+function readEmbeddingProvider(
+  value: string | undefined,
+  environment: EnvironmentName | undefined,
+): EmbeddingProvider | undefined {
+  if (value === undefined) {
+    return environment === "production" ? "openai" : "deterministic";
+  }
+
+  return value === "deterministic" || value === "openai" ? value : undefined;
+}
+
 function readWebSocketEndpoint(value: string | undefined): string | undefined {
   const endpoint = value ?? "wss://api.deepgram.com/v1/listen";
 
@@ -202,6 +225,11 @@ function readPositiveInteger(value: string | undefined, defaultValue: number): n
 
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function readEmbeddingDimensions(value: string | undefined): number | undefined {
+  const dimensions = readPositiveInteger(value, 1536);
+  return dimensions === 1536 ? dimensions : undefined;
 }
 
 function readSigningSecret(
@@ -298,6 +326,27 @@ function createOpenAiLlmConfig(input: {
   return config;
 }
 
+function createOpenAiEmbeddingConfig(input: {
+  apiKey: string | undefined;
+  baseUrl: string;
+  model: string;
+  timeoutMs: number;
+  dimensions: number;
+}): OpenAiEmbeddingConfig {
+  const config: OpenAiEmbeddingConfig = {
+    baseUrl: input.baseUrl,
+    model: input.model,
+    timeoutMs: input.timeoutMs,
+    dimensions: input.dimensions,
+  };
+
+  if (input.apiKey !== undefined) {
+    config.apiKey = input.apiKey;
+  }
+
+  return config;
+}
+
 export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): ConfigParseResult {
   const errors: string[] = [];
   const environment = readEnvironment(env.DOKEZA_ENV);
@@ -335,6 +384,13 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   const openAiBaseUrl = readHttpEndpoint(env.OPENAI_BASE_URL, "https://api.openai.com/v1");
   const openAiModel = readRequiredString(env.OPENAI_MODEL, "gpt-4.1-mini");
   const openAiTimeoutMs = readPositiveInteger(env.OPENAI_TIMEOUT_MS, 10000);
+  const embeddingProvider = readEmbeddingProvider(env.DOKEZA_EMBEDDING_PROVIDER, environment);
+  const openAiEmbeddingModel = readRequiredString(
+    env.OPENAI_EMBEDDING_MODEL,
+    "text-embedding-3-small",
+  );
+  const openAiEmbeddingTimeoutMs = readPositiveInteger(env.OPENAI_EMBEDDING_TIMEOUT_MS, 10000);
+  const openAiEmbeddingDimensions = readEmbeddingDimensions(env.OPENAI_EMBEDDING_DIMENSIONS);
   const realtimePersistence = readRealtimePersistenceMode(
     env.DOKEZA_REALTIME_PERSISTENCE,
     environment,
@@ -440,6 +496,15 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   if (llmProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) {
     errors.push("OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai.");
   }
+  if (embeddingProvider === undefined) {
+    errors.push("DOKEZA_EMBEDDING_PROVIDER must be deterministic or openai.");
+  }
+  if (
+    embeddingProvider === "openai" &&
+    (openAiApiKey === undefined || openAiApiKey.length === 0)
+  ) {
+    errors.push("OPENAI_API_KEY is required when DOKEZA_EMBEDDING_PROVIDER is openai.");
+  }
   if (openAiBaseUrl === undefined) {
     errors.push("OPENAI_BASE_URL must be an absolute http or https URL.");
   }
@@ -454,6 +519,15 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   }
   if (openAiTimeoutMs === undefined) {
     errors.push("OPENAI_TIMEOUT_MS must be a positive integer.");
+  }
+  if (openAiEmbeddingModel === undefined) {
+    errors.push("OPENAI_EMBEDDING_MODEL is required.");
+  }
+  if (openAiEmbeddingTimeoutMs === undefined) {
+    errors.push("OPENAI_EMBEDDING_TIMEOUT_MS must be a positive integer.");
+  }
+  if (openAiEmbeddingDimensions === undefined) {
+    errors.push("OPENAI_EMBEDDING_DIMENSIONS must be 1536 for the current pgvector schema.");
   }
   if (realtimePersistence === undefined) {
     errors.push("DOKEZA_REALTIME_PERSISTENCE must be memory or postgres.");
@@ -497,12 +571,18 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     deepgramChannels === undefined ||
     deepgramTimeoutMs === undefined ||
     llmProvider === undefined ||
+    embeddingProvider === undefined ||
     openAiBaseUrl === undefined ||
     openAiModel === undefined ||
     openAiTimeoutMs === undefined ||
+    openAiEmbeddingModel === undefined ||
+    openAiEmbeddingTimeoutMs === undefined ||
+    openAiEmbeddingDimensions === undefined ||
     realtimePersistence === undefined ||
     databasePoolMax === undefined ||
     (llmProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
+    (embeddingProvider === "openai" &&
+      (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
     (realtimePersistence === "postgres" && databaseUrl === undefined)
   ) {
     return { ok: false, errors };
@@ -559,7 +639,17 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
             timeoutMs: openAiTimeoutMs,
           }),
         },
-        embeddings: "openai",
+        embeddings: {
+          provider: embeddingProvider,
+          openai: createOpenAiEmbeddingConfig({
+            apiKey:
+              openAiApiKey !== undefined && openAiApiKey.length > 0 ? openAiApiKey : undefined,
+            baseUrl: openAiBaseUrl,
+            model: openAiEmbeddingModel,
+            timeoutMs: openAiEmbeddingTimeoutMs,
+            dimensions: openAiEmbeddingDimensions,
+          }),
+        },
       },
       retentionDefaults: {
         individual: "7_days",
