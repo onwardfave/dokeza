@@ -22,6 +22,15 @@ const AudioGapReason = Type.Union([
   Type.Literal("device_unavailable"),
 ]);
 
+const SuggestionKind = Type.Union([
+  Type.Literal("answer_question"),
+  Type.Literal("summarize_so_far"),
+  Type.Literal("suggest_follow_up"),
+  Type.Literal("objection_response"),
+]);
+
+const Confidence = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]);
+
 export const MeetingSummarySchema = Type.Object({
   meeting_id: Type.String({ minLength: 1 }),
   workspace_id: Type.String({ minLength: 1 }),
@@ -51,6 +60,25 @@ export const MeetingTranscriptGapSchema = Type.Object({
   reason: AudioGapReason,
 });
 
+export const MeetingSuggestionSourceSchema = Type.Object({
+  document_id: Type.String({ minLength: 1 }),
+  title: Type.String(),
+  chunk_id: Type.String({ minLength: 1 }),
+});
+
+export const MeetingSuggestionSchema = Type.Object({
+  suggestion_id: Type.String({ minLength: 1 }),
+  request_id: Type.Optional(Type.String({ minLength: 1 })),
+  kind: SuggestionKind,
+  content: Type.String(),
+  sources: Type.Array(MeetingSuggestionSourceSchema),
+  confidence: Confidence,
+  prompt_version: Type.String({ minLength: 1 }),
+  model: Type.String({ minLength: 1 }),
+  server_seq: Type.Optional(Type.Number({ minimum: 0 })),
+  created_at: Type.Optional(IsoTimestamp),
+});
+
 export const MeetingHistoryResponseSchema = Type.Object({
   workspace_id: Type.String({ minLength: 1 }),
   meetings: Type.Array(MeetingSummarySchema),
@@ -62,6 +90,7 @@ export const MeetingDetailResponseSchema = Type.Object({
     segments: Type.Array(MeetingTranscriptSegmentSchema),
     gaps: Type.Array(MeetingTranscriptGapSchema),
   }),
+  suggestions: Type.Array(MeetingSuggestionSchema),
 });
 
 export const MeetingExportResponseSchema = Type.Object({
@@ -93,6 +122,8 @@ export const MeetingApiErrorResponseSchema = Type.Object({
 export type MeetingSummary = Static<typeof MeetingSummarySchema>;
 export type MeetingTranscriptSegment = Static<typeof MeetingTranscriptSegmentSchema>;
 export type MeetingTranscriptGap = Static<typeof MeetingTranscriptGapSchema>;
+export type MeetingSuggestionSource = Static<typeof MeetingSuggestionSourceSchema>;
+export type MeetingSuggestion = Static<typeof MeetingSuggestionSchema>;
 export type MeetingHistoryResponse = Static<typeof MeetingHistoryResponseSchema>;
 export type MeetingDetailResponse = Static<typeof MeetingDetailResponseSchema>;
 export type MeetingExportResponse = Static<typeof MeetingExportResponseSchema>;
@@ -103,6 +134,8 @@ export const meetingJsonSchemas = {
   "meeting-summary": MeetingSummarySchema,
   "meeting-transcript-segment": MeetingTranscriptSegmentSchema,
   "meeting-transcript-gap": MeetingTranscriptGapSchema,
+  "meeting-suggestion-source": MeetingSuggestionSourceSchema,
+  "meeting-suggestion": MeetingSuggestionSchema,
   "meeting-history-response": MeetingHistoryResponseSchema,
   "meeting-detail-response": MeetingDetailResponseSchema,
   "meeting-export-response": MeetingExportResponseSchema,

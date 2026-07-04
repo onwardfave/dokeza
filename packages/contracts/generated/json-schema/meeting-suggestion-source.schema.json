@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": [
+    "document_id",
+    "title",
+    "chunk_id"
+  ],
+  "properties": {
+    "document_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "chunk_id": {
+      "minLength": 1,
+      "type": "string"
+    }
+  }
+}

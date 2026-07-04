@@ -2,7 +2,8 @@
   "type": "object",
   "required": [
     "meeting",
-    "transcript"
+    "transcript",
+    "suggestions"
   ],
   "properties": {
     "meeting": {
@@ -183,6 +184,110 @@
                 ]
               }
             }
+          }
+        }
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "suggestion_id",
+          "kind",
+          "content",
+          "sources",
+          "confidence",
+          "prompt_version",
+          "model"
+        ],
+        "properties": {
+          "suggestion_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "request_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "answer_question",
+                "type": "string"
+              },
+              {
+                "const": "summarize_so_far",
+                "type": "string"
+              },
+              {
+                "const": "suggest_follow_up",
+                "type": "string"
+              },
+              {
+                "const": "objection_response",
+                "type": "string"
+              }
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "document_id",
+                "title",
+                "chunk_id"
+              ],
+              "properties": {
+                "document_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "chunk_id": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "const": "low",
+                "type": "string"
+              },
+              {
+                "const": "medium",
+                "type": "string"
+              },
+              {
+                "const": "high",
+                "type": "string"
+              }
+            ]
+          },
+          "prompt_version": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "model": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "server_seq": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "created_at": {
+            "description": "ISO 8601 timestamp",
+            "type": "string"
           }
         }
       }
