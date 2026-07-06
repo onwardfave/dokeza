@@ -44,6 +44,12 @@ Use the project-local skills in `.codex/skills/` when relevant:
 - Infrastructure: Terraform-first.
 - Realtime transport: WebSocket over TLS.
 
+## Current Execution Gate
+
+- Near-term work follows `docs/development/plans/2026-07-06-production-alpha-gate.md`.
+- The active bottleneck is Alpha.1 production auth and onboarding, then desktop productization, native microphone stream hardening, M2 usage guardrails, alpha E2E verification, and knowledge upload UI.
+- Hosted identity is implemented through a provider-neutral OIDC/JWKS verification boundary at the API service; Dokeza-owned workspace membership remains authoritative.
+
 ## Hard Rules
 
 - Keep workspace isolation explicit in every data access path.

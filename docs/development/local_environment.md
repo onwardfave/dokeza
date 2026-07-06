@@ -69,6 +69,23 @@ Default local auth settings:
 
 Production-like environments require `DOKEZA_AUTH_SIGNING_SECRET` and reject `DOKEZA_DEV_AUTH_ENABLED=true`.
 
+Hosted provider auth can be enabled for staging or production-alpha API testing with:
+
+```powershell
+$env:DOKEZA_HOSTED_AUTH_ENABLED = "true"
+$env:DOKEZA_HOSTED_AUTH_ISSUER = "https://idp.example.com/"
+$env:DOKEZA_HOSTED_AUTH_AUDIENCE = "dokeza-api"
+$env:DOKEZA_HOSTED_AUTH_JWKS_URL = "https://idp.example.com/.well-known/jwks.json"
+```
+
+When hosted auth is enabled, the API accepts provider tokens only at:
+
+```text
+POST /v1/auth/provider/exchange
+```
+
+The exchange verifies the provider token and returns a Dokeza API token plus Dokeza-owned workspace memberships. Realtime and resource APIs continue to require Dokeza-issued API or realtime tokens. Development auth is not a production fallback.
+
 Request a synthetic local API token:
 
 ```powershell

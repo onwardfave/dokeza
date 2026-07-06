@@ -13,6 +13,10 @@ describe("parseConfig", () => {
       apiTokenTtlSeconds: 3600,
       realtimeTokenTtlSeconds: 300,
       developmentAuthEnabled: true,
+      hostedProvider: {
+        enabled: false,
+        jwksCacheTtlSeconds: 300,
+      },
     });
     expect(result.config?.telemetry).toEqual({
       enabled: true,
@@ -112,6 +116,32 @@ describe("parseConfig", () => {
       apiTokenTtlSeconds: 7200,
       realtimeTokenTtlSeconds: 120,
       developmentAuthEnabled: false,
+      hostedProvider: {
+        enabled: false,
+        jwksCacheTtlSeconds: 300,
+      },
+    });
+  });
+
+  it("accepts hosted auth provider settings", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_HOSTED_AUTH_ENABLED: "true",
+        DOKEZA_HOSTED_AUTH_ISSUER: "https://idp.example.com/",
+        DOKEZA_HOSTED_AUTH_AUDIENCE: "dokeza-api",
+        DOKEZA_HOSTED_AUTH_JWKS_URL: "https://idp.example.com/.well-known/jwks.json",
+        DOKEZA_HOSTED_AUTH_JWKS_CACHE_TTL_SECONDS: "600",
+      },
+      "api",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.config?.auth.hostedProvider).toEqual({
+      enabled: true,
+      issuer: "https://idp.example.com/",
+      audience: "dokeza-api",
+      jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+      jwksCacheTtlSeconds: 600,
     });
   });
 
@@ -204,6 +234,9 @@ describe("parseConfig", () => {
       {
         DOKEZA_ENV: "production",
         DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
+        DOKEZA_HOSTED_AUTH_ISSUER: "https://idp.example.com/",
+        DOKEZA_HOSTED_AUTH_AUDIENCE: "dokeza-api",
+        DOKEZA_HOSTED_AUTH_JWKS_URL: "https://idp.example.com/.well-known/jwks.json",
         DEEPGRAM_API_KEY: "dg_real_secret",
         DATABASE_URL: "postgres://dokeza:secret@db.example.com:5432/dokeza",
       },
@@ -225,6 +258,9 @@ describe("parseConfig", () => {
       {
         DOKEZA_ENV: "production",
         DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
+        DOKEZA_HOSTED_AUTH_ISSUER: "https://idp.example.com/",
+        DOKEZA_HOSTED_AUTH_AUDIENCE: "dokeza-api",
+        DOKEZA_HOSTED_AUTH_JWKS_URL: "https://idp.example.com/.well-known/jwks.json",
         DEEPGRAM_API_KEY: "dg_real_secret",
         DOKEZA_LLM_PROVIDER: "openai",
         OPENAI_API_KEY: "sk-real-secret",
@@ -296,6 +332,9 @@ describe("parseConfig", () => {
       {
         DOKEZA_ENV: "production",
         DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
+        DOKEZA_HOSTED_AUTH_ISSUER: "https://idp.example.com/",
+        DOKEZA_HOSTED_AUTH_AUDIENCE: "dokeza-api",
+        DOKEZA_HOSTED_AUTH_JWKS_URL: "https://idp.example.com/.well-known/jwks.json",
         DEEPGRAM_API_KEY: "dg_real_secret",
         DEEPGRAM_ENDPOINT: "ws://stt.example.com/v1/listen",
         DOKEZA_LLM_PROVIDER: "deterministic",
@@ -370,6 +409,34 @@ describe("parseConfig", () => {
     expect(result.errors).toContain(
       "DOKEZA_TELEMETRY_CONTENT_LOGGING_ALLOWED cannot be true in production.",
     );
+  });
+
+  it("requires hosted auth settings in production without echoing provider values", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_ENV: "production",
+        DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
+        DOKEZA_HOSTED_AUTH_JWKS_URL: "http://idp.example.com/jwks",
+        DEEPGRAM_API_KEY: "dg_real_secret",
+        DOKEZA_LLM_PROVIDER: "deterministic",
+        DOKEZA_EMBEDDING_PROVIDER: "deterministic",
+        DATABASE_URL: "postgres://dokeza:secret@db.example.com:5432/dokeza",
+      },
+      "api",
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      "DOKEZA_HOSTED_AUTH_ISSUER is required when hosted auth is enabled.",
+    );
+    expect(result.errors).toContain(
+      "DOKEZA_HOSTED_AUTH_AUDIENCE is required when hosted auth is enabled.",
+    );
+    expect(result.errors).toContain(
+      "DOKEZA_HOSTED_AUTH_JWKS_URL must use https when hosted auth is enabled.",
+    );
+    expect(result.errors.join(" ")).not.toContain("idp.example.com");
+    expect(result.errors.join(" ")).not.toContain("dg_real_secret");
   });
 
   it("rejects invalid auth TTLs and short secrets without echoing values", () => {

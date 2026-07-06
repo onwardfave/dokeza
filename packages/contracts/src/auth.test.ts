@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   validateAuthTokenClaims,
   validateDevAuthTokenRequest,
+  validateProviderAuthExchangeRequest,
   validateRealtimeTokenRequest,
 } from "./auth.js";
 
@@ -44,5 +45,15 @@ describe("auth contracts", () => {
 
   it("accepts an empty development auth request for defaults", () => {
     expect(validateDevAuthTokenRequest({})).toBe(true);
+  });
+
+  it("accepts provider auth exchange requests", () => {
+    expect(
+      validateProviderAuthExchangeRequest({
+        provider_token: "provider.jwt",
+        device_id: "dev_1",
+      }),
+    ).toBe(true);
+    expect(validateProviderAuthExchangeRequest({ provider_token: "" })).toBe(false);
   });
 });

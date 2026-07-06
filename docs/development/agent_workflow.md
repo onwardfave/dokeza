@@ -122,8 +122,9 @@ The agent must be able to recover from a lost session by reading a small set of 
 For Dokeza, the canonical state is:
 
 1. The roadmap: `docs/development/plans/2026-06-25-production-vertical-roadmap.md`.
-2. The active slice plan under `docs/development/plans/`.
-3. Git history and worktree state.
+2. The active execution gate: `docs/development/plans/2026-07-06-production-alpha-gate.md` while production alpha is in progress.
+3. The active slice plan under `docs/development/plans/`.
+4. Git history and worktree state.
 
 Use these instead of introducing ad hoc progress files by default. Add a temporary progress file only when a slice genuinely cannot be recovered from roadmap, plan, and git state.
 
@@ -378,6 +379,8 @@ Record repeated process lessons here so future sessions start stronger.
 - Broad multi-slice prompts need stricter, not looser, checkpoint discipline. Batch execution should produce a sequence of small reviewed commits and roadmap updates.
 - When an agent misses a process step, update this workflow in the same repair turn so the harness captures the lesson instead of relying on memory.
 - Source-grounded retrieval work needs one explicit checklist that couples authorization, retrieval quality, prompt safety, citations, evals, provider data flow, and retention behavior; use `dokeza-rag-source-grounding` for those slices.
+- Production alpha work starts from `docs/development/plans/2026-07-06-production-alpha-gate.md`; do not widen into billing, broad admin governance, CRM/email writeback, analytics, role packs, full macOS product support, or local-first processing until the alpha gate is reliable.
+- Hosted identity provider tokens belong at the API exchange boundary only. Realtime, meeting review, knowledge, and other resource APIs should continue to accept Dokeza-issued tokens, with workspace membership resolved through Dokeza-owned identity state.
 
 ## 17. Updating This Workflow
 

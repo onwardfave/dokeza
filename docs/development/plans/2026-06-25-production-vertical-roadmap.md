@@ -59,12 +59,13 @@ Implemented foundation:
 - Bounded native default-microphone capture can produce protocol-compatible mono 16 kHz PCM chunks and feed them into the desktop realtime client.
 - Auth architecture baseline exists for hosted identity, Dokeza-owned workspace membership, and short-lived realtime session tokens.
 - Development-only auth token path exists: the API can issue synthetic API tokens, exchange them for short-lived workspace-scoped realtime tokens, realtime validates token purpose/workspace/device context, and the desktop can request local dev realtime tokens.
+- Production auth foundation has started: the API can verify hosted provider tokens through a provider-neutral OIDC/JWKS boundary at `POST /v1/auth/provider/exchange`, resolve Dokeza-owned workspace memberships through an injectable identity repository, and issue short-lived Dokeza API tokens. The desktop auth API client can call that exchange route.
 - Local development PostgreSQL and pgvector stack.
 
 Key gaps:
 
 - Continuous desktop audio capture still uses repeated bounded native capture windows; long-lived native streaming and system-audio capture remain.
-- No implemented hosted auth provider, durable user/workspace provisioning, or production onboarding flow.
+- Hosted auth is only partially implemented. Provider-token verification and API exchange exist, but hosted IdP vendor selection, desktop redirect/SDK flow, durable PostgreSQL user/workspace provisioning, secure desktop token storage, and production onboarding UI remain.
 - Reconnect/resume is implemented for in-process realtime recovery with original session reattachment, final-transcript replay by server sequence, and safe invalid-resume failure behavior; durable replay after realtime process restart still needs persisted server-sequence metadata.
 - Live transcript and meeting review UI exist for local/dev verticals but need production onboarding, hosted auth, and product polish.
 - Manual live suggestion streaming exists; source grounding for manual requests can now use hybrid keyword/vector retrieval; completed suggestions and citation metadata persist into meeting review when retention permits. Automatic triggers, debounce/rate limits, cost ledger storage, reranking, and eval datasets remain.

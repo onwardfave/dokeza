@@ -89,6 +89,15 @@ Initial cloud STT implementation:
 - Adapter telemetry includes provider metadata, chunk timing, stream name, event counts, and failure categories only. It must not include transcript text, raw audio bytes, prompts, documents, suggestions, or API keys.
 - Automated tests use a fake provider transport and must not call the live Deepgram service.
 
+Initial hosted auth implementation:
+
+- The API service accepts hosted identity provider tokens only at `POST /v1/auth/provider/exchange`.
+- The API verifies configured issuer, audience, expiration, RS256 signature, and JWKS key ID through a provider-neutral OIDC/JWKS verifier.
+- Hosted provider tokens are not accepted by realtime, meeting review, knowledge, or other resource APIs.
+- After verification, the API resolves the provider subject through Dokeza-owned user/workspace membership state and issues a short-lived Dokeza API token.
+- The development-only HMAC token issuer remains available only in local/test-enabled environments and is not a production fallback.
+- Provider tokens, Dokeza API tokens, realtime tokens, and refresh tokens must not be logged, stored in diagnostics, or emitted in telemetry.
+
 Initial cloud LLM implementation:
 
 - The realtime service routes manual `suggestion.request` messages to the AI orchestrator.
@@ -117,6 +126,7 @@ Initial knowledge-base implementation:
 | Flow | Data | Sensitive Content | Protection | Opt-Out / Policy |
 | --- | --- | --- | --- | --- |
 | Desktop/API to identity provider | Login redirects, provider tokens, profile identifiers | Account identity, email, auth metadata | TLS, hosted IdP controls, short-lived tokens, secure local token storage | Required for cloud account usage; local-only future mode may differ |
+| Desktop to API auth exchange | Hosted provider token, optional device ID | Account identity, bearer token | TLS, provider token verification, Dokeza-owned membership resolution, metadata-only errors | Sign out; revoke provider session |
 | API to desktop | Workspace list, user profile, short-lived realtime token | Account identity, workspace membership, bearer token | TLS, token TTL, platform secure storage, redacted diagnostics | Sign out; revoke sessions |
 | Device to realtime service | Audio chunks | Voice, meeting content, PII | TLS, session token, retention policy | Disable capture; local mode where supported |
 | Device to context service | Screen text, active window metadata | Visible documents, customer data, secrets | TLS, redaction, permission prompt | Disable screen context |

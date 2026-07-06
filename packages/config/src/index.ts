@@ -46,6 +46,13 @@ export interface DokezaConfig {
     apiTokenTtlSeconds: number;
     realtimeTokenTtlSeconds: number;
     developmentAuthEnabled: boolean;
+    hostedProvider: {
+      enabled: boolean;
+      issuer?: string;
+      audience?: string;
+      jwksUrl?: string;
+      jwksCacheTtlSeconds: number;
+    };
   };
   telemetry: {
     enabled: boolean;
@@ -259,6 +266,17 @@ function readDevelopmentAuthEnabled(
   return readBoolean(value, false);
 }
 
+function readHostedAuthEnabled(
+  value: string | undefined,
+  environment: EnvironmentName | undefined,
+): boolean | undefined {
+  if (value === undefined) {
+    return environment === "production" || environment === "staging";
+  }
+
+  return readBoolean(value, false);
+}
+
 function readPostgresUrl(value: string | undefined): string | undefined {
   if (value === undefined || value.trim().length === 0) {
     return undefined;
@@ -368,6 +386,14 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     env.DOKEZA_DEV_AUTH_ENABLED,
     environment,
   );
+  const hostedAuthEnabled = readHostedAuthEnabled(env.DOKEZA_HOSTED_AUTH_ENABLED, environment);
+  const hostedAuthIssuer = readRequiredString(env.DOKEZA_HOSTED_AUTH_ISSUER, "");
+  const hostedAuthAudience = readRequiredString(env.DOKEZA_HOSTED_AUTH_AUDIENCE, "");
+  const hostedAuthJwksUrl = readHttpEndpoint(env.DOKEZA_HOSTED_AUTH_JWKS_URL, "");
+  const hostedAuthJwksCacheTtlSeconds = readPositiveInteger(
+    env.DOKEZA_HOSTED_AUTH_JWKS_CACHE_TTL_SECONDS,
+    300,
+  );
   const deepgramApiKey = env.DEEPGRAM_API_KEY?.trim();
   const deepgramEndpoint = readWebSocketEndpoint(env.DEEPGRAM_ENDPOINT);
   const deepgramModel = readRequiredString(env.DEEPGRAM_MODEL, "nova-3");
@@ -440,6 +466,9 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   if (developmentAuthEnabled === undefined) {
     errors.push("DOKEZA_DEV_AUTH_ENABLED must be true or false.");
   }
+  if (hostedAuthEnabled === undefined) {
+    errors.push("DOKEZA_HOSTED_AUTH_ENABLED must be true or false.");
+  }
   if (
     developmentAuthEnabled === true &&
     environment !== undefined &&
@@ -447,6 +476,25 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     environment !== "test"
   ) {
     errors.push("DOKEZA_DEV_AUTH_ENABLED can only be true in local or test.");
+  }
+  if (hostedAuthEnabled === true) {
+    if (hostedAuthIssuer === undefined) {
+      errors.push("DOKEZA_HOSTED_AUTH_ISSUER is required when hosted auth is enabled.");
+    }
+    if (hostedAuthAudience === undefined) {
+      errors.push("DOKEZA_HOSTED_AUTH_AUDIENCE is required when hosted auth is enabled.");
+    }
+    if (hostedAuthJwksUrl === undefined) {
+      errors.push("DOKEZA_HOSTED_AUTH_JWKS_URL is required when hosted auth is enabled.");
+    } else {
+      const parsedHostedAuthJwksUrl = new URL(hostedAuthJwksUrl);
+      if (parsedHostedAuthJwksUrl.protocol !== "https:") {
+        errors.push("DOKEZA_HOSTED_AUTH_JWKS_URL must use https when hosted auth is enabled.");
+      }
+    }
+  }
+  if (hostedAuthJwksCacheTtlSeconds === undefined) {
+    errors.push("DOKEZA_HOSTED_AUTH_JWKS_CACHE_TTL_SECONDS must be a positive integer.");
   }
   if (
     environment === "production" &&
@@ -557,6 +605,12 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     apiTokenTtlSeconds === undefined ||
     realtimeTokenTtlSeconds === undefined ||
     developmentAuthEnabled === undefined ||
+    hostedAuthEnabled === undefined ||
+    hostedAuthJwksCacheTtlSeconds === undefined ||
+    (hostedAuthEnabled === true &&
+      (hostedAuthIssuer === undefined ||
+        hostedAuthAudience === undefined ||
+        hostedAuthJwksUrl === undefined)) ||
     deepgramEndpoint === undefined ||
     deepgramModel === undefined ||
     deepgramLanguage === undefined ||
@@ -598,6 +652,13 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
         apiTokenTtlSeconds,
         realtimeTokenTtlSeconds,
         developmentAuthEnabled,
+        hostedProvider: {
+          enabled: hostedAuthEnabled,
+          ...(hostedAuthIssuer === undefined ? {} : { issuer: hostedAuthIssuer }),
+          ...(hostedAuthAudience === undefined ? {} : { audience: hostedAuthAudience }),
+          ...(hostedAuthJwksUrl === undefined ? {} : { jwksUrl: hostedAuthJwksUrl }),
+          jwksCacheTtlSeconds: hostedAuthJwksCacheTtlSeconds,
+        },
       },
       telemetry: {
         enabled: telemetryEnabled,

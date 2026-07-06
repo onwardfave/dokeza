@@ -1,10 +1,16 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
-import { createDokezaAuthTokenService, type DokezaAuthTokenService } from "@dokeza/auth";
+import {
+  createDokezaAuthTokenService,
+  OidcJwtProviderVerifier,
+  type DokezaAuthTokenService,
+  type ProviderTokenValidationResult,
+} from "@dokeza/auth";
 import { authorizeWorkspace, type Actor, type WorkspaceRole } from "@dokeza/authz";
 import { parseConfig, type DokezaConfig } from "@dokeza/config";
 import {
   validateDevAuthTokenRequest,
   validateKnowledgeDocumentUploadRequest,
+  validateProviderAuthExchangeRequest,
   validateRealtimeTokenRequest,
   type DevAuthTokenRequest,
 } from "@dokeza/contracts";
@@ -21,12 +27,19 @@ import {
   type MeetingReviewPersistence,
   type MeetingReviewRepository,
 } from "./meeting-review-repository.js";
+import { InMemoryIdentityRepository, type IdentityRepository } from "./identity-repository.js";
+
+export interface ProviderVerifier {
+  verify(token: string): Promise<ProviderTokenValidationResult>;
+}
 
 export interface HttpServerOptions {
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
   meetingRepository?: MeetingReviewRepository;
   knowledgeRepository?: KnowledgeRepository;
+  identityRepository?: IdentityRepository;
+  providerVerifier?: ProviderVerifier;
 }
 
 export interface HttpServerHandle {
@@ -143,6 +156,10 @@ function workspaceName(workspaceId: string): string {
   return `Development Workspace ${workspaceId}`;
 }
 
+function workspaceDisplayName(workspaceId: string, developmentOnly: boolean): string {
+  return developmentOnly ? workspaceName(workspaceId) : workspaceId;
+}
+
 interface MeetingRouteMatch {
   workspaceId: string;
   meetingId?: string;
@@ -246,6 +263,22 @@ function sendKnowledgeError(res: ServerResponse, err: unknown): void {
   sendJson(res, 503, { error: "service_unavailable" });
 }
 
+function createProviderVerifier(config: DokezaConfig): ProviderVerifier | undefined {
+  if (!config.auth.hostedProvider.enabled) {
+    return undefined;
+  }
+  const { issuer, audience, jwksUrl } = config.auth.hostedProvider;
+  if (issuer === undefined || audience === undefined || jwksUrl === undefined) {
+    return undefined;
+  }
+
+  return new OidcJwtProviderVerifier({
+    issuer,
+    audience,
+    jwksUrl,
+  });
+}
+
 function handleHealth(req: IncomingMessage, res: ServerResponse, env: NodeJS.ProcessEnv): void {
   if (req.method !== "GET") {
     methodNotAllowed(res);
@@ -265,6 +298,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
   const now = options.now ?? (() => new Date());
   let managedMeetingPersistence: MeetingReviewPersistence | undefined;
   let managedKnowledgePersistence: KnowledgePersistence | undefined;
+  const identityRepository = options.identityRepository ?? new InMemoryIdentityRepository();
 
   function getMeetingRepository(config: DokezaConfig): MeetingReviewRepository {
     if (options.meetingRepository !== undefined) {
@@ -342,6 +376,64 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
       return;
     }
 
+    if (url.pathname === "/v1/auth/provider/exchange") {
+      if (req.method !== "POST") {
+        methodNotAllowed(res);
+        return;
+      }
+
+      const providerVerifier = options.providerVerifier ?? createProviderVerifier(runtime.config);
+      if (providerVerifier === undefined) {
+        sendJson(res, 403, { error: "auth_provider_unavailable" });
+        return;
+      }
+
+      void readJsonBody(req)
+        .then(async (body) => {
+          if (!validateProviderAuthExchangeRequest(body)) {
+            sendJson(res, 400, { error: "invalid_request" });
+            return;
+          }
+
+          const providerValidation = await providerVerifier.verify(body.provider_token);
+          if (!providerValidation.ok) {
+            sendJson(res, 401, { error: "auth_invalid" });
+            return;
+          }
+
+          const principal = await identityRepository.resolveProviderIdentity(
+            providerValidation.identity,
+          );
+          const token = runtime.tokenService.issueToken({
+            actor: principal.actor,
+            purpose: "api_access",
+            expiresInSeconds: runtime.config.auth.apiTokenTtlSeconds,
+            developmentOnly: false,
+            ...(body.device_id === undefined ? {} : { deviceId: body.device_id }),
+          });
+
+          sendJson(res, 200, {
+            token,
+            token_type: "Bearer",
+            expires_at: expiresAt(now(), runtime.config.auth.apiTokenTtlSeconds),
+            user: {
+              user_id: principal.actor.userId,
+              display_name: principal.displayName,
+              development_only: false,
+            },
+            workspaces: principal.actor.memberships
+              .filter((membership) => membership.userId === principal.actor.userId)
+              .map((membership) => ({
+                workspace_id: membership.workspaceId,
+                name: workspaceDisplayName(membership.workspaceId, false),
+                role: membership.role,
+              })),
+          });
+        })
+        .catch(() => sendJson(res, 400, { error: "invalid_request" }));
+      return;
+    }
+
     if (url.pathname === "/v1/me") {
       if (req.method !== "GET") {
         methodNotAllowed(res);
@@ -381,7 +473,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
           .filter((membership) => membership.userId === auth.actor.userId)
           .map((membership) => ({
             workspace_id: membership.workspaceId,
-            name: workspaceName(membership.workspaceId),
+            name: workspaceDisplayName(membership.workspaceId, auth.developmentOnly),
             role: membership.role,
           })),
       });

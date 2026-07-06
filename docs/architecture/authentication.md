@@ -13,11 +13,11 @@ For M1A local development, Dokeza includes a development-only HMAC token issuer 
 The internal Dokeza boundary is:
 
 - The desktop client receives user authentication through the provider's supported desktop/browser flow.
-- The API service exchanges or validates provider credentials and issues short-lived Dokeza session tokens where needed.
+- The API service validates hosted-provider ID/access tokens at `/v1/auth/provider/exchange` and issues short-lived Dokeza API tokens where needed.
 - The realtime service validates Dokeza session tokens before accepting `auth.hello`.
 - Workspace membership and role checks remain Dokeza-owned and are enforced by backend authorization code and PostgreSQL RLS.
 
-Provider choices can include Clerk, Auth0, Supabase Auth, or an equivalent hosted IdP. The final choice must satisfy the requirements in this document before implementation.
+Provider choices can include Clerk, Auth0, Supabase Auth, or an equivalent hosted IdP. The first implementation uses a provider-neutral OIDC/JWKS verification boundary so the vendor can be selected without changing desktop, REST, or realtime contracts. The final vendor choice must satisfy the requirements in this document before production alpha.
 
 ## 3. Identity Model
 
@@ -29,6 +29,8 @@ Provider choices can include Clerk, Auth0, Supabase Auth, or an equivalent hoste
 | Realtime session token | Dokeza | Short-lived token scoped to user, workspace, device, and session-start intent. |
 | Development API token | Dokeza local/test only | Synthetic token for local M1A testing; unavailable outside local/test config. |
 | Refresh token | Hosted IdP | Stored only through provider-supported secure desktop/browser mechanisms. |
+
+Hosted provider tokens are not accepted directly by realtime or resource APIs. They are accepted only by the API exchange endpoint, verified against configured issuer, audience, expiration, RS256 signature, and JWKS key ID, then mapped to a Dokeza-owned user/workspace membership record before a Dokeza API token is issued.
 
 ## 4. Token Requirements
 
@@ -50,9 +52,10 @@ Development tokens are signed with `DOKEZA_AUTH_SIGNING_SECRET`; local/test envi
 1. User starts sign-in from the desktop app.
 2. Desktop opens the hosted IdP flow using the OS browser or approved embedded flow.
 3. Desktop receives the provider completion signal using a secure redirect or provider SDK mechanism.
-4. Desktop calls the API service to list authorized workspaces and select one.
-5. Desktop requests a short-lived realtime session token for the selected workspace.
-6. Desktop sends that token in `auth.hello` over WSS.
+4. Desktop sends the provider token to `POST /v1/auth/provider/exchange`.
+5. API verifies the provider token and returns a Dokeza API token plus authorized workspaces from Dokeza-owned membership state.
+6. Desktop selects a workspace and requests a short-lived realtime session token for that workspace.
+7. Desktop sends that realtime token in `auth.hello` over WSS.
 
 Tokens stored on device must use platform secure storage where available. Logs, diagnostics, and telemetry must never include token values.
 
@@ -60,16 +63,17 @@ Tokens stored on device must use platform secure storage where available. Logs, 
 
 | Service | Responsibility |
 | --- | --- |
-| API service | Provider token verification, workspace listing, workspace selection, realtime token issuance, user profile endpoints. |
+| API service | Provider token verification, provider-to-Dokeza token exchange, workspace listing, workspace selection, realtime token issuance, user profile endpoints. |
 | Realtime service | Realtime token validation, workspace/user/session binding, recoverable auth failures, no provider refresh logic. |
 | Database package | Workspace-scoped transactions with RLS using the selected workspace ID. |
 | Authz package | Membership and role checks shared by API, realtime, and future services. |
-| Auth package | Dokeza token signing/validation for internal API and realtime token boundaries. |
+| Auth package | Dokeza token signing/validation for internal API/realtime token boundaries, plus provider-neutral OIDC/JWKS token verification for the API exchange boundary. |
 
 ## 7. Failure and Degraded Behavior
 
 - If the hosted IdP is unreachable during sign-in, desktop shows sign-in unavailable and does not start a session.
 - If the API cannot issue a realtime token, desktop keeps the user signed in but marks live sessions unavailable.
+- If provider-token exchange fails, desktop shows sign-in unavailable or retryable auth failure and does not fall back to development tokens.
 - If a realtime token expires before session start, desktop requests a new token.
 - If a token expires during an active realtime connection, the session may continue until the server policy requires renewal; reconnect must obtain a fresh token before `resume.request`.
 - If workspace membership cannot be verified, access fails closed.
@@ -87,6 +91,7 @@ Tokens stored on device must use platform secure storage where available. Logs, 
 
 Required tests before production auth is considered complete:
 
+- API rejects provider tokens with invalid issuer, audience, expiration, signature, unknown key ID, or unavailable JWKS.
 - API rejects invalid issuer, audience, expired token, and wrong-purpose token.
 - API lists only workspaces where the user is a member.
 - Realtime rejects missing, expired, malformed, and cross-workspace tokens.
@@ -98,6 +103,6 @@ Required tests before production auth is considered complete:
 
 - Hosted IdP vendor.
 - Desktop redirect or SDK mechanism.
-- Whether M1A uses a development token issuer before hosted provider integration.
+- Durable PostgreSQL identity repository for provider subject, users, workspaces, and memberships. The first provider exchange slice includes an in-memory repository for local/test and injectable service tests.
 - Device-binding strength for first beta.
 - Enterprise SSO timing and required providers.

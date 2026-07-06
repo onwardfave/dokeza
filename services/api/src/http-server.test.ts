@@ -3,6 +3,7 @@ import { createDokezaAuthTokenService } from "@dokeza/auth";
 import type { Actor } from "@dokeza/authz";
 import { InMemoryKnowledgeRepository } from "@dokeza/knowledge";
 import { createHttpServer, type HttpServerHandle } from "./http-server.js";
+import { InMemoryIdentityRepository } from "./identity-repository.js";
 import { InMemoryMeetingReviewRepository } from "./meeting-review-repository.js";
 
 function getPort(handle: HttpServerHandle): number {
@@ -240,6 +241,116 @@ describe("API HTTP Server", () => {
         { workspace_id: "ws_2", name: "Development Workspace ws_2", role: "owner" },
       ],
     });
+  });
+
+  it("exchanges a hosted provider token for a Dokeza API token and workspace list", async () => {
+    const identityRepository = new InMemoryIdentityRepository([
+      {
+        providerSubject: "provider_user_1",
+        userId: "user_provider_1",
+        email: "provider@example.com",
+        displayName: "Provider User",
+        memberships: [{ userId: "user_provider_1", workspaceId: "ws_provider", role: "admin" }],
+      },
+    ]);
+    handle = createHttpServer({
+      env: {
+        ...defaultEnv,
+        DOKEZA_HOSTED_AUTH_ENABLED: "true",
+        DOKEZA_HOSTED_AUTH_ISSUER: "https://idp.example.com/",
+        DOKEZA_HOSTED_AUTH_AUDIENCE: "dokeza-api",
+        DOKEZA_HOSTED_AUTH_JWKS_URL: "https://idp.example.com/.well-known/jwks.json",
+      },
+      now: () => fixedNow,
+      providerVerifier: {
+        verify: async (token) =>
+          token === "provider-token"
+            ? {
+                ok: true,
+                identity: {
+                  providerSubject: "provider_user_1",
+                  email: "provider@example.com",
+                  displayName: "Provider User",
+                },
+              }
+            : { ok: false, reason: "invalid_signature" },
+      },
+      identityRepository,
+    });
+    await new Promise<void>((resolve) => {
+      handle!.server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const port = getPort(handle);
+
+    const response = await fetch(`http://127.0.0.1:${port}/v1/auth/provider/exchange`, {
+      method: "POST",
+      body: JSON.stringify({ provider_token: "provider-token", device_id: "dev_1" }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      token: string;
+      token_type: string;
+      user: { user_id: string; display_name: string; development_only: boolean };
+      workspaces: Array<{ workspace_id: string; role: string }>;
+    };
+    expect(body.token_type).toBe("Bearer");
+    expect(body.user).toEqual({
+      user_id: "user_provider_1",
+      display_name: "Provider User",
+      development_only: false,
+    });
+    expect(body.workspaces).toEqual([
+      { workspace_id: "ws_provider", name: "ws_provider", role: "admin" },
+    ]);
+    expect(JSON.stringify(body)).not.toContain("provider-token");
+
+    const validation = createTestAuthService().validateToken(body.token, "api_access");
+    expect(validation.ok).toBe(true);
+    if (validation.ok) {
+      expect(validation.principal.actor).toEqual({
+        userId: "user_provider_1",
+        memberships: [{ userId: "user_provider_1", workspaceId: "ws_provider", role: "admin" }],
+      });
+      expect(validation.principal.claims.development_only).toBe(false);
+    }
+  });
+
+  it("fails provider exchange closed when hosted auth is unavailable or invalid", async () => {
+    const disabledPort = await startServer();
+    const disabled = await fetch(`http://127.0.0.1:${disabledPort}/v1/auth/provider/exchange`, {
+      method: "POST",
+      body: JSON.stringify({ provider_token: "provider-token" }),
+    });
+    expect(disabled.status).toBe(403);
+    expect(await disabled.json()).toEqual({ error: "auth_provider_unavailable" });
+    await handle?.close();
+    handle = undefined;
+
+    handle = createHttpServer({
+      env: {
+        ...defaultEnv,
+        DOKEZA_HOSTED_AUTH_ENABLED: "true",
+        DOKEZA_HOSTED_AUTH_ISSUER: "https://idp.example.com/",
+        DOKEZA_HOSTED_AUTH_AUDIENCE: "dokeza-api",
+        DOKEZA_HOSTED_AUTH_JWKS_URL: "https://idp.example.com/.well-known/jwks.json",
+      },
+      now: () => fixedNow,
+      providerVerifier: {
+        verify: async () => ({ ok: false, reason: "invalid_signature" }),
+      },
+    });
+    await new Promise<void>((resolve) => {
+      handle!.server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const invalidPort = getPort(handle);
+
+    const invalid = await fetch(`http://127.0.0.1:${invalidPort}/v1/auth/provider/exchange`, {
+      method: "POST",
+      body: JSON.stringify({ provider_token: "provider-token" }),
+    });
+    expect(invalid.status).toBe(401);
+    expect(await invalid.json()).toEqual({ error: "auth_invalid" });
   });
 
   it("issues a short-lived realtime token for an authorized workspace", async () => {

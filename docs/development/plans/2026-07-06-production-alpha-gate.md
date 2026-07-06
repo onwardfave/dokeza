@@ -140,16 +140,18 @@ Acceptance criteria:
 
 Goal: replace development-token UX with a production-capable hosted IdP and workspace-selection path.
 
+Status: partially implemented. The API now has a provider-neutral OIDC/JWKS verification boundary and `POST /v1/auth/provider/exchange` route that converts verified hosted provider tokens into short-lived Dokeza API tokens using Dokeza-owned workspace membership state. Local/test development auth remains available only when explicitly enabled. The desktop protocol client can call the provider exchange route. Remaining work: select the hosted IdP vendor and desktop redirect/SDK strategy, add durable PostgreSQL identity/workspace provisioning, store desktop tokens in platform-secure storage, replace the visible dev-token product flow, and add auth telemetry.
+
 Tasks:
 
 1. Select hosted IdP and desktop redirect/SDK strategy.
-2. Add provider token verification boundary in `services/api`.
-3. Add durable users, workspaces, memberships, and first-workspace provisioning path.
-4. Preserve development-only token issuer for local/test only and fail closed outside enabled local/test environments.
+2. Add provider token verification boundary in `services/api`. Done for provider-neutral OIDC/JWKS verification.
+3. Add durable users, workspaces, memberships, and first-workspace provisioning path. Partially done with injectable in-memory identity repository; PostgreSQL persistence remains.
+4. Preserve development-only token issuer for local/test only and fail closed outside enabled local/test environments. Done.
 5. Add desktop sign-in, sign-out, workspace selection, token refresh/retry states, and secure token storage.
 6. Replace visible dev-token fields in normal product flow with authenticated state.
 7. Add auth telemetry with no token values.
-8. Update auth, data-flow, failure-mode, local environment, and roadmap docs.
+8. Update auth, data-flow, failure-mode, local environment, and roadmap docs. Done for provider exchange boundary.
 
 Acceptance criteria:
 
@@ -366,4 +368,3 @@ Rollback strategy:
 6. Should system audio be required for the first alpha cohort, or is microphone-only acceptable with clear limitations?
 7. Should knowledge upload UI stay desktop-only for alpha, or should a minimal web workspace be introduced earlier?
 8. What provider cost threshold should block or warn during alpha if measured usage exceeds the planning assumption?
-

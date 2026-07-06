@@ -29,6 +29,10 @@
         {
           "const": "dev_auth_unavailable",
           "type": "string"
+        },
+        {
+          "const": "auth_provider_unavailable",
+          "type": "string"
         }
       ]
     }
