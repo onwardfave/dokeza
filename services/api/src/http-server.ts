@@ -27,7 +27,11 @@ import {
   type MeetingReviewPersistence,
   type MeetingReviewRepository,
 } from "./meeting-review-repository.js";
-import { InMemoryIdentityRepository, type IdentityRepository } from "./identity-repository.js";
+import {
+  createIdentityPersistenceFromConfig,
+  type IdentityPersistence,
+  type IdentityRepository,
+} from "./identity-repository.js";
 
 export interface ProviderVerifier {
   verify(token: string): Promise<ProviderTokenValidationResult>;
@@ -298,7 +302,19 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
   const now = options.now ?? (() => new Date());
   let managedMeetingPersistence: MeetingReviewPersistence | undefined;
   let managedKnowledgePersistence: KnowledgePersistence | undefined;
-  const identityRepository = options.identityRepository ?? new InMemoryIdentityRepository();
+  let managedIdentityPersistence: IdentityPersistence | undefined;
+
+  function getIdentityRepository(config: DokezaConfig): IdentityRepository {
+    if (options.identityRepository !== undefined) {
+      return options.identityRepository;
+    }
+
+    if (managedIdentityPersistence === undefined) {
+      managedIdentityPersistence = createIdentityPersistenceFromConfig(config);
+    }
+
+    return managedIdentityPersistence.repository;
+  }
 
   function getMeetingRepository(config: DokezaConfig): MeetingReviewRepository {
     if (options.meetingRepository !== undefined) {
@@ -401,6 +417,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
             return;
           }
 
+          const identityRepository = getIdentityRepository(runtime.config);
           const principal = await identityRepository.resolveProviderIdentity(
             providerValidation.identity,
           );
@@ -738,6 +755,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
           void Promise.all([
             managedMeetingPersistence?.close() ?? Promise.resolve(),
             managedKnowledgePersistence?.close() ?? Promise.resolve(),
+            managedIdentityPersistence?.close() ?? Promise.resolve(),
           ])
             .then(() => resolve())
             .catch(reject);

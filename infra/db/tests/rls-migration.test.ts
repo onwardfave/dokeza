@@ -14,6 +14,10 @@ const suggestionPersistenceMigration = readFileSync(
   resolve("migrations/0004_suggestion_persistence_metadata.sql"),
   "utf8",
 ).toLowerCase();
+const userProviderIdentitiesMigration = readFileSync(
+  resolve("migrations/0005_user_provider_identities.sql"),
+  "utf8",
+).toLowerCase();
 
 const highRiskTables = [
   "workspace_policies",
@@ -66,5 +70,15 @@ describe("workspace RLS migration baseline", () => {
     expect(suggestionPersistenceMigration).toContain("sources_json text not null default '[]'");
     expect(suggestionPersistenceMigration).toContain("server_seq integer");
     expect(suggestionPersistenceMigration).toContain("suggestions_workspace_meeting_seq_idx");
+  });
+
+  it("adds provider identity mapping without customer content columns", () => {
+    expect(userProviderIdentitiesMigration).toContain("create table user_provider_identities");
+    expect(userProviderIdentitiesMigration).toContain("provider_issuer text not null");
+    expect(userProviderIdentitiesMigration).toContain("provider_subject text not null");
+    expect(userProviderIdentitiesMigration).toContain("user_id text not null references users(id)");
+    expect(userProviderIdentitiesMigration).not.toContain("token");
+    expect(userProviderIdentitiesMigration).not.toContain("transcript");
+    expect(userProviderIdentitiesMigration).not.toContain("document");
   });
 });

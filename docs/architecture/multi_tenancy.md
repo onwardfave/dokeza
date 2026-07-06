@@ -23,6 +23,8 @@ Every resource that contains customer data shall include:
 
 For user-private data, resources shall also include `owner_user_id`.
 
+Hosted identity metadata is stored separately from customer-owned workspace resources. `user_provider_identities` maps a configured provider issuer and provider subject to a Dokeza `users.id`; it does not contain tokens or meeting content and does not grant workspace access by itself. Workspace access remains authoritative in `workspace_memberships`.
+
 ## 4. Relational Data Isolation
 
 Baseline:

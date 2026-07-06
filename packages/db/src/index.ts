@@ -35,6 +35,7 @@ export {
   workspaces,
   users,
   workspaceMemberships,
+  userProviderIdentities,
   workspacePolicies,
   meetingSessions,
   transcriptSegments,

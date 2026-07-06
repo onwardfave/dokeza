@@ -248,9 +248,10 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Realtime accepts only Dokeza-issued realtime tokens (purpose, workspace, device context)
 - [x] Desktop can request local dev realtime token
 - [x] Provider-neutral OIDC/JWKS verification boundary at API (`POST /v1/auth/provider/exchange`)
+- [x] PostgreSQL provider identity mapping and first-workspace provisioning foundation
 - [ ] Select hosted IdP vendor
 - [ ] Define desktop redirect/SDK strategy
-- [ ] Durable PostgreSQL identity / workspace provisioning
+- [ ] Full durable workspace provisioning and membership administration
 - [ ] Desktop secure token storage (platform keychain)
 - [ ] Replace visible dev-token product flow with authenticated state
 - [ ] Auth telemetry (metadata-only, no token values)
@@ -333,9 +334,10 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Provider-neutral OIDC/JWKS verification boundary
 - [x] `POST /v1/auth/provider/exchange` route
 - [x] Development-only issuer (fail-closed outside local/test)
+- [x] PostgreSQL provider identity mapping and first-workspace provisioning foundation
 - [ ] Select hosted IdP vendor
 - [ ] Implement desktop redirect/SDK flow
-- [ ] Durable PG identity/workspace provisioning
+- [ ] Full durable workspace provisioning and membership administration
 - [ ] Desktop secure token storage
 - [ ] Replace dev-token product flow
 - [ ] Auth telemetry
@@ -401,7 +403,8 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] Update `data_flows.md` with selected IdP redirect/session flow
 - [x] Update `failure_modes.md` with hosted provider token exchange rejection
 - [ ] Update `failure_modes.md` with usage guardrail and desktop capture failures
-- [ ] Update `multi_tenancy.md` with durable identity/membership
+- [x] Update `multi_tenancy.md` with durable provider identity mapping
+- [ ] Update `multi_tenancy.md` with full membership administration
 - [ ] Update `code_architecture.md` with `packages/db`, `packages/auth`
 - [ ] Update `testing_strategy.md` with alpha E2E, failure injection, prompt/source evals
 - [x] Update `local_environment.md` with provider-neutral hosted auth env vars

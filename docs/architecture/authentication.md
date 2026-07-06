@@ -32,6 +32,8 @@ Provider choices can include Clerk, Auth0, Supabase Auth, or an equivalent hoste
 
 Hosted provider tokens are not accepted directly by realtime or resource APIs. They are accepted only by the API exchange endpoint, verified against configured issuer, audience, expiration, RS256 signature, and JWKS key ID, then mapped to a Dokeza-owned user/workspace membership record before a Dokeza API token is issued.
 
+When PostgreSQL persistence is enabled, hosted provider identities are stored in `user_provider_identities`, keyed by provider issuer and provider subject, and linked to Dokeza-owned `users`. Workspace access is still resolved from `workspace_memberships`; provider claims do not grant workspace membership directly. The first durable provisioning slice creates a single owner workspace for a newly resolved provider identity so production-alpha onboarding can proceed before full admin-managed membership workflows exist.
+
 ## 4. Token Requirements
 
 API and realtime authentication must validate:
@@ -103,6 +105,6 @@ Required tests before production auth is considered complete:
 
 - Hosted IdP vendor.
 - Desktop redirect or SDK mechanism.
-- Durable PostgreSQL identity repository for provider subject, users, workspaces, and memberships. The first provider exchange slice includes an in-memory repository for local/test and injectable service tests.
+- Full admin-managed identity and workspace provisioning workflow beyond the first PostgreSQL provider identity mapping and first-workspace provisioning path.
 - Device-binding strength for first beta.
 - Enterprise SSO timing and required providers.

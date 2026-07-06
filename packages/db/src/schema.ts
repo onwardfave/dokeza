@@ -19,6 +19,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 const vector1536 = customType<{ data: number[]; driverData: string }>({
@@ -64,6 +65,28 @@ export const workspaceMemberships = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.userId] })],
+);
+
+export const userProviderIdentities = pgTable(
+  "user_provider_identities",
+  {
+    providerIssuer: text("provider_issuer").notNull(),
+    providerSubject: text("provider_subject").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    email: text("email"),
+    displayName: text("display_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.providerIssuer, table.providerSubject] }),
+    uniqueIndex("user_provider_identities_user_provider_idx").on(
+      table.userId,
+      table.providerIssuer,
+    ),
+  ],
 );
 
 // ---------------------------------------------------------------------------

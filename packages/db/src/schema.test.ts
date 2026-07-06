@@ -4,6 +4,7 @@ import {
   integrationConnections,
   meetingSessions,
   suggestions,
+  userProviderIdentities,
   workspacePolicies,
 } from "./schema.js";
 
@@ -53,6 +54,15 @@ describe("database schema", () => {
     expect(column(suggestions.sourcesJson).notNull).toBe(true);
     expect(column(suggestions.sourcesJson).hasDefault).toBe(true);
     expect(column(suggestions.serverSeq).columnType).toBe("PgInteger");
+  });
+
+  it("includes hosted provider identity columns", () => {
+    expect(column(userProviderIdentities.providerIssuer).columnType).toBe("PgText");
+    expect(column(userProviderIdentities.providerIssuer).notNull).toBe(true);
+    expect(column(userProviderIdentities.providerSubject).columnType).toBe("PgText");
+    expect(column(userProviderIdentities.providerSubject).notNull).toBe(true);
+    expect(column(userProviderIdentities.userId).columnType).toBe("PgText");
+    expect(column(userProviderIdentities.userId).notNull).toBe(true);
   });
 
   it("keeps generated-id defaults where the SQL migration defines them", () => {
