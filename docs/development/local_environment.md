@@ -88,6 +88,19 @@ For production-alpha Auth0 setup:
 
 The current desktop hosted-auth flow exposes Auth0 domain, client ID, audience, redirect URI, and callback URL fields in the live-session panel. Under Tauri, starting hosted auth opens the browser, waits for the local loopback callback, exchanges the provider token with the API, and stores the resulting Dokeza API session plus provider refresh metadata through secure token storage. When the stored Dokeza API session is expired or near expiry, the desktop can refresh through Auth0 and rotate the stored refresh token if Auth0 returns one. Browser preview can still use the callback field as a manual smoke-test fallback because it cannot bind a native loopback listener.
 
+For the desktop hosted-auth product path, set these Vite variables before starting the desktop dev server when the defaults are not suitable:
+
+```powershell
+$env:VITE_DOKEZA_API_ENDPOINT = "http://127.0.0.1:3000"
+$env:VITE_DOKEZA_REALTIME_ENDPOINT = "ws://127.0.0.1:3001/realtime"
+$env:VITE_DOKEZA_AUTH0_DOMAIN = "https://<auth0-tenant-domain>"
+$env:VITE_DOKEZA_AUTH0_CLIENT_ID = "<auth0-native-app-client-id>"
+$env:VITE_DOKEZA_AUTH0_AUDIENCE = "dokeza-api"
+$env:VITE_DOKEZA_AUTH0_REDIRECT_URI = "http://127.0.0.1:57619/auth/callback"
+```
+
+Development-token controls remain available only inside the live-session panel's developer configuration disclosure for local/test fallback.
+
 When hosted auth is enabled, the API accepts provider tokens only at:
 
 ```text

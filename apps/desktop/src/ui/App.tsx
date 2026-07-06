@@ -114,15 +114,27 @@ export function App() {
 }
 
 function LiveSessionPanel() {
-  const [endpoint, setEndpoint] = useState("ws://127.0.0.1:3001/realtime");
-  const [apiEndpoint, setApiEndpoint] = useState("http://127.0.0.1:3000");
+  const [endpoint, setEndpoint] = useState(
+    import.meta.env.VITE_DOKEZA_REALTIME_ENDPOINT ?? "ws://127.0.0.1:3001/realtime",
+  );
+  const [apiEndpoint, setApiEndpoint] = useState(
+    import.meta.env.VITE_DOKEZA_API_ENDPOINT ?? "http://127.0.0.1:3000",
+  );
   const [workspaceId, setWorkspaceId] = useState("ws_dev");
   const [token, setToken] = useState("");
   const [authMessage, setAuthMessage] = useState("No realtime token");
-  const [auth0Domain, setAuth0Domain] = useState("https://dokeza-alpha.us.auth0.com");
-  const [auth0ClientId, setAuth0ClientId] = useState("");
-  const [auth0Audience, setAuth0Audience] = useState("dokeza-api");
-  const [auth0RedirectUri, setAuth0RedirectUri] = useState("http://127.0.0.1:57619/auth/callback");
+  const [auth0Domain, setAuth0Domain] = useState(
+    import.meta.env.VITE_DOKEZA_AUTH0_DOMAIN ?? "https://dokeza-alpha.us.auth0.com",
+  );
+  const [auth0ClientId, setAuth0ClientId] = useState(
+    import.meta.env.VITE_DOKEZA_AUTH0_CLIENT_ID ?? "",
+  );
+  const [auth0Audience, setAuth0Audience] = useState(
+    import.meta.env.VITE_DOKEZA_AUTH0_AUDIENCE ?? "dokeza-api",
+  );
+  const [auth0RedirectUri, setAuth0RedirectUri] = useState(
+    import.meta.env.VITE_DOKEZA_AUTH0_REDIRECT_URI ?? "http://127.0.0.1:57619/auth/callback",
+  );
   const [auth0CallbackUrl, setAuth0CallbackUrl] = useState("");
   const [pendingHostedAuth, setPendingHostedAuth] = useState<PendingHostedAuth | null>(null);
   const [snapshot, setSnapshot] = useState<DesktopRealtimeSnapshot>(initialLiveSessionSnapshot);
@@ -469,79 +481,6 @@ function LiveSessionPanel() {
       </div>
       <div className="live-session-controls">
         <label>
-          <span>Endpoint</span>
-          <input
-            value={endpoint}
-            onChange={(event) => setEndpoint(event.currentTarget.value)}
-            disabled={!canStart}
-          />
-        </label>
-        <label>
-          <span>API endpoint</span>
-          <input
-            value={apiEndpoint}
-            onChange={(event) => setApiEndpoint(event.currentTarget.value)}
-            disabled={!canStart}
-          />
-        </label>
-        <label>
-          <span>Workspace</span>
-          <input
-            value={workspaceId}
-            onChange={(event) => setWorkspaceId(event.currentTarget.value)}
-            disabled={!canStart}
-          />
-        </label>
-        <label>
-          <span>Dev token</span>
-          <input
-            type="password"
-            value={token}
-            onChange={(event) => setToken(event.currentTarget.value)}
-            disabled={!canStart}
-          />
-        </label>
-        <label>
-          <span>Auth0 domain</span>
-          <input
-            value={auth0Domain}
-            onChange={(event) => setAuth0Domain(event.currentTarget.value)}
-            disabled={!canStart}
-          />
-        </label>
-        <label>
-          <span>Auth0 client</span>
-          <input
-            value={auth0ClientId}
-            onChange={(event) => setAuth0ClientId(event.currentTarget.value)}
-            disabled={!canStart}
-          />
-        </label>
-        <label>
-          <span>Auth0 audience</span>
-          <input
-            value={auth0Audience}
-            onChange={(event) => setAuth0Audience(event.currentTarget.value)}
-            disabled={!canStart}
-          />
-        </label>
-        <label>
-          <span>Auth0 redirect</span>
-          <input
-            value={auth0RedirectUri}
-            onChange={(event) => setAuth0RedirectUri(event.currentTarget.value)}
-            disabled={!canStart}
-          />
-        </label>
-        <label>
-          <span>Auth callback</span>
-          <input
-            value={auth0CallbackUrl}
-            onChange={(event) => setAuth0CallbackUrl(event.currentTarget.value)}
-            disabled={!canStart || pendingHostedAuth === null}
-          />
-        </label>
-        <label>
           <span>Microphone</span>
           <select
             value={selectedMicrophoneDeviceId}
@@ -560,25 +499,17 @@ function LiveSessionPanel() {
             )}
           </select>
         </label>
+        <div className="auth-state">
+          <span>Workspace</span>
+          <strong>{workspaceId}</strong>
+        </div>
         <div className="live-session-buttons">
-          <button type="button" disabled={!canStart} onClick={() => void requestDevRealtimeToken()}>
-            Get dev token
-          </button>
           <button
             type="button"
             disabled={!canStart || auth0ClientId.trim().length === 0}
             onClick={() => void startHostedSignIn()}
           >
             Start hosted auth
-          </button>
-          <button
-            type="button"
-            disabled={
-              !canStart || pendingHostedAuth === null || auth0CallbackUrl.trim().length === 0
-            }
-            onClick={() => void completeHostedSignIn()}
-          >
-            Complete hosted auth
           </button>
           <button
             type="button"
@@ -607,6 +538,102 @@ function LiveSessionPanel() {
             Resume mic
           </button>
         </div>
+        <details className="developer-config">
+          <summary>Developer configuration</summary>
+          <div className="developer-config-grid">
+            <label>
+              <span>Endpoint</span>
+              <input
+                value={endpoint}
+                onChange={(event) => setEndpoint(event.currentTarget.value)}
+                disabled={!canStart}
+              />
+            </label>
+            <label>
+              <span>API endpoint</span>
+              <input
+                value={apiEndpoint}
+                onChange={(event) => setApiEndpoint(event.currentTarget.value)}
+                disabled={!canStart}
+              />
+            </label>
+            <label>
+              <span>Workspace</span>
+              <input
+                value={workspaceId}
+                onChange={(event) => setWorkspaceId(event.currentTarget.value)}
+                disabled={!canStart}
+              />
+            </label>
+            <label>
+              <span>Dev token</span>
+              <input
+                type="password"
+                value={token}
+                onChange={(event) => setToken(event.currentTarget.value)}
+                disabled={!canStart}
+              />
+            </label>
+            <label>
+              <span>Auth0 domain</span>
+              <input
+                value={auth0Domain}
+                onChange={(event) => setAuth0Domain(event.currentTarget.value)}
+                disabled={!canStart}
+              />
+            </label>
+            <label>
+              <span>Auth0 client</span>
+              <input
+                value={auth0ClientId}
+                onChange={(event) => setAuth0ClientId(event.currentTarget.value)}
+                disabled={!canStart}
+              />
+            </label>
+            <label>
+              <span>Auth0 audience</span>
+              <input
+                value={auth0Audience}
+                onChange={(event) => setAuth0Audience(event.currentTarget.value)}
+                disabled={!canStart}
+              />
+            </label>
+            <label>
+              <span>Auth0 redirect</span>
+              <input
+                value={auth0RedirectUri}
+                onChange={(event) => setAuth0RedirectUri(event.currentTarget.value)}
+                disabled={!canStart}
+              />
+            </label>
+            <label>
+              <span>Auth callback</span>
+              <input
+                value={auth0CallbackUrl}
+                onChange={(event) => setAuth0CallbackUrl(event.currentTarget.value)}
+                disabled={!canStart || pendingHostedAuth === null}
+              />
+            </label>
+            <div className="live-session-buttons">
+              <button
+                type="button"
+                disabled={!canStart}
+                onClick={() => void requestDevRealtimeToken()}
+              >
+                Get dev token
+              </button>
+              <button
+                type="button"
+                disabled={
+                  !canStart || pendingHostedAuth === null || auth0CallbackUrl.trim().length === 0
+                }
+                onClick={() => void completeHostedSignIn()}
+              >
+                Complete hosted auth
+              </button>
+            </div>
+          </div>
+        </details>
         <label>
           <span>Suggestion</span>
           <select

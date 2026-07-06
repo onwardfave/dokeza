@@ -208,6 +208,47 @@ h2 {
   gap: 10px;
 }
 
+.auth-state {
+  display: grid;
+  gap: 6px;
+  min-height: 38px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 8px 10px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-state strong {
+  min-width: 0;
+  color: #17202a;
+  overflow-wrap: anywhere;
+}
+
+.developer-config {
+  grid-column: 1 / -1;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.developer-config summary {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.developer-config-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 180px);
+  gap: 10px;
+  margin-top: 10px;
+}
+
 .meeting-review-buttons {
   grid-column: 1 / -1;
   display: grid;
@@ -569,6 +610,7 @@ h2 {
 
   .live-session-controls,
   .live-session-buttons,
+  .developer-config-grid,
   .meeting-review-controls,
   .meeting-review-buttons {
     grid-template-columns: 1fr;
