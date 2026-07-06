@@ -1,6 +1,7 @@
 mod audio_probe;
 mod cache_probe;
 mod crash_diagnostics;
+mod hosted_auth_callback;
 mod microphone_capture;
 mod realtime_probe;
 mod secure_token_storage;
@@ -13,6 +14,7 @@ use audio_probe::{
 };
 use cache_probe::probe_local_sqlite_cache;
 use crash_diagnostics::{install_panic_hook, probe_crash_diagnostics};
+use hosted_auth_callback::wait_for_hosted_auth_callback;
 use microphone_capture::{
     capture_default_microphone_chunks, capture_microphone_chunks, list_microphone_capture_devices,
 };
@@ -60,7 +62,8 @@ pub fn run() {
             probe_system_audio_loopback,
             save_api_session,
             load_api_session,
-            clear_api_session
+            clear_api_session,
+            wait_for_hosted_auth_callback
         ])
         .run(tauri::generate_context!())
         .expect("error while running Dokeza desktop shell");

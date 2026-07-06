@@ -26,6 +26,10 @@ import {
   type PendingHostedAuth,
 } from "../protocol/hostedAuthFlow.js";
 import {
+  parseLoopbackRedirect,
+  waitForHostedAuthCallback,
+} from "../protocol/hostedAuthCallback.js";
+import {
   deleteMeeting,
   exportMeeting,
   getMeetingDetail,
@@ -362,8 +366,23 @@ function LiveSessionPanel() {
         },
       });
       setPendingHostedAuth(pending);
+      const callbackPromise = nativeRuntimeAvailable
+        ? waitForHostedAuthCallback({
+            ...parseLoopbackRedirect(auth0RedirectUri),
+            state: pending.state,
+            timeoutMs: 120_000,
+          })
+        : null;
       await openHostedAuthBrowser(pending);
-      setAuthMessage("Complete hosted sign-in in the browser");
+      if (callbackPromise === null) {
+        setAuthMessage("Complete hosted sign-in in the browser");
+        return;
+      }
+
+      setAuthMessage("Waiting for hosted sign-in callback");
+      const callbackUrl = await callbackPromise;
+      setAuth0CallbackUrl(callbackUrl);
+      await completeHostedSignInWithCallback(pending, callbackUrl);
     } catch {
       setPendingHostedAuth(null);
       setAuthMessage("Hosted sign-in could not start");
@@ -376,6 +395,10 @@ function LiveSessionPanel() {
       return;
     }
 
+    await completeHostedSignInWithCallback(pendingHostedAuth, auth0CallbackUrl);
+  }
+
+  async function completeHostedSignInWithCallback(pending: PendingHostedAuth, callbackUrl: string) {
     setAuthMessage("Completing hosted sign-in");
 
     try {
@@ -386,8 +409,8 @@ function LiveSessionPanel() {
           audience: auth0Audience,
           redirectUri: auth0RedirectUri,
         },
-        pending: pendingHostedAuth,
-        callbackUrl: auth0CallbackUrl,
+        pending,
+        callbackUrl,
       });
       const apiSession = await exchangeProviderAuthToken({
         apiBaseUrl: apiEndpoint,
