@@ -6,6 +6,21 @@ Build Dokeza into a production-ready application by proving one complete vertica
 
 This roadmap is the implementation basis for future feature slices. Each slice must stay independently verifiable and should not widen into later milestones until the current vertical gate is working end to end.
 
+## Current Execution Gate
+
+The next execution gate is the Production Alpha Gate in `docs/development/plans/2026-07-06-production-alpha-gate.md`.
+
+That gate narrows near-term work to a controlled Windows alpha workflow:
+
+- production-capable auth and workspace onboarding;
+- desktop productization of the live session, overlay, meeting review, and diagnostics surfaces;
+- long-lived native microphone capture hardening;
+- M2 usage, rate, and cost guardrails;
+- end-to-end alpha verification with synthetic and real microphone-backed sessions;
+- desktop knowledge upload UI using the existing text document and source-grounding contracts.
+
+Billing, broad admin governance, CRM/email writeback, analytics, role packs, full macOS product support, and local-first processing remain deferred until the production alpha workflow is reliable.
+
 ## Requirements and Milestone
 
 - Milestone 1: desktop shell, onboarding, audio capture, STT, session lifecycle, live transcript.
