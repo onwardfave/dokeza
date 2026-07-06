@@ -73,10 +73,18 @@ Hosted provider auth can be enabled for staging or production-alpha API testing 
 
 ```powershell
 $env:DOKEZA_HOSTED_AUTH_ENABLED = "true"
-$env:DOKEZA_HOSTED_AUTH_ISSUER = "https://idp.example.com/"
+$env:DOKEZA_HOSTED_AUTH_ISSUER = "https://<auth0-tenant-domain>/"
 $env:DOKEZA_HOSTED_AUTH_AUDIENCE = "dokeza-api"
-$env:DOKEZA_HOSTED_AUTH_JWKS_URL = "https://idp.example.com/.well-known/jwks.json"
+$env:DOKEZA_HOSTED_AUTH_JWKS_URL = "https://<auth0-tenant-domain>/.well-known/jwks.json"
 ```
+
+For production-alpha Auth0 setup:
+
+1. Create an Auth0 Native Application for the desktop client.
+2. Configure the Auth0 API audience to match `DOKEZA_HOSTED_AUTH_AUDIENCE`.
+3. Configure an exact Allowed Callback URL for the desktop loopback redirect, for example `http://127.0.0.1:57619/auth/callback`.
+4. Do not configure or ship a desktop client secret.
+5. Keep `DOKEZA_DEV_AUTH_ENABLED=false` for hosted-auth smoke tests and production-like environments.
 
 When hosted auth is enabled, the API accepts provider tokens only at:
 

@@ -17,7 +17,7 @@ The internal Dokeza boundary is:
 - The realtime service validates Dokeza session tokens before accepting `auth.hello`.
 - Workspace membership and role checks remain Dokeza-owned and are enforced by backend authorization code and PostgreSQL RLS.
 
-Provider choices can include Clerk, Auth0, Supabase Auth, or an equivalent hosted IdP. The first implementation uses a provider-neutral OIDC/JWKS verification boundary so the vendor can be selected without changing desktop, REST, or realtime contracts. The final vendor choice must satisfy the requirements in this document before production alpha.
+Production alpha uses Auth0 as the hosted IdP, configured behind the existing provider-neutral OIDC/JWKS verification boundary. The code boundary remains provider-neutral so a later enterprise SSO or hosted IdP change does not require REST, realtime, or Dokeza-token contract changes.
 
 ## 3. Identity Model
 
@@ -52,14 +52,16 @@ Development tokens are signed with `DOKEZA_AUTH_SIGNING_SECRET`; local/test envi
 ## 5. Desktop Flow
 
 1. User starts sign-in from the desktop app.
-2. Desktop opens the hosted IdP flow using the OS browser or approved embedded flow.
-3. Desktop receives the provider completion signal using a secure redirect or provider SDK mechanism.
-4. Desktop sends the provider token to `POST /v1/auth/provider/exchange`.
+2. Desktop opens Auth0's Native Application authorization flow in the OS browser using Authorization Code with PKCE.
+3. Desktop receives the provider completion signal through an exact loopback callback on `127.0.0.1` for production alpha. The desktop validates high-entropy `state`, `nonce`, and PKCE verifier binding before accepting the authorization response.
+4. Desktop exchanges the authorization code with Auth0 without a client secret, then sends the resulting provider token to `POST /v1/auth/provider/exchange`.
 5. API verifies the provider token and returns a Dokeza API token plus authorized workspaces from Dokeza-owned membership state.
 6. Desktop selects a workspace and requests a short-lived realtime session token for that workspace.
 7. Desktop sends that realtime token in `auth.hello` over WSS.
 
 Tokens stored on device must use platform secure storage where available. The desktop stores Dokeza API session tokens through native secure-token commands backed by the OS credential store and keeps realtime session tokens transient in memory because they are short-lived and workspace/session scoped. Logs, diagnostics, and telemetry must never include token values.
+
+Loopback callbacks are acceptable for the controlled production alpha only with an exact configured callback URI, short local listener lifetime, single pending auth transaction, `state` and `nonce` validation, PKCE, sanitized errors, and no token persistence outside the secure-token storage boundary. A claimed HTTPS or signed-app redirect can replace loopback before broader release if release-channel constraints require it.
 
 ## 6. Service Responsibilities
 
@@ -74,6 +76,7 @@ Tokens stored on device must use platform secure storage where available. The de
 ## 7. Failure and Degraded Behavior
 
 - If the hosted IdP is unreachable during sign-in, desktop shows sign-in unavailable and does not start a session.
+- If the Auth0 loopback callback times out, is canceled, or fails `state` / `nonce` validation, desktop discards the pending verifier and shows a sanitized sign-in failed state.
 - If the API cannot issue a realtime token, desktop keeps the user signed in but marks live sessions unavailable.
 - If provider-token exchange fails, desktop shows sign-in unavailable or retryable auth failure and does not fall back to development tokens.
 - If a realtime token expires before session start, desktop requests a new token.
@@ -107,8 +110,11 @@ Required tests before production auth is considered complete:
 
 ## 10. Open Decisions
 
-- Hosted IdP vendor.
-- Desktop redirect or SDK mechanism.
 - Full admin-managed identity and workspace provisioning workflow beyond the first PostgreSQL provider identity mapping and first-workspace provisioning path.
 - Device-binding strength for first beta.
 - Enterprise SSO timing and required providers.
+
+Resolved production-alpha decisions:
+
+- Hosted IdP vendor: Auth0.
+- Desktop redirect strategy: Auth0 Native Application flow through the OS browser with Authorization Code + PKCE and an exact loopback callback on `127.0.0.1` for alpha.

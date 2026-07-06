@@ -53,8 +53,9 @@ flowchart LR
         Email[Email]
     end
 
-    DesktopAuth -->|sign-in redirect or provider SDK| IdP
-    IdP -->|auth code or provider token| API
+    DesktopAuth -->|Auth0 system-browser PKCE sign-in| IdP
+    IdP -->|auth code to loopback callback| DesktopAuth
+    DesktopAuth -->|provider token exchange| API
     API -->|workspace list and realtime session token| DesktopAuth
     Mic -->|audio chunks| RT
     Sys -->|audio chunks| RT
@@ -91,6 +92,9 @@ Initial cloud STT implementation:
 
 Initial hosted auth implementation:
 
+- The selected production-alpha hosted identity provider is Auth0.
+- The desktop starts an Auth0 Native Application Authorization Code with PKCE flow in the OS browser.
+- The production-alpha callback is an exact loopback redirect on `127.0.0.1`; desktop accepts it only for a single pending sign-in transaction with validated `state`, `nonce`, PKCE verifier binding, and a short listener lifetime.
 - The API service accepts hosted identity provider tokens only at `POST /v1/auth/provider/exchange`.
 - The API verifies configured issuer, audience, expiration, RS256 signature, and JWKS key ID through a provider-neutral OIDC/JWKS verifier.
 - Hosted provider tokens are not accepted by realtime, meeting review, knowledge, or other resource APIs.
@@ -125,7 +129,8 @@ Initial knowledge-base implementation:
 
 | Flow | Data | Sensitive Content | Protection | Opt-Out / Policy |
 | --- | --- | --- | --- | --- |
-| Desktop/API to identity provider | Login redirects, provider tokens, profile identifiers | Account identity, email, auth metadata | TLS, hosted IdP controls, short-lived tokens, secure local token storage | Required for cloud account usage; local-only future mode may differ |
+| Desktop to Auth0 | Login redirect, PKCE challenge, state, nonce, callback metadata, profile identifiers | Account identity, email, auth metadata | TLS, OS browser, exact redirect allowlist, PKCE, state/nonce validation, short listener lifetime | Required for cloud account usage; local-only future mode may differ |
+| Auth0 to desktop | Authorization code through loopback callback, provider tokens after code exchange | Account identity, bearer token | TLS for token exchange, no desktop client secret, platform secure storage for retained tokens, redacted diagnostics | Sign out; revoke provider session |
 | Desktop to API auth exchange | Hosted provider token, optional device ID | Account identity, bearer token | TLS, provider token verification, Dokeza-owned membership resolution, metadata-only errors | Sign out; revoke provider session |
 | API to desktop | Workspace list, user profile, short-lived realtime token | Account identity, workspace membership, bearer token | TLS, token TTL, platform secure storage, redacted diagnostics | Sign out; revoke sessions |
 | Device to realtime service | Audio chunks | Voice, meeting content, PII | TLS, session token, retention policy | Disable capture; local mode where supported |

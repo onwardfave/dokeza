@@ -115,7 +115,7 @@ Hard rules for every alpha slice:
 
 Trust-boundary notes:
 
-- The hosted IdP is already documented as an external trust boundary, but the selected vendor, redirect flow, token verification strategy, and desktop secure-storage behavior must be documented when chosen.
+- Auth0 is the selected production-alpha hosted IdP. The selected desktop redirect flow, token verification strategy, and desktop secure-storage behavior are documented in authentication and data-flow docs.
 - OpenAI and Deepgram provider flows already exist in data-flow docs; guardrail work must not add content logging or direct desktop-provider calls.
 - Knowledge upload remains text-only for the first UI slice unless object storage is intentionally introduced and documented.
 
@@ -140,11 +140,11 @@ Acceptance criteria:
 
 Goal: replace development-token UX with a production-capable hosted IdP and workspace-selection path.
 
-Status: partially implemented. The API now has a provider-neutral OIDC/JWKS verification boundary and `POST /v1/auth/provider/exchange` route that converts verified hosted provider tokens into short-lived Dokeza API tokens using Dokeza-owned workspace membership state. Local/test development auth remains available only when explicitly enabled. PostgreSQL provider identity mapping, first-workspace provisioning, metadata-only auth telemetry, and desktop OS credential-store foundations exist. The desktop protocol client can call the provider exchange route. Remaining work: select the hosted IdP vendor and desktop redirect/SDK strategy, finish full workspace provisioning and membership administration, add hosted IdP refresh/session renewal in secure storage, and replace the visible dev-token product flow.
+Status: partially implemented. The API now has a provider-neutral OIDC/JWKS verification boundary and `POST /v1/auth/provider/exchange` route that converts verified hosted provider tokens into short-lived Dokeza API tokens using Dokeza-owned workspace membership state. Local/test development auth remains available only when explicitly enabled. PostgreSQL provider identity mapping, first-workspace provisioning, metadata-only auth telemetry, and desktop OS credential-store foundations exist. The desktop protocol client can call the provider exchange route. Auth0 is selected for production alpha, and the desktop strategy is the Auth0 Native Application Authorization Code with PKCE flow through the OS browser with an exact loopback callback on `127.0.0.1` for alpha. Remaining work: implement the desktop redirect flow, finish full workspace provisioning and membership administration, add hosted IdP refresh/session renewal in secure storage, and replace the visible dev-token product flow.
 
 Tasks:
 
-1. Select hosted IdP and desktop redirect/SDK strategy.
+1. Select hosted IdP and desktop redirect/SDK strategy. Done: Auth0 Native Application flow through OS browser with Authorization Code + PKCE and loopback callback for alpha.
 2. Add provider token verification boundary in `services/api`. Done for provider-neutral OIDC/JWKS verification.
 3. Add durable users, workspaces, memberships, and first-workspace provisioning path. Partially done with injectable in-memory identity repository; PostgreSQL persistence remains.
 4. Preserve development-only token issuer for local/test only and fail closed outside enabled local/test environments. Done.
@@ -360,7 +360,7 @@ Rollback strategy:
 
 ## Open Questions
 
-1. Which hosted IdP should be selected for production alpha: Clerk, Auth0, Supabase Auth, or another provider?
+1. Should the first signed alpha release keep loopback redirect or move to a claimed HTTPS/custom-domain redirect after installer signing and release-channel work?
 2. Should production alpha target individual users only, or one shared team workspace with owner/member roles?
 3. What is the first design-partner vertical for prompt/eval examples: sales, support, internal meetings, or general meetings?
 4. What disclosure/consent copy should the desktop show before first capture?

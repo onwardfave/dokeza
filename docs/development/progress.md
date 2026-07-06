@@ -23,6 +23,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## Latest Broad Verification
 
+- [x] 2026-07-06, Auth0 IdP selection docs: `pnpm check` passed.
 - [x] 2026-07-06, SRS/MVP tracker alignment update: `pnpm check` passed.
 - [x] 2026-07-06, progress tracker/process update: `pnpm check` passed.
 - [x] 2026-07-06, commit `ee70b2e`: `pnpm check` passed; `pnpm generate:schemas` completed after auth contract/schema updates.
@@ -251,8 +252,8 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] PostgreSQL provider identity mapping and first-workspace provisioning foundation
 - [x] Auth telemetry foundation (metadata-only, no token values)
 - [x] Desktop secure token storage foundation (OS credential store for API session tokens)
-- [ ] Select hosted IdP vendor
-- [ ] Define desktop redirect/SDK strategy
+- [x] Select hosted IdP vendor (Auth0)
+- [x] Define desktop redirect/SDK strategy (system browser Authorization Code + PKCE with loopback callback for alpha)
 - [ ] Full durable workspace provisioning and membership administration
 - [ ] Hosted IdP refresh/session renewal in desktop secure storage
 - [ ] Replace visible dev-token product flow with authenticated state
@@ -338,7 +339,8 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] PostgreSQL provider identity mapping and first-workspace provisioning foundation
 - [x] Auth telemetry foundation (metadata-only, no token values)
 - [x] Desktop secure token storage foundation (OS credential store for API session tokens)
-- [ ] Select hosted IdP vendor
+- [x] Select hosted IdP vendor (Auth0)
+- [x] Define desktop redirect/SDK strategy
 - [ ] Implement desktop redirect/SDK flow
 - [ ] Full durable workspace provisioning and membership administration
 - [ ] Hosted IdP refresh/session renewal in desktop secure storage
@@ -400,9 +402,9 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 ## Documentation Debt
 
 - [x] Update `authentication.md` with provider-neutral hosted auth exchange boundary
-- [ ] Update `authentication.md` with selected hosted IdP details
+- [x] Update `authentication.md` with selected hosted IdP details
 - [x] Update `data_flows.md` with provider-token exchange boundary
-- [ ] Update `data_flows.md` with selected IdP redirect/session flow
+- [x] Update `data_flows.md` with selected IdP redirect/session flow
 - [x] Update `failure_modes.md` with hosted provider token exchange rejection
 - [ ] Update `failure_modes.md` with usage guardrail and desktop capture failures
 - [x] Update `multi_tenancy.md` with durable provider identity mapping
@@ -410,4 +412,4 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] Update `code_architecture.md` with `packages/db`, `packages/auth`
 - [ ] Update `testing_strategy.md` with alpha E2E, failure injection, prompt/source evals
 - [x] Update `local_environment.md` with provider-neutral hosted auth env vars
-- [ ] Update `local_environment.md` with selected IdP local setup
+- [x] Update `local_environment.md` with selected IdP local setup
