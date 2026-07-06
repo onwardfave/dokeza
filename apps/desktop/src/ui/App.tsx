@@ -15,9 +15,16 @@ import {
   type MicrophoneCaptureSnapshot,
 } from "../protocol/microphoneCaptureController.js";
 import {
+  exchangeProviderAuthToken,
   requestDevelopmentApiToken,
   requestRealtimeSessionToken,
 } from "../protocol/authApiClient.js";
+import {
+  beginAuth0DesktopSignIn,
+  completeAuth0DesktopSignIn,
+  openHostedAuthBrowser,
+  type PendingHostedAuth,
+} from "../protocol/hostedAuthFlow.js";
 import {
   deleteMeeting,
   exportMeeting,
@@ -107,6 +114,12 @@ function LiveSessionPanel() {
   const [workspaceId, setWorkspaceId] = useState("ws_dev");
   const [token, setToken] = useState("");
   const [authMessage, setAuthMessage] = useState("No realtime token");
+  const [auth0Domain, setAuth0Domain] = useState("https://dokeza-alpha.us.auth0.com");
+  const [auth0ClientId, setAuth0ClientId] = useState("");
+  const [auth0Audience, setAuth0Audience] = useState("dokeza-api");
+  const [auth0RedirectUri, setAuth0RedirectUri] = useState("http://127.0.0.1:57619/auth/callback");
+  const [auth0CallbackUrl, setAuth0CallbackUrl] = useState("");
+  const [pendingHostedAuth, setPendingHostedAuth] = useState<PendingHostedAuth | null>(null);
   const [snapshot, setSnapshot] = useState<DesktopRealtimeSnapshot>(initialLiveSessionSnapshot);
   const [microphoneDevices, setMicrophoneDevices] = useState<NativeMicrophoneCaptureDevice[]>([]);
   const [selectedMicrophoneDeviceId, setSelectedMicrophoneDeviceId] = useState("");
@@ -336,6 +349,81 @@ function LiveSessionPanel() {
     }
   }
 
+  async function startHostedSignIn() {
+    setAuthMessage("Opening hosted sign-in");
+
+    try {
+      const pending = await beginAuth0DesktopSignIn({
+        config: {
+          domain: auth0Domain,
+          clientId: auth0ClientId,
+          audience: auth0Audience,
+          redirectUri: auth0RedirectUri,
+        },
+      });
+      setPendingHostedAuth(pending);
+      await openHostedAuthBrowser(pending);
+      setAuthMessage("Complete hosted sign-in in the browser");
+    } catch {
+      setPendingHostedAuth(null);
+      setAuthMessage("Hosted sign-in could not start");
+    }
+  }
+
+  async function completeHostedSignIn() {
+    if (pendingHostedAuth === null) {
+      setAuthMessage("Hosted sign-in not started");
+      return;
+    }
+
+    setAuthMessage("Completing hosted sign-in");
+
+    try {
+      const hostedToken = await completeAuth0DesktopSignIn({
+        config: {
+          domain: auth0Domain,
+          clientId: auth0ClientId,
+          audience: auth0Audience,
+          redirectUri: auth0RedirectUri,
+        },
+        pending: pendingHostedAuth,
+        callbackUrl: auth0CallbackUrl,
+      });
+      const apiSession = await exchangeProviderAuthToken({
+        apiBaseUrl: apiEndpoint,
+        providerToken: hostedToken.providerToken,
+        deviceId: "dev_desktop_preview",
+      });
+      const selectedWorkspace = apiSession.workspaces[0];
+      if (selectedWorkspace === undefined) {
+        throw new Error("hosted_auth_no_workspace");
+      }
+
+      setWorkspaceId(selectedWorkspace.workspaceId);
+      if (nativeRuntimeAvailable) {
+        await saveApiSession({
+          token: apiSession.token,
+          expiresAt: apiSession.expiresAt,
+          userId: apiSession.user.userId,
+          workspaceId: selectedWorkspace.workspaceId,
+        }).catch(() => undefined);
+      }
+      const realtimeToken = await requestRealtimeSessionToken({
+        apiBaseUrl: apiEndpoint,
+        apiToken: apiSession.token,
+        workspaceId: selectedWorkspace.workspaceId,
+        deviceId: "dev_desktop_preview",
+      });
+      setToken(realtimeToken.token);
+      setPendingHostedAuth(null);
+      setAuth0CallbackUrl("");
+      setAuthMessage(`Hosted auth ready for ${selectedWorkspace.name}`);
+    } catch {
+      setToken("");
+      setAuthMessage("Hosted sign-in failed");
+    }
+  }
+
   return (
     <section className="live-session" aria-labelledby="live-session-title">
       <div className="live-session-header">
@@ -380,6 +468,46 @@ function LiveSessionPanel() {
           />
         </label>
         <label>
+          <span>Auth0 domain</span>
+          <input
+            value={auth0Domain}
+            onChange={(event) => setAuth0Domain(event.currentTarget.value)}
+            disabled={!canStart}
+          />
+        </label>
+        <label>
+          <span>Auth0 client</span>
+          <input
+            value={auth0ClientId}
+            onChange={(event) => setAuth0ClientId(event.currentTarget.value)}
+            disabled={!canStart}
+          />
+        </label>
+        <label>
+          <span>Auth0 audience</span>
+          <input
+            value={auth0Audience}
+            onChange={(event) => setAuth0Audience(event.currentTarget.value)}
+            disabled={!canStart}
+          />
+        </label>
+        <label>
+          <span>Auth0 redirect</span>
+          <input
+            value={auth0RedirectUri}
+            onChange={(event) => setAuth0RedirectUri(event.currentTarget.value)}
+            disabled={!canStart}
+          />
+        </label>
+        <label>
+          <span>Auth callback</span>
+          <input
+            value={auth0CallbackUrl}
+            onChange={(event) => setAuth0CallbackUrl(event.currentTarget.value)}
+            disabled={!canStart || pendingHostedAuth === null}
+          />
+        </label>
+        <label>
           <span>Microphone</span>
           <select
             value={selectedMicrophoneDeviceId}
@@ -401,6 +529,22 @@ function LiveSessionPanel() {
         <div className="live-session-buttons">
           <button type="button" disabled={!canStart} onClick={() => void requestDevRealtimeToken()}>
             Get dev token
+          </button>
+          <button
+            type="button"
+            disabled={!canStart || auth0ClientId.trim().length === 0}
+            onClick={() => void startHostedSignIn()}
+          >
+            Start hosted auth
+          </button>
+          <button
+            type="button"
+            disabled={
+              !canStart || pendingHostedAuth === null || auth0CallbackUrl.trim().length === 0
+            }
+            onClick={() => void completeHostedSignIn()}
+          >
+            Complete hosted auth
           </button>
           <button
             type="button"

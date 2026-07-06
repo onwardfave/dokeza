@@ -23,6 +23,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## Latest Broad Verification
 
+- [x] 2026-07-06, desktop hosted-auth PKCE foundation: `pnpm check` passed.
 - [x] 2026-07-06, Auth0 IdP selection docs: `pnpm check` passed.
 - [x] 2026-07-06, SRS/MVP tracker alignment update: `pnpm check` passed.
 - [x] 2026-07-06, progress tracker/process update: `pnpm check` passed.
@@ -83,7 +84,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 ### Onboarding and Permissions (FR-020 to FR-025, NFR-060, NFR-080)
 
 - [ ] Production account creation/sign-in and workspace selection.
-- [ ] Desktop hosted IdP redirect/SDK flow.
+- [ ] Partial: Desktop hosted IdP Authorization Code + PKCE flow foundation exists; native loopback callback listener remains open.
 - [ ] Desktop secure token storage.
 - [ ] First-run capture explanation and consent/disclosure copy.
 - [ ] Independent controls for microphone, system audio, screen context, and document retrieval.
@@ -254,6 +255,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Desktop secure token storage foundation (OS credential store for API session tokens)
 - [x] Select hosted IdP vendor (Auth0)
 - [x] Define desktop redirect/SDK strategy (system browser Authorization Code + PKCE with loopback callback for alpha)
+- [ ] Partial: Desktop hosted IdP flow foundation can build an Auth0 PKCE URL, validate callback state, exchange code for provider tokens, exchange provider token for a Dokeza API session, and save the API session; native loopback callback listener remains open.
 - [ ] Full durable workspace provisioning and membership administration
 - [ ] Hosted IdP refresh/session renewal in desktop secure storage
 - [ ] Replace visible dev-token product flow with authenticated state
@@ -341,7 +343,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Desktop secure token storage foundation (OS credential store for API session tokens)
 - [x] Select hosted IdP vendor (Auth0)
 - [x] Define desktop redirect/SDK strategy
-- [ ] Implement desktop redirect/SDK flow
+- [ ] Partial: Implement desktop redirect/SDK flow (PKCE/token-exchange foundation exists; native loopback callback listener remains open)
 - [ ] Full durable workspace provisioning and membership administration
 - [ ] Hosted IdP refresh/session renewal in desktop secure storage
 - [ ] Replace dev-token product flow
