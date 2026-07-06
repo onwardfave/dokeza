@@ -2,6 +2,7 @@ import { describe, expect, it, afterEach } from "vitest";
 import { createDokezaAuthTokenService } from "@dokeza/auth";
 import type { Actor } from "@dokeza/authz";
 import { InMemoryKnowledgeRepository } from "@dokeza/knowledge";
+import type { TelemetryEvent } from "@dokeza/telemetry";
 import { createHttpServer, type HttpServerHandle } from "./http-server.js";
 import { InMemoryIdentityRepository } from "./identity-repository.js";
 import { InMemoryMeetingReviewRepository } from "./meeting-review-repository.js";
@@ -316,6 +317,77 @@ describe("API HTTP Server", () => {
     }
   });
 
+  it("emits metadata-only auth telemetry for hosted provider exchange", async () => {
+    const telemetry: TelemetryEvent[] = [];
+    const identityRepository = new InMemoryIdentityRepository([
+      {
+        providerSubject: "provider_user_telemetry",
+        userId: "user_provider_telemetry",
+        email: "telemetry@example.com",
+        displayName: "Telemetry User",
+        memberships: [
+          { userId: "user_provider_telemetry", workspaceId: "ws_provider", role: "admin" },
+        ],
+      },
+    ]);
+    handle = createHttpServer({
+      env: {
+        ...defaultEnv,
+        DOKEZA_HOSTED_AUTH_ENABLED: "true",
+        DOKEZA_HOSTED_AUTH_ISSUER: "https://idp.example.com/",
+        DOKEZA_HOSTED_AUTH_AUDIENCE: "dokeza-api",
+        DOKEZA_HOSTED_AUTH_JWKS_URL: "https://idp.example.com/.well-known/jwks.json",
+      },
+      now: () => fixedNow,
+      providerVerifier: {
+        verify: async (token) =>
+          token === "provider-token-sensitive"
+            ? {
+                ok: true,
+                identity: {
+                  providerSubject: "provider_user_telemetry",
+                  email: "telemetry@example.com",
+                  displayName: "Telemetry User",
+                },
+              }
+            : { ok: false, reason: "invalid_signature" },
+      },
+      identityRepository,
+      telemetrySink: {
+        emit: (event) => {
+          telemetry.push(event);
+        },
+      },
+    });
+    await new Promise<void>((resolve) => {
+      handle!.server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const port = getPort(handle);
+
+    const response = await fetch(`http://127.0.0.1:${port}/v1/auth/provider/exchange`, {
+      method: "POST",
+      body: JSON.stringify({ provider_token: "provider-token-sensitive", device_id: "dev_1" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(telemetry).toContainEqual({
+      name: "api.auth_request",
+      fields: {
+        route: "provider_exchange",
+        method: "POST",
+        status: 200,
+        statusCategory: "2xx",
+        latencyMs: 0,
+        environment: "test",
+        developmentOnly: false,
+        userId: "user_provider_telemetry",
+      },
+    });
+    const serialized = JSON.stringify(telemetry);
+    expect(serialized).not.toContain("provider-token-sensitive");
+    expect(serialized).not.toContain("dev_1");
+  });
+
   it("fails provider exchange closed when hosted auth is unavailable or invalid", async () => {
     const disabledPort = await startServer();
     const disabled = await fetch(`http://127.0.0.1:${disabledPort}/v1/auth/provider/exchange`, {
@@ -419,6 +491,70 @@ describe("API HTTP Server", () => {
     });
     expect(crossWorkspace.status).toBe(403);
     expect(await crossWorkspace.json()).toEqual({ error: "workspace_access_denied" });
+  });
+
+  it("emits metadata-only auth telemetry for API token auth and realtime token issuance", async () => {
+    const telemetry: TelemetryEvent[] = [];
+    const apiToken = issueApiToken({
+      userId: "user_1",
+      memberships: [{ userId: "user_1", workspaceId: "ws_1", role: "member" }],
+    });
+    handle = createHttpServer({
+      env: defaultEnv,
+      now: () => fixedNow,
+      meetingRepository,
+      knowledgeRepository,
+      telemetrySink: {
+        emit: (event) => {
+          telemetry.push(event);
+        },
+      },
+    });
+    await new Promise<void>((resolve) => {
+      handle!.server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const port = getPort(handle);
+
+    await fetch(`http://127.0.0.1:${port}/v1/me`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+    await fetch(`http://127.0.0.1:${port}/v1/workspaces`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+    await fetch(`http://127.0.0.1:${port}/v1/realtime/token`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}` },
+      body: JSON.stringify({ workspace_id: "ws_1", device_id: "dev_1" }),
+    });
+    await fetch(`http://127.0.0.1:${port}/v1/realtime/token`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}` },
+      body: JSON.stringify({ workspace_id: "ws_other" }),
+    });
+
+    expect(telemetry.map((event) => event.fields.route)).toEqual([
+      "profile",
+      "workspace_list",
+      "realtime_token",
+      "realtime_token",
+    ]);
+    expect(telemetry[2]?.fields).toMatchObject({
+      status: 200,
+      statusCategory: "2xx",
+      userId: "user_1",
+      workspaceId: "ws_1",
+      developmentOnly: true,
+    });
+    expect(telemetry[3]?.fields).toMatchObject({
+      status: 403,
+      statusCategory: "4xx",
+      failureCategory: "workspace_access_denied",
+      userId: "user_1",
+      workspaceId: "ws_other",
+    });
+    const serialized = JSON.stringify(telemetry);
+    expect(serialized).not.toContain(apiToken);
+    expect(serialized).not.toContain("dev_1");
   });
 
   it("lists meeting history for an authorized workspace without transcript content", async () => {

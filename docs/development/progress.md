@@ -249,12 +249,12 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Desktop can request local dev realtime token
 - [x] Provider-neutral OIDC/JWKS verification boundary at API (`POST /v1/auth/provider/exchange`)
 - [x] PostgreSQL provider identity mapping and first-workspace provisioning foundation
+- [x] Auth telemetry foundation (metadata-only, no token values)
 - [ ] Select hosted IdP vendor
 - [ ] Define desktop redirect/SDK strategy
 - [ ] Full durable workspace provisioning and membership administration
 - [ ] Desktop secure token storage (platform keychain)
 - [ ] Replace visible dev-token product flow with authenticated state
-- [ ] Auth telemetry (metadata-only, no token values)
 
 ## M1A.5 — Live Transcript UI
 
@@ -335,12 +335,12 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] `POST /v1/auth/provider/exchange` route
 - [x] Development-only issuer (fail-closed outside local/test)
 - [x] PostgreSQL provider identity mapping and first-workspace provisioning foundation
+- [x] Auth telemetry foundation (metadata-only, no token values)
 - [ ] Select hosted IdP vendor
 - [ ] Implement desktop redirect/SDK flow
 - [ ] Full durable workspace provisioning and membership administration
 - [ ] Desktop secure token storage
 - [ ] Replace dev-token product flow
-- [ ] Auth telemetry
 
 ### Alpha.2 — Desktop Productization Pass
 - [ ] Live-session-first application surface (replace diagnostics-first layout)

@@ -85,7 +85,8 @@ Tokens stored on device must use platform secure storage where available. Logs, 
 
 - Authentication verifies identity; Dokeza authorization still enforces workspace isolation.
 - Provider access tokens, refresh tokens, and Dokeza realtime tokens are restricted secrets.
-- Telemetry may include provider name, auth route, status code category, latency, and failure category only.
+- Telemetry may include auth route, method, status code category, latency, environment, development-only flag, user/workspace IDs where already authenticated, and failure category only.
+- Telemetry must not include provider token values, Dokeza API token values, realtime token values, refresh token values, device IDs, provider payloads, workspace internals, or customer content.
 - No raw transcript, prompt, document, suggestion, or audio content is sent to the IdP.
 - Enterprise SSO/SAML should be implemented through the hosted IdP or a dedicated enterprise auth boundary, not by bypassing Dokeza workspace authorization.
 
@@ -99,6 +100,7 @@ Required tests before production auth is considered complete:
 - Realtime rejects missing, expired, malformed, and cross-workspace tokens.
 - Realtime resume rejects tokens for a different user, workspace, or device where device binding is enabled.
 - Logs and telemetry redact token values.
+- API auth telemetry emits metadata-only success and failure events for provider exchange, development auth, profile, workspace list, and realtime-token issuance.
 - Local development auth remains explicitly marked as development-only.
 
 ## 10. Open Decisions

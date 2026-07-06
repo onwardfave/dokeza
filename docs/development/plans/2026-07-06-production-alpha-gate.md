@@ -140,7 +140,7 @@ Acceptance criteria:
 
 Goal: replace development-token UX with a production-capable hosted IdP and workspace-selection path.
 
-Status: partially implemented. The API now has a provider-neutral OIDC/JWKS verification boundary and `POST /v1/auth/provider/exchange` route that converts verified hosted provider tokens into short-lived Dokeza API tokens using Dokeza-owned workspace membership state. Local/test development auth remains available only when explicitly enabled. The desktop protocol client can call the provider exchange route. Remaining work: select the hosted IdP vendor and desktop redirect/SDK strategy, add durable PostgreSQL identity/workspace provisioning, store desktop tokens in platform-secure storage, replace the visible dev-token product flow, and add auth telemetry.
+Status: partially implemented. The API now has a provider-neutral OIDC/JWKS verification boundary and `POST /v1/auth/provider/exchange` route that converts verified hosted provider tokens into short-lived Dokeza API tokens using Dokeza-owned workspace membership state. Local/test development auth remains available only when explicitly enabled. PostgreSQL provider identity mapping, first-workspace provisioning, and metadata-only auth telemetry foundations exist. The desktop protocol client can call the provider exchange route. Remaining work: select the hosted IdP vendor and desktop redirect/SDK strategy, finish full workspace provisioning and membership administration, store desktop tokens in platform-secure storage, and replace the visible dev-token product flow.
 
 Tasks:
 
@@ -150,7 +150,7 @@ Tasks:
 4. Preserve development-only token issuer for local/test only and fail closed outside enabled local/test environments. Done.
 5. Add desktop sign-in, sign-out, workspace selection, token refresh/retry states, and secure token storage.
 6. Replace visible dev-token fields in normal product flow with authenticated state.
-7. Add auth telemetry with no token values.
+7. Add auth telemetry with no token values. Done for API auth boundary.
 8. Update auth, data-flow, failure-mode, local environment, and roadmap docs. Done for provider exchange boundary.
 
 Acceptance criteria:

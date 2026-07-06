@@ -7,6 +7,7 @@ import {
 } from "@dokeza/auth";
 import { authorizeWorkspace, type Actor, type WorkspaceRole } from "@dokeza/authz";
 import { parseConfig, type DokezaConfig } from "@dokeza/config";
+import { createTelemetryEvent, type TelemetryEvent } from "@dokeza/telemetry";
 import {
   validateDevAuthTokenRequest,
   validateKnowledgeDocumentUploadRequest,
@@ -44,11 +45,16 @@ export interface HttpServerOptions {
   knowledgeRepository?: KnowledgeRepository;
   identityRepository?: IdentityRepository;
   providerVerifier?: ProviderVerifier;
+  telemetrySink?: TelemetrySink;
 }
 
 export interface HttpServerHandle {
   server: Server;
   close(): Promise<void>;
+}
+
+export interface TelemetrySink {
+  emit(event: TelemetryEvent): void | Promise<void>;
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -58,6 +64,44 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
     "Content-Length": Buffer.byteLength(json),
   });
   res.end(json);
+}
+
+function statusCategory(status: number): string {
+  return `${Math.floor(status / 100)}xx`;
+}
+
+function emitTelemetry(sink: TelemetrySink, event: TelemetryEvent): void {
+  try {
+    void sink.emit(event);
+  } catch {
+    // Auth telemetry must never block or alter auth behavior.
+  }
+}
+
+function createAuthTelemetry(input: {
+  route: string;
+  method: string | undefined;
+  status: number;
+  startedAtMs: number;
+  nowMs: number;
+  environment: DokezaConfig["environment"];
+  developmentOnly?: boolean;
+  failureCategory?: string;
+  userId?: string;
+  workspaceId?: string;
+}): TelemetryEvent {
+  return createTelemetryEvent("api.auth_request", {
+    route: input.route,
+    method: input.method ?? "UNKNOWN",
+    status: input.status,
+    statusCategory: statusCategory(input.status),
+    latencyMs: Math.max(0, input.nowMs - input.startedAtMs),
+    environment: input.environment,
+    ...(input.developmentOnly === undefined ? {} : { developmentOnly: input.developmentOnly }),
+    ...(input.failureCategory === undefined ? {} : { failureCategory: input.failureCategory }),
+    ...(input.userId === undefined ? {} : { userId: input.userId }),
+    ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
+  });
 }
 
 function methodNotAllowed(res: ServerResponse): void {
@@ -300,9 +344,24 @@ function handleHealth(req: IncomingMessage, res: ServerResponse, env: NodeJS.Pro
 export function createHttpServer(options: HttpServerOptions = {}): HttpServerHandle {
   const env = options.env ?? process.env;
   const now = options.now ?? (() => new Date());
+  const telemetrySink = options.telemetrySink ?? { emit: () => undefined };
   let managedMeetingPersistence: MeetingReviewPersistence | undefined;
   let managedKnowledgePersistence: KnowledgePersistence | undefined;
   let managedIdentityPersistence: IdentityPersistence | undefined;
+
+  function emitAuthTelemetry(
+    runtime: { config: DokezaConfig },
+    input: Omit<Parameters<typeof createAuthTelemetry>[0], "environment" | "nowMs">,
+  ): void {
+    emitTelemetry(
+      telemetrySink,
+      createAuthTelemetry({
+        ...input,
+        nowMs: now().getTime(),
+        environment: runtime.config.environment,
+      }),
+    );
+  }
 
   function getIdentityRepository(config: DokezaConfig): IdentityRepository {
     if (options.identityRepository !== undefined) {
@@ -355,12 +414,27 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
     }
 
     if (url.pathname === "/v1/dev/auth/token") {
+      const startedAtMs = now().getTime();
       if (req.method !== "POST") {
+        emitAuthTelemetry(runtime, {
+          route: "dev_auth_token",
+          method: req.method,
+          status: 405,
+          startedAtMs,
+          failureCategory: "method_not_allowed",
+        });
         methodNotAllowed(res);
         return;
       }
 
       if (!runtime.config.auth.developmentAuthEnabled) {
+        emitAuthTelemetry(runtime, {
+          route: "dev_auth_token",
+          method: req.method,
+          status: 403,
+          startedAtMs,
+          failureCategory: "dev_auth_unavailable",
+        });
         sendJson(res, 403, { error: "dev_auth_unavailable" });
         return;
       }
@@ -368,6 +442,13 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
       void readJsonBody(req)
         .then((body) => {
           if (!validateDevAuthTokenRequest(body)) {
+            emitAuthTelemetry(runtime, {
+              route: "dev_auth_token",
+              method: req.method,
+              status: 400,
+              startedAtMs,
+              failureCategory: "invalid_request",
+            });
             sendJson(res, 400, { error: "invalid_request" });
             return;
           }
@@ -380,6 +461,15 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
             developmentOnly: true,
           });
 
+          emitAuthTelemetry(runtime, {
+            route: "dev_auth_token",
+            method: req.method,
+            status: 200,
+            startedAtMs,
+            developmentOnly: true,
+            userId: actor.userId,
+          });
+
           sendJson(res, 200, {
             token,
             token_type: "Bearer",
@@ -388,18 +478,42 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
             development_only: true,
           });
         })
-        .catch(() => sendJson(res, 400, { error: "invalid_request" }));
+        .catch(() => {
+          emitAuthTelemetry(runtime, {
+            route: "dev_auth_token",
+            method: req.method,
+            status: 400,
+            startedAtMs,
+            failureCategory: "invalid_request",
+          });
+          sendJson(res, 400, { error: "invalid_request" });
+        });
       return;
     }
 
     if (url.pathname === "/v1/auth/provider/exchange") {
+      const startedAtMs = now().getTime();
       if (req.method !== "POST") {
+        emitAuthTelemetry(runtime, {
+          route: "provider_exchange",
+          method: req.method,
+          status: 405,
+          startedAtMs,
+          failureCategory: "method_not_allowed",
+        });
         methodNotAllowed(res);
         return;
       }
 
       const providerVerifier = options.providerVerifier ?? createProviderVerifier(runtime.config);
       if (providerVerifier === undefined) {
+        emitAuthTelemetry(runtime, {
+          route: "provider_exchange",
+          method: req.method,
+          status: 403,
+          startedAtMs,
+          failureCategory: "auth_provider_unavailable",
+        });
         sendJson(res, 403, { error: "auth_provider_unavailable" });
         return;
       }
@@ -407,12 +521,26 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
       void readJsonBody(req)
         .then(async (body) => {
           if (!validateProviderAuthExchangeRequest(body)) {
+            emitAuthTelemetry(runtime, {
+              route: "provider_exchange",
+              method: req.method,
+              status: 400,
+              startedAtMs,
+              failureCategory: "invalid_request",
+            });
             sendJson(res, 400, { error: "invalid_request" });
             return;
           }
 
           const providerValidation = await providerVerifier.verify(body.provider_token);
           if (!providerValidation.ok) {
+            emitAuthTelemetry(runtime, {
+              route: "provider_exchange",
+              method: req.method,
+              status: 401,
+              startedAtMs,
+              failureCategory: providerValidation.reason,
+            });
             sendJson(res, 401, { error: "auth_invalid" });
             return;
           }
@@ -427,6 +555,15 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
             expiresInSeconds: runtime.config.auth.apiTokenTtlSeconds,
             developmentOnly: false,
             ...(body.device_id === undefined ? {} : { deviceId: body.device_id }),
+          });
+
+          emitAuthTelemetry(runtime, {
+            route: "provider_exchange",
+            method: req.method,
+            status: 200,
+            startedAtMs,
+            developmentOnly: false,
+            userId: principal.actor.userId,
           });
 
           sendJson(res, 200, {
@@ -447,21 +584,54 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
               })),
           });
         })
-        .catch(() => sendJson(res, 400, { error: "invalid_request" }));
+        .catch(() => {
+          emitAuthTelemetry(runtime, {
+            route: "provider_exchange",
+            method: req.method,
+            status: 400,
+            startedAtMs,
+            failureCategory: "invalid_request",
+          });
+          sendJson(res, 400, { error: "invalid_request" });
+        });
       return;
     }
 
     if (url.pathname === "/v1/me") {
+      const startedAtMs = now().getTime();
       if (req.method !== "GET") {
+        emitAuthTelemetry(runtime, {
+          route: "profile",
+          method: req.method,
+          status: 405,
+          startedAtMs,
+          failureCategory: "method_not_allowed",
+        });
         methodNotAllowed(res);
         return;
       }
 
       const auth = authenticateApiRequest(req, runtime.tokenService);
       if ("error" in auth) {
+        emitAuthTelemetry(runtime, {
+          route: "profile",
+          method: req.method,
+          status: 401,
+          startedAtMs,
+          failureCategory: auth.error,
+        });
         sendJson(res, 401, { error: auth.error });
         return;
       }
+
+      emitAuthTelemetry(runtime, {
+        route: "profile",
+        method: req.method,
+        status: 200,
+        startedAtMs,
+        developmentOnly: auth.developmentOnly,
+        userId: auth.actor.userId,
+      });
 
       sendJson(res, 200, {
         user: {
@@ -474,16 +644,40 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
     }
 
     if (url.pathname === "/v1/workspaces") {
+      const startedAtMs = now().getTime();
       if (req.method !== "GET") {
+        emitAuthTelemetry(runtime, {
+          route: "workspace_list",
+          method: req.method,
+          status: 405,
+          startedAtMs,
+          failureCategory: "method_not_allowed",
+        });
         methodNotAllowed(res);
         return;
       }
 
       const auth = authenticateApiRequest(req, runtime.tokenService);
       if ("error" in auth) {
+        emitAuthTelemetry(runtime, {
+          route: "workspace_list",
+          method: req.method,
+          status: 401,
+          startedAtMs,
+          failureCategory: auth.error,
+        });
         sendJson(res, 401, { error: auth.error });
         return;
       }
+
+      emitAuthTelemetry(runtime, {
+        route: "workspace_list",
+        method: req.method,
+        status: 200,
+        startedAtMs,
+        developmentOnly: auth.developmentOnly,
+        userId: auth.actor.userId,
+      });
 
       sendJson(res, 200, {
         workspaces: auth.actor.memberships
@@ -498,13 +692,28 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
     }
 
     if (url.pathname === "/v1/realtime/token") {
+      const startedAtMs = now().getTime();
       if (req.method !== "POST") {
+        emitAuthTelemetry(runtime, {
+          route: "realtime_token",
+          method: req.method,
+          status: 405,
+          startedAtMs,
+          failureCategory: "method_not_allowed",
+        });
         methodNotAllowed(res);
         return;
       }
 
       const auth = authenticateApiRequest(req, runtime.tokenService);
       if ("error" in auth) {
+        emitAuthTelemetry(runtime, {
+          route: "realtime_token",
+          method: req.method,
+          status: 401,
+          startedAtMs,
+          failureCategory: auth.error,
+        });
         sendJson(res, 401, { error: auth.error });
         return;
       }
@@ -512,12 +721,31 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
       void readJsonBody(req)
         .then((body) => {
           if (!validateRealtimeTokenRequest(body)) {
+            emitAuthTelemetry(runtime, {
+              route: "realtime_token",
+              method: req.method,
+              status: 400,
+              startedAtMs,
+              developmentOnly: auth.developmentOnly,
+              failureCategory: "invalid_request",
+              userId: auth.actor.userId,
+            });
             sendJson(res, 400, { error: "invalid_request" });
             return;
           }
 
           const authorization = authorizeWorkspace(auth.actor, body.workspace_id);
           if (!authorization.allowed) {
+            emitAuthTelemetry(runtime, {
+              route: "realtime_token",
+              method: req.method,
+              status: 403,
+              startedAtMs,
+              developmentOnly: auth.developmentOnly,
+              failureCategory: "workspace_access_denied",
+              userId: auth.actor.userId,
+              workspaceId: body.workspace_id,
+            });
             sendJson(res, 403, { error: "workspace_access_denied" });
             return;
           }
@@ -531,6 +759,16 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
             ...(body.device_id === undefined ? {} : { deviceId: body.device_id }),
           });
 
+          emitAuthTelemetry(runtime, {
+            route: "realtime_token",
+            method: req.method,
+            status: 200,
+            startedAtMs,
+            developmentOnly: auth.developmentOnly,
+            userId: auth.actor.userId,
+            workspaceId: body.workspace_id,
+          });
+
           sendJson(res, 200, {
             token,
             token_type: "Bearer",
@@ -539,7 +777,18 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
             development_only: auth.developmentOnly,
           });
         })
-        .catch(() => sendJson(res, 400, { error: "invalid_request" }));
+        .catch(() => {
+          emitAuthTelemetry(runtime, {
+            route: "realtime_token",
+            method: req.method,
+            status: 400,
+            startedAtMs,
+            developmentOnly: auth.developmentOnly,
+            failureCategory: "invalid_request",
+            userId: auth.actor.userId,
+          });
+          sendJson(res, 400, { error: "invalid_request" });
+        });
       return;
     }
 
