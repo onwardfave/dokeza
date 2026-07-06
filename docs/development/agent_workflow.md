@@ -303,7 +303,9 @@ Progress tracker updates should be checkbox-compatible and conservative:
 
 - Use `[x]` only for verified, durable implementation state.
 - Use `[ ] Partial:` when a foundation exists but production storage, provider, policy, UX, or operational wiring remains.
-- Use `[ ] Deferred:` for real roadmap work that is intentionally outside the current production-alpha gate.
+- Use `[ ] Alpha-deferred:` for real SRS/MVP roadmap work that is intentionally outside the current production-alpha gate.
+- Preserve SRS requirement IDs on MVP/full-SRS checklist items whenever practical.
+- Keep the SRS/MVP dashboard, MVP acceptance checklist, requirement coverage, and alpha gate sections in sync when a slice changes product status.
 - Split mixed items instead of combining done and open work in one checkbox.
 - Keep broad verification such as `pnpm check` in the "Latest Broad Verification" section, not as a permanent feature item.
 
@@ -394,7 +396,7 @@ Record repeated process lessons here so future sessions start stronger.
 - Source-grounded retrieval work needs one explicit checklist that couples authorization, retrieval quality, prompt safety, citations, evals, provider data flow, and retention behavior; use `dokeza-rag-source-grounding` for those slices.
 - Production alpha work starts from `docs/development/plans/2026-07-06-production-alpha-gate.md`; do not widen into billing, broad admin governance, CRM/email writeback, analytics, role packs, full macOS product support, or local-first processing until the alpha gate is reliable.
 - Hosted identity provider tokens belong at the API exchange boundary only. Realtime, meeting review, knowledge, and other resource APIs should continue to accept Dokeza-issued tokens, with workspace membership resolved through Dokeza-owned identity state.
-- `docs/development/progress.md` is the compact checklist for completion state. Keep it checkbox-compatible, split partial work from completed foundations, and update it with the same commit as the implementation that changes status.
+- `docs/development/progress.md` is the compact checklist for full SRS/MVP and production-alpha completion state. Keep it checkbox-compatible, include SRS IDs for MVP/full-SRS items, split partial work from completed foundations, and update it with the same commit as the implementation that changes status.
 
 ## 17. Updating This Workflow
 
