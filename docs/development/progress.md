@@ -23,6 +23,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## Latest Broad Verification
 
+- [x] 2026-07-06, hosted IdP refresh/session renewal: `pnpm check` passed; `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` passed.
 - [x] 2026-07-06, desktop hosted-auth loopback callback: `pnpm check` passed; `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` passed.
 - [x] 2026-07-06, desktop hosted-auth PKCE foundation: `pnpm check` passed.
 - [x] 2026-07-06, Auth0 IdP selection docs: `pnpm check` passed.
@@ -258,7 +259,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Define desktop redirect/SDK strategy (system browser Authorization Code + PKCE with loopback callback for alpha)
 - [x] Desktop hosted IdP flow can open Auth0 PKCE sign-in, capture the loopback callback under Tauri, validate callback state, exchange code for provider tokens, exchange provider token for a Dokeza API session, save the API session, and request realtime tokens.
 - [ ] Full durable workspace provisioning and membership administration
-- [ ] Hosted IdP refresh/session renewal in desktop secure storage
+- [x] Hosted IdP refresh/session renewal in desktop secure storage
 - [ ] Replace visible dev-token product flow with authenticated state
 
 ## M1A.5 — Live Transcript UI
@@ -346,7 +347,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Define desktop redirect/SDK strategy
 - [x] Implement desktop redirect/SDK flow
 - [ ] Full durable workspace provisioning and membership administration
-- [ ] Hosted IdP refresh/session renewal in desktop secure storage
+- [x] Hosted IdP refresh/session renewal in desktop secure storage
 - [ ] Replace dev-token product flow
 
 ### Alpha.2 — Desktop Productization Pass

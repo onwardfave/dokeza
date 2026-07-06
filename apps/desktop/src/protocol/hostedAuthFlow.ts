@@ -56,6 +56,12 @@ export interface CompleteHostedAuthInput {
   fetcher?: HostedAuthFetch;
 }
 
+export interface RefreshHostedAuthInput {
+  config: Auth0DesktopConfig;
+  refreshToken: string;
+  fetcher?: HostedAuthFetch;
+}
+
 export type HostedAuthBrowserOpen = (authorizeUrl: string) => void | Promise<void>;
 
 const defaultScopes = ["openid", "profile", "email", "offline_access"];
@@ -126,8 +132,6 @@ export async function completeAuth0DesktopSignIn(
     throw new Error("hosted_auth_missing_code");
   }
 
-  const fetcher = input.fetcher ?? fetch;
-  const tokenUrl = new URL("/oauth/token", config.domain);
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     client_id: config.clientId,
@@ -135,6 +139,32 @@ export async function completeAuth0DesktopSignIn(
     code_verifier: input.pending.codeVerifier,
     redirect_uri: config.redirectUri,
   });
+  return exchangeAuth0Token(config, body, input.fetcher);
+}
+
+export async function refreshAuth0DesktopSignIn(
+  input: RefreshHostedAuthInput,
+): Promise<HostedAuthTokenResult> {
+  const config = normalizeConfig(input.config);
+  if (input.refreshToken.trim().length === 0) {
+    throw new Error("hosted_auth_invalid_refresh_token");
+  }
+
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    client_id: config.clientId,
+    refresh_token: input.refreshToken,
+  });
+  return exchangeAuth0Token(config, body, input.fetcher);
+}
+
+async function exchangeAuth0Token(
+  config: Auth0DesktopConfig,
+  body: URLSearchParams,
+  fetcherInput?: HostedAuthFetch,
+): Promise<HostedAuthTokenResult> {
+  const fetcher = fetcherInput ?? fetch;
+  const tokenUrl = new URL("/oauth/token", config.domain);
   const response = await fetcher(tokenUrl.toString(), {
     method: "POST",
     headers: {

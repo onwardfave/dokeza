@@ -12,6 +12,10 @@ describe("secureTokenStorage", () => {
           expiresAt: "2026-07-07T00:00:00.000Z",
           userId: "user_1",
           workspaceId: "ws_1",
+          providerRefreshToken: "provider_refresh_secret",
+          providerDomain: "https://dokeza-alpha.us.auth0.com",
+          providerClientId: "desktop_client_id",
+          providerAudience: "dokeza-api",
         },
         invoke,
       ),
@@ -23,6 +27,10 @@ describe("secureTokenStorage", () => {
         expires_at: "2026-07-07T00:00:00.000Z",
         user_id: "user_1",
         workspace_id: "ws_1",
+        provider_refresh_token: "provider_refresh_secret",
+        provider_domain: "https://dokeza-alpha.us.auth0.com",
+        provider_client_id: "desktop_client_id",
+        provider_audience: "dokeza-api",
       },
     });
   });
@@ -33,6 +41,10 @@ describe("secureTokenStorage", () => {
       expires_at: "2026-07-07T00:00:00.000Z",
       user_id: "user_1",
       workspace_id: "ws_1",
+      provider_refresh_token: "provider_refresh_secret",
+      provider_domain: "https://dokeza-alpha.us.auth0.com",
+      provider_client_id: "desktop_client_id",
+      provider_audience: "dokeza-api",
     });
 
     await expect(loadApiSession(invoke)).resolves.toEqual({
@@ -40,6 +52,10 @@ describe("secureTokenStorage", () => {
       expiresAt: "2026-07-07T00:00:00.000Z",
       userId: "user_1",
       workspaceId: "ws_1",
+      providerRefreshToken: "provider_refresh_secret",
+      providerDomain: "https://dokeza-alpha.us.auth0.com",
+      providerClientId: "desktop_client_id",
+      providerAudience: "dokeza-api",
     });
   });
 

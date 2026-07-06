@@ -3,6 +3,7 @@ import {
   beginAuth0DesktopSignIn,
   completeAuth0DesktopSignIn,
   openHostedAuthBrowser,
+  refreshAuth0DesktopSignIn,
   type Auth0DesktopConfig,
   type HostedAuthCrypto,
   type HostedAuthFetch,
@@ -164,5 +165,40 @@ describe("hostedAuthFlow", () => {
         }),
       }),
     ).rejects.toThrow("hosted_auth_token_exchange_failed:403");
+  });
+
+  it("renews provider tokens with a refresh token without a client secret", async () => {
+    const calls: Array<{ input: string; body?: string }> = [];
+    const fetcher: HostedAuthFetch = async (input, init) => {
+      calls.push({ input, ...(init?.body === undefined ? {} : { body: init.body }) });
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            access_token: "provider_access_token",
+            refresh_token: "rotated_refresh_token",
+          };
+        },
+      };
+    };
+
+    await expect(
+      refreshAuth0DesktopSignIn({
+        config,
+        refreshToken: "provider_refresh_token",
+        fetcher,
+      }),
+    ).resolves.toEqual({
+      providerToken: "provider_access_token",
+      refreshToken: "rotated_refresh_token",
+    });
+
+    const body = new URLSearchParams(calls[0]?.body);
+    expect(calls[0]?.input).toBe("https://dokeza-alpha.us.auth0.com/oauth/token");
+    expect(body.get("grant_type")).toBe("refresh_token");
+    expect(body.get("client_id")).toBe("desktop_client_id");
+    expect(body.get("refresh_token")).toBe("provider_refresh_token");
+    expect(body.has("client_secret")).toBe(false);
   });
 });

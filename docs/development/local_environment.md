@@ -86,7 +86,7 @@ For production-alpha Auth0 setup:
 4. Do not configure or ship a desktop client secret.
 5. Keep `DOKEZA_DEV_AUTH_ENABLED=false` for hosted-auth smoke tests and production-like environments.
 
-The current desktop hosted-auth flow exposes Auth0 domain, client ID, audience, redirect URI, and callback URL fields in the live-session panel. Under Tauri, starting hosted auth opens the browser, waits for the local loopback callback, exchanges the provider token with the API, and stores only the resulting Dokeza API session through secure token storage. Browser preview can still use the callback field as a manual smoke-test fallback because it cannot bind a native loopback listener.
+The current desktop hosted-auth flow exposes Auth0 domain, client ID, audience, redirect URI, and callback URL fields in the live-session panel. Under Tauri, starting hosted auth opens the browser, waits for the local loopback callback, exchanges the provider token with the API, and stores the resulting Dokeza API session plus provider refresh metadata through secure token storage. When the stored Dokeza API session is expired or near expiry, the desktop can refresh through Auth0 and rotate the stored refresh token if Auth0 returns one. Browser preview can still use the callback field as a manual smoke-test fallback because it cannot bind a native loopback listener.
 
 When hosted auth is enabled, the API accepts provider tokens only at:
 

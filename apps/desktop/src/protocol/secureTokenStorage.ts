@@ -5,6 +5,10 @@ export interface StoredApiSession {
   expiresAt: string;
   userId: string;
   workspaceId: string;
+  providerRefreshToken?: string;
+  providerDomain?: string;
+  providerClientId?: string;
+  providerAudience?: string;
 }
 
 export interface SecureTokenStorageReport {
@@ -22,6 +26,16 @@ function toNativeSession(session: StoredApiSession): Record<string, string> {
     expires_at: session.expiresAt,
     user_id: session.userId,
     workspace_id: session.workspaceId,
+    ...(session.providerRefreshToken === undefined
+      ? {}
+      : { provider_refresh_token: session.providerRefreshToken }),
+    ...(session.providerDomain === undefined ? {} : { provider_domain: session.providerDomain }),
+    ...(session.providerClientId === undefined
+      ? {}
+      : { provider_client_id: session.providerClientId }),
+    ...(session.providerAudience === undefined
+      ? {}
+      : { provider_audience: session.providerAudience }),
   };
 }
 
@@ -47,7 +61,28 @@ function fromNativeSession(value: unknown): StoredApiSession {
     expiresAt: readString(value.expires_at),
     userId: readString(value.user_id),
     workspaceId: readString(value.workspace_id),
+    ...readOptionalStringField(value, "provider_refresh_token", "providerRefreshToken"),
+    ...readOptionalStringField(value, "provider_domain", "providerDomain"),
+    ...readOptionalStringField(value, "provider_client_id", "providerClientId"),
+    ...readOptionalStringField(value, "provider_audience", "providerAudience"),
   };
+}
+
+function readOptionalStringField(
+  value: Record<string, unknown>,
+  nativeField: string,
+  outputField: "providerRefreshToken" | "providerDomain" | "providerClientId" | "providerAudience",
+): Partial<StoredApiSession> {
+  const nativeValue = value[nativeField];
+  if (nativeValue === undefined) {
+    return {};
+  }
+
+  if (typeof nativeValue !== "string" || nativeValue.trim().length === 0) {
+    throw new Error("secure_token_storage_invalid_response");
+  }
+
+  return { [outputField]: nativeValue };
 }
 
 function fromReport(value: unknown): SecureTokenStorageReport {

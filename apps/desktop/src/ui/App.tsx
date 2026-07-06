@@ -23,6 +23,7 @@ import {
   beginAuth0DesktopSignIn,
   completeAuth0DesktopSignIn,
   openHostedAuthBrowser,
+  refreshAuth0DesktopSignIn,
   type PendingHostedAuth,
 } from "../protocol/hostedAuthFlow.js";
 import {
@@ -179,8 +180,10 @@ function LiveSessionPanel() {
         return;
       }
 
-      setWorkspaceId(stored.workspaceId);
-      setAuthMessage(`Stored API session ready for ${stored.workspaceId}`);
+      const renewed = await renewStoredHostedSessionIfNeeded(stored, apiEndpoint).catch(() => null);
+      const activeSession = renewed ?? stored;
+      setWorkspaceId(activeSession.workspaceId);
+      setAuthMessage(`Stored API session ready for ${activeSession.workspaceId}`);
     } catch {
       setAuthMessage("Secure token storage unavailable");
     }
@@ -429,6 +432,14 @@ function LiveSessionPanel() {
           expiresAt: apiSession.expiresAt,
           userId: apiSession.user.userId,
           workspaceId: selectedWorkspace.workspaceId,
+          ...(hostedToken.refreshToken === undefined
+            ? {}
+            : {
+                providerRefreshToken: hostedToken.refreshToken,
+                providerDomain: auth0Domain,
+                providerClientId: auth0ClientId,
+                providerAudience: auth0Audience,
+              }),
         }).catch(() => undefined);
       }
       const realtimeToken = await requestRealtimeSessionToken({
@@ -726,9 +737,11 @@ function MeetingReviewPanel() {
         return;
       }
 
-      setApiToken(stored.token);
-      setWorkspaceId(stored.workspaceId);
-      setMessage(`Stored API session ready for ${stored.userId}`);
+      const renewed = await renewStoredHostedSessionIfNeeded(stored, apiEndpoint).catch(() => null);
+      const activeSession = renewed ?? stored;
+      setApiToken(activeSession.token);
+      setWorkspaceId(activeSession.workspaceId);
+      setMessage(`Stored API session ready for ${activeSession.userId}`);
     } catch {
       setMessage("Secure token storage unavailable");
     }
@@ -1062,6 +1075,66 @@ function MeetingReviewPanel() {
       ) : null}
     </section>
   );
+}
+
+async function renewStoredHostedSessionIfNeeded(
+  stored: Awaited<ReturnType<typeof loadApiSession>>,
+  apiEndpoint: string,
+) {
+  if (stored === null || !isExpiredOrNearExpiry(stored.expiresAt)) {
+    return stored;
+  }
+
+  if (
+    stored.providerRefreshToken === undefined ||
+    stored.providerDomain === undefined ||
+    stored.providerClientId === undefined ||
+    stored.providerAudience === undefined
+  ) {
+    return stored;
+  }
+
+  const providerToken = await refreshAuth0DesktopSignIn({
+    config: {
+      domain: stored.providerDomain,
+      clientId: stored.providerClientId,
+      audience: stored.providerAudience,
+      redirectUri: "http://127.0.0.1:57619/auth/callback",
+    },
+    refreshToken: stored.providerRefreshToken,
+  });
+  const apiSession = await exchangeProviderAuthToken({
+    apiBaseUrl: apiEndpoint,
+    providerToken: providerToken.providerToken,
+    deviceId: "dev_desktop_preview",
+  });
+  const workspace = apiSession.workspaces.find((item) => item.workspaceId === stored.workspaceId);
+  const selectedWorkspace = workspace ?? apiSession.workspaces[0];
+  if (selectedWorkspace === undefined) {
+    return stored;
+  }
+
+  const renewed = {
+    token: apiSession.token,
+    expiresAt: apiSession.expiresAt,
+    userId: apiSession.user.userId,
+    workspaceId: selectedWorkspace.workspaceId,
+    providerRefreshToken: providerToken.refreshToken ?? stored.providerRefreshToken,
+    providerDomain: stored.providerDomain,
+    providerClientId: stored.providerClientId,
+    providerAudience: stored.providerAudience,
+  };
+  await saveApiSession(renewed).catch(() => undefined);
+  return renewed;
+}
+
+function isExpiredOrNearExpiry(expiresAt: string): boolean {
+  const expires = Date.parse(expiresAt);
+  if (!Number.isFinite(expires)) {
+    return true;
+  }
+
+  return expires - Date.now() <= 60_000;
 }
 
 function DiagnosticsPanel() {
