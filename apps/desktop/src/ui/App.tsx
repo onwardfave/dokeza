@@ -29,6 +29,7 @@ import {
   listMicrophoneCaptureDevices,
   type NativeMicrophoneCaptureDevice,
 } from "../protocol/nativeMicrophoneSource.js";
+import { clearApiSession, loadApiSession, saveApiSession } from "../protocol/secureTokenStorage.js";
 import {
   formatDiagnosticDetails,
   isTauriRuntime,
@@ -144,6 +145,7 @@ function LiveSessionPanel() {
     broadcastRef.current = openLiveSessionBroadcastChannel();
     if (nativeRuntimeAvailable) {
       void refreshMicrophoneDevices();
+      void restoreApiSessionForRealtime();
     }
 
     return () => {
@@ -152,6 +154,20 @@ function LiveSessionPanel() {
       broadcastRef.current?.close();
     };
   }, [nativeRuntimeAvailable]);
+
+  async function restoreApiSessionForRealtime() {
+    try {
+      const stored = await loadApiSession();
+      if (stored === null) {
+        return;
+      }
+
+      setWorkspaceId(stored.workspaceId);
+      setAuthMessage(`Stored API session ready for ${stored.workspaceId}`);
+    } catch {
+      setAuthMessage("Secure token storage unavailable");
+    }
+  }
 
   useEffect(() => {
     broadcastRef.current?.postMessage({
@@ -289,11 +305,23 @@ function LiveSessionPanel() {
     setAuthMessage("Requesting token");
 
     try {
-      const apiToken = await requestDevelopmentApiToken({
-        apiBaseUrl: apiEndpoint,
-        workspaceId,
-        userId: "user_desktop_preview",
-      });
+      let apiToken = await loadApiSession().catch(() => null);
+      if (apiToken === null || apiToken.workspaceId !== workspaceId) {
+        const issued = await requestDevelopmentApiToken({
+          apiBaseUrl: apiEndpoint,
+          workspaceId,
+          userId: "user_desktop_preview",
+        });
+        apiToken = {
+          token: issued.token,
+          expiresAt: issued.expiresAt,
+          userId: issued.userId,
+          workspaceId,
+        };
+        if (nativeRuntimeAvailable) {
+          await saveApiSession(apiToken).catch(() => undefined);
+        }
+      }
       const realtimeToken = await requestRealtimeSessionToken({
         apiBaseUrl: apiEndpoint,
         apiToken: apiToken.token,
@@ -513,9 +541,31 @@ function MeetingReviewPanel() {
   const [detail, setDetail] = useState<MeetingDetailResponse | null>(null);
   const [exportFormat, setExportFormat] = useState<MeetingExportResponse["format"]>("markdown");
   const [exportContent, setExportContent] = useState("");
+  const nativeRuntimeAvailable = useMemo(() => isTauriRuntime(), []);
   const canCallApi = apiToken.trim().length > 0 && workspaceId.trim().length > 0;
   const selectedMeeting =
     meetings.find((meeting) => meeting.meeting_id === selectedMeetingId) ?? null;
+
+  useEffect(() => {
+    if (nativeRuntimeAvailable) {
+      void restoreReviewApiSession();
+    }
+  }, [nativeRuntimeAvailable]);
+
+  async function restoreReviewApiSession() {
+    try {
+      const stored = await loadApiSession();
+      if (stored === null) {
+        return;
+      }
+
+      setApiToken(stored.token);
+      setWorkspaceId(stored.workspaceId);
+      setMessage(`Stored API session ready for ${stored.userId}`);
+    } catch {
+      setMessage("Secure token storage unavailable");
+    }
+  }
 
   async function requestReviewToken() {
     setMessage("Requesting API token");
@@ -527,11 +577,33 @@ function MeetingReviewPanel() {
         userId: "user_desktop_preview",
       });
       setApiToken(token.token);
+      if (nativeRuntimeAvailable) {
+        await saveApiSession({
+          token: token.token,
+          expiresAt: token.expiresAt,
+          userId: token.userId,
+          workspaceId,
+        }).catch(() => undefined);
+      }
       setMessage(`API token ready for ${token.userId}`);
     } catch {
       setApiToken("");
       setMessage("API token request failed");
     }
+  }
+
+  async function clearReviewToken() {
+    setApiToken("");
+    setMeetings([]);
+    setSelectedMeetingId("");
+    setDetail(null);
+    setExportContent("");
+
+    if (nativeRuntimeAvailable) {
+      await clearApiSession().catch(() => undefined);
+    }
+
+    setMessage("API token cleared");
   }
 
   async function refreshMeetings() {
@@ -716,6 +788,13 @@ function MeetingReviewPanel() {
         <div className="meeting-review-buttons">
           <button type="button" onClick={() => void requestReviewToken()}>
             Get API token
+          </button>
+          <button
+            type="button"
+            disabled={apiToken.length === 0}
+            onClick={() => void clearReviewToken()}
+          >
+            Clear token
           </button>
           <button type="button" disabled={!canCallApi} onClick={() => void refreshMeetings()}>
             Refresh history

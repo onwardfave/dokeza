@@ -3,6 +3,7 @@ mod cache_probe;
 mod crash_diagnostics;
 mod microphone_capture;
 mod realtime_probe;
+mod secure_token_storage;
 mod shortcuts;
 mod update_policy;
 
@@ -16,6 +17,7 @@ use microphone_capture::{
     capture_default_microphone_chunks, capture_microphone_chunks, list_microphone_capture_devices,
 };
 use realtime_probe::probe_realtime_websocket;
+use secure_token_storage::{clear_api_session, load_api_session, save_api_session};
 use shortcuts::{toggle_overlay_window, DEV_OVERLAY_TOGGLE_SHORTCUT};
 use tauri::Manager;
 use tauri_plugin_global_shortcut::ShortcutState;
@@ -55,7 +57,10 @@ pub fn run() {
             capture_default_microphone_chunks,
             capture_microphone_chunks,
             list_microphone_capture_devices,
-            probe_system_audio_loopback
+            probe_system_audio_loopback,
+            save_api_session,
+            load_api_session,
+            clear_api_session
         ])
         .run(tauri::generate_context!())
         .expect("error while running Dokeza desktop shell");

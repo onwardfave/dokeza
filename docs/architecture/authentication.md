@@ -59,7 +59,7 @@ Development tokens are signed with `DOKEZA_AUTH_SIGNING_SECRET`; local/test envi
 6. Desktop selects a workspace and requests a short-lived realtime session token for that workspace.
 7. Desktop sends that realtime token in `auth.hello` over WSS.
 
-Tokens stored on device must use platform secure storage where available. Logs, diagnostics, and telemetry must never include token values.
+Tokens stored on device must use platform secure storage where available. The desktop stores Dokeza API session tokens through native secure-token commands backed by the OS credential store and keeps realtime session tokens transient in memory because they are short-lived and workspace/session scoped. Logs, diagnostics, and telemetry must never include token values.
 
 ## 6. Service Responsibilities
 
@@ -78,6 +78,7 @@ Tokens stored on device must use platform secure storage where available. Logs, 
 - If provider-token exchange fails, desktop shows sign-in unavailable or retryable auth failure and does not fall back to development tokens.
 - If a realtime token expires before session start, desktop requests a new token.
 - If a token expires during an active realtime connection, the session may continue until the server policy requires renewal; reconnect must obtain a fresh token before `resume.request`.
+- If desktop secure token storage is unavailable, desktop continues with in-memory auth for the current run, shows a sanitized storage-unavailable state, and does not write tokens to browser storage or diagnostics.
 - If workspace membership cannot be verified, access fails closed.
 - If a development API token is presented outside local/test-enabled config, API access fails closed.
 
@@ -100,6 +101,7 @@ Required tests before production auth is considered complete:
 - Realtime rejects missing, expired, malformed, and cross-workspace tokens.
 - Realtime resume rejects tokens for a different user, workspace, or device where device binding is enabled.
 - Logs and telemetry redact token values.
+- Desktop secure-token storage commands redact token values in debug output and expose only save/load/clear behavior.
 - API auth telemetry emits metadata-only success and failure events for provider exchange, development auth, profile, workspace list, and realtime-token issuance.
 - Local development auth remains explicitly marked as development-only.
 
