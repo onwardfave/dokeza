@@ -1,8 +1,21 @@
 # Dokeza Progress Tracker
 
-Checkbox tracker derived from the [production alpha gate plan](plans/2026-07-06-production-alpha-gate.md) and [production vertical roadmap](plans/2026-06-25-production-vertical-roadmap.md). Updated as work lands.
+Checkbox tracker derived from the [production alpha gate plan](plans/2026-07-06-production-alpha-gate.md) and [production vertical roadmap](plans/2026-06-25-production-vertical-roadmap.md). Updated in the same commit as feature, workflow, or documentation changes that alter completion state.
 
-**Legend:** `[x]` done · `[/]` partially done · `[ ]` not started
+**Legend:** `[x]` done · `[ ]` open · `Partial:` implemented foundation exists, production/completion gap remains · `Deferred:` not part of the current production-alpha gate.
+
+## Tracker Rules
+
+- This file is the lightweight completion checklist; detailed rationale stays in the linked roadmap and alpha gate plan.
+- Mark `[x]` only after the implementation is merged into repo state and verified with the relevant gate.
+- Use `Partial:` instead of a checked box when contracts, fakes, local/test paths, or first UI slices exist but production storage, policy, provider, or operational wiring remains.
+- Do not duplicate broad verification such as `pnpm check` as a permanent feature checkbox; record the latest broad verification below and keep per-slice verification in commit handoffs or QA docs.
+- When a future slice changes feature status, update this file in the same commit as the implementation/docs.
+
+## Latest Broad Verification
+
+- [x] 2026-07-06, progress tracker/process update: `pnpm check` passed.
+- [x] 2026-07-06, commit `ee70b2e`: `pnpm check` passed; `pnpm generate:schemas` completed after auth contract/schema updates.
 
 ---
 
@@ -15,7 +28,6 @@ Checkbox tracker derived from the [production alpha gate plan](plans/2026-07-06-
 - [x] Local Docker Compose PG 17 + pgvector stack (`docker-compose.yml`)
 - [x] `pnpm dev:infra` / `dev:infra:down` / `dev:infra:status` scripts
 - [x] Migration 0002: session recovery columns
-- [x] `pnpm check` passes
 
 ## M1A.1 — PostgreSQL Session and Transcript Persistence
 
@@ -63,8 +75,8 @@ Checkbox tracker derived from the [production alpha gate plan](plans/2026-07-06-
 - [x] Pause / resume / stop state machine
 - [x] `audio.gap` for user pause and device capture failure
 - [ ] Replace repeated bounded capture windows with long-lived native stream
-- [ ] System audio capture (Windows WASAPI loopback)
-- [ ] macOS system audio capture
+- [ ] Deferred: system audio capture (Windows WASAPI loopback)
+- [ ] Deferred: macOS system audio capture
 
 ## M1A.Auth — Minimum Auth and Workspace Token Path
 
@@ -75,7 +87,8 @@ Checkbox tracker derived from the [production alpha gate plan](plans/2026-07-06-
 - [x] Realtime accepts only Dokeza-issued realtime tokens (purpose, workspace, device context)
 - [x] Desktop can request local dev realtime token
 - [x] Provider-neutral OIDC/JWKS verification boundary at API (`POST /v1/auth/provider/exchange`)
-- [/] Hosted IdP vendor selection and desktop redirect/SDK strategy
+- [ ] Select hosted IdP vendor
+- [ ] Define desktop redirect/SDK strategy
 - [ ] Durable PostgreSQL identity / workspace provisioning
 - [ ] Desktop secure token storage (platform keychain)
 - [ ] Replace visible dev-token product flow with authenticated state
@@ -98,8 +111,10 @@ Checkbox tracker derived from the [production alpha gate plan](plans/2026-07-06-
 - [x] Desktop review panel (first version)
 - [x] Transcript search (API history query + desktop panel)
 - [x] Export to Markdown / JSON / clipboard
-- [/] Delete meeting flow (workspace authz + repo delete; role/admin policy + audit later)
-- [/] Retention cleanup job (workspace-scoped primitive; scheduling + audit later)
+- [x] Delete meeting flow with workspace authorization and repository delete
+- [ ] Add role/admin policy checks and audit to meeting delete
+- [x] Retention cleanup repository primitive
+- [ ] Schedule retention cleanup and add audit trail
 
 ---
 
@@ -117,7 +132,7 @@ Checkbox tracker derived from the [production alpha gate plan](plans/2026-07-06-
 - [x] Durable suggestion persistence (request ID, server seq, prompt/model metadata, citations)
 - [x] Desktop live-session panel suggestion display with source cues
 - [x] Meeting review shows persisted suggestions
-- [/] Cost/latency telemetry (metadata-only events exist; durable usage ledger remains)
+- [x] Cost/latency telemetry metadata events
 - [ ] Automatic suggestion triggers
 - [ ] Debounce / per-session rate limits
 - [ ] Cost ledger storage
@@ -137,7 +152,8 @@ Checkbox tracker derived from the [production alpha gate plan](plans/2026-07-06-
 - [x] Hybrid keyword + vector search with keyword-only fallback
 - [x] `live_only` / `local_only` block cloud document + embedding persistence
 - [x] Source metadata returned in manual live suggestions
-- [/] Permission-aware retrieval (workspace isolation + explicit allowed-document filter; doc-level policy later)
+- [x] Permission-aware retrieval foundation: workspace isolation and explicit allowed-document filter
+- [ ] Document-level permission policy
 - [ ] Reranking
 - [ ] Desktop / web knowledge upload UI
 - [ ] Retrieval evaluation dataset
@@ -156,7 +172,8 @@ Checkbox tracker derived from the [production alpha gate plan](plans/2026-07-06-
 - [x] Provider-neutral OIDC/JWKS verification boundary
 - [x] `POST /v1/auth/provider/exchange` route
 - [x] Development-only issuer (fail-closed outside local/test)
-- [/] Hosted IdP vendor + desktop redirect/SDK
+- [ ] Select hosted IdP vendor
+- [ ] Implement desktop redirect/SDK flow
 - [ ] Durable PG identity/workspace provisioning
 - [ ] Desktop secure token storage
 - [ ] Replace dev-token product flow
@@ -198,7 +215,8 @@ Checkbox tracker derived from the [production alpha gate plan](plans/2026-07-06-
 
 ### Alpha.6 — Knowledge Upload UI
 - [ ] Desktop knowledge panel (text/Markdown upload, list, detail, search)
-- [ ] Source selection / source cues in manual suggestions
+- [x] Source cues in manual suggestions
+- [ ] Source selection controls for knowledge-backed suggestions
 - [ ] Desktop API client tests + view-model/UI tests
 
 ---
@@ -216,10 +234,14 @@ Checkbox tracker derived from the [production alpha gate plan](plans/2026-07-06-
 
 ## Documentation Debt
 
+- [x] Update `authentication.md` with provider-neutral hosted auth exchange boundary
 - [ ] Update `authentication.md` with selected hosted IdP details
-- [ ] Update `data_flows.md` with hosted IdP token exchange
-- [ ] Update `failure_modes.md` with auth, usage, desktop capture failures
+- [x] Update `data_flows.md` with provider-token exchange boundary
+- [ ] Update `data_flows.md` with selected IdP redirect/session flow
+- [x] Update `failure_modes.md` with hosted provider token exchange rejection
+- [ ] Update `failure_modes.md` with usage guardrail and desktop capture failures
 - [ ] Update `multi_tenancy.md` with durable identity/membership
 - [ ] Update `code_architecture.md` with `packages/db`, `packages/auth`
 - [ ] Update `testing_strategy.md` with alpha E2E, failure injection, prompt/source evals
-- [ ] Update `local_environment.md` with hosted auth local setup
+- [x] Update `local_environment.md` with provider-neutral hosted auth env vars
+- [ ] Update `local_environment.md` with selected IdP local setup
