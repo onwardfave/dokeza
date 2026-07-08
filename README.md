@@ -43,13 +43,13 @@ Full local setup, environment variables, and hosted-auth configuration: [docs/de
 
 ## Key documentation
 
-| Area | Doc |
-| --- | --- |
-| Requirements | [SRS](docs/srs/realtime_meeting_copilot_srs.md), [traceability matrix](docs/srs/traceability_matrix.md) |
-| Current gate & progress | [Production alpha gate](docs/development/plans/2026-07-06-production-alpha-gate.md), [progress tracker](docs/development/progress.md) |
-| Security & privacy | [Data flows](docs/security/data_flows.md), [threat model](docs/security/threat_model.md), [multi-tenancy](docs/architecture/multi_tenancy.md) |
-| Reliability | [Failure modes](docs/architecture/failure_modes.md), [testing strategy](docs/testing/testing_strategy.md) |
-| Operations | [Local environment](docs/development/local_environment.md), [CI/CD & release](docs/devops/ci_cd_release.md), [desktop release operations](docs/devops/desktop_release_operations.md) |
+| Area                    | Doc                                                                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirements            | [SRS](docs/srs/realtime_meeting_copilot_srs.md), [traceability matrix](docs/srs/traceability_matrix.md)                                                                              |
+| Current gate & progress | [Production alpha gate](docs/development/plans/2026-07-06-production-alpha-gate.md), [progress tracker](docs/development/progress.md)                                                |
+| Security & privacy      | [Data flows](docs/security/data_flows.md), [threat model](docs/security/threat_model.md), [multi-tenancy](docs/architecture/multi_tenancy.md)                                        |
+| Reliability             | [Failure modes](docs/architecture/failure_modes.md), [testing strategy](docs/testing/testing_strategy.md)                                                                            |
+| Operations              | [Local environment](docs/development/local_environment.md), [CI/CD & release](docs/devops/ci_cd_release.md), [desktop release operations](docs/devops/desktop_release_operations.md) |
 
 ## License
 
