@@ -86,11 +86,28 @@ export function App() {
     return <OverlaySurface />;
   }
 
+  if (surface === "qa") {
+    return <QaSurface />;
+  }
+
   return (
     <main className="shell">
       <section className="panel">
-        <p className="eyebrow">Desktop Spike</p>
+        <p className="eyebrow">Meeting Copilot</p>
         <h1>Dokeza</h1>
+        <LiveSessionPanel />
+        <MeetingReviewPanel />
+      </section>
+    </main>
+  );
+}
+
+function QaSurface() {
+  return (
+    <main className="shell">
+      <section className="panel">
+        <p className="eyebrow">QA Surface</p>
+        <h1>Dokeza diagnostics</h1>
         <dl>
           <div>
             <dt>Protocol</dt>
@@ -105,8 +122,6 @@ export function App() {
             <dd>Backend adapter</dd>
           </div>
         </dl>
-        <LiveSessionPanel />
-        <MeetingReviewPanel />
         <DiagnosticsPanel />
       </section>
     </main>

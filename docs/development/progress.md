@@ -23,6 +23,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## Latest Broad Verification
 
+- [x] 2026-07-08, live-session-first desktop surface: `pnpm check` passed.
 - [x] 2026-07-08, workspace membership administration: `pnpm generate:schemas` completed; `pnpm check` passed.
 - [x] 2026-07-06, hosted-auth product flow default: `pnpm check` passed.
 - [x] 2026-07-06, hosted IdP refresh/session renewal: `pnpm check` passed; `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` passed.
@@ -353,10 +354,10 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Replace dev-token product flow
 
 ### Alpha.2 — Desktop Productization Pass
-- [ ] Live-session-first application surface (replace diagnostics-first layout)
-- [ ] Diagnostics behind secondary QA surface
+- [x] Live-session-first application surface (replace diagnostics-first layout)
+- [x] Diagnostics behind secondary QA surface
 - [ ] First-run capture explanation + permission UX
-- [ ] Collapse endpoint/workspace/token controls behind config + auth state
+- [x] Collapse endpoint/workspace/token controls behind config + auth state
 - [ ] Improved session controls (start, pause, resume, stop, request suggestion, copy, inspect sources)
 - [ ] Overlay state for capture, reconnecting, degraded, suggestions unavailable
 - [ ] Empty / loading / degraded / failed states for review + knowledge

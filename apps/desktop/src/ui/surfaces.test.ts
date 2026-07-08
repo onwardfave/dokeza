@@ -11,4 +11,8 @@ describe("desktop surfaces", () => {
     expect(selectDesktopSurface("#/overlay")).toBe("overlay");
     expect(OVERLAY_WINDOW_LABEL).toBe("overlay");
   });
+
+  it("selects the QA diagnostics surface from the QA route hash", () => {
+    expect(selectDesktopSurface("#/qa")).toBe("qa");
+  });
 });
