@@ -28,7 +28,7 @@ describe("meeting review contracts", () => {
     ).toBe(true);
   });
 
-  it("accepts meeting detail with transcript segments and audio gaps", () => {
+  it("accepts meeting detail with transcript segments, audio gaps, and suggestions", () => {
     expect(
       validateMeetingDetailResponse({
         meeting: {
@@ -63,6 +63,26 @@ describe("meeting review contracts", () => {
             },
           ],
         },
+        suggestions: [
+          {
+            suggestion_id: "sug_1",
+            request_id: "sreq_1",
+            kind: "answer_question",
+            content: "Offer a two-week onboarding plan.",
+            sources: [
+              {
+                document_id: "doc_1",
+                title: "Onboarding Guide",
+                chunk_id: "chunk_1",
+              },
+            ],
+            confidence: "medium",
+            prompt_version: "sales.answer.v1",
+            model: "deterministic-live-v1",
+            server_seq: 42,
+            created_at: "2026-07-02T00:15:00.000Z",
+          },
+        ],
       }),
     ).toBe(true);
   });

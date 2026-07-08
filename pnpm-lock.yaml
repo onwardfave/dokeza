@@ -193,6 +193,9 @@ importers:
       '@dokeza/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@dokeza/knowledge':
+        specifier: workspace:*
+        version: link:../knowledge
       '@dokeza/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry

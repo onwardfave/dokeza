@@ -126,6 +126,25 @@ describe("meetingReviewApiClient", () => {
           ],
           gaps: [],
         },
+        suggestions: [
+          {
+            suggestion_id: "sug_1",
+            request_id: "sreq_1",
+            kind: "answer_question",
+            content: "Suggested answer",
+            sources: [
+              {
+                document_id: "doc_1",
+                title: "Guide",
+                chunk_id: "chunk_1",
+              },
+            ],
+            confidence: "medium",
+            prompt_version: "live.answer.v1",
+            model: "deterministic-live-v1",
+            server_seq: 8,
+          },
+        ],
       });
     };
 
@@ -137,7 +156,10 @@ describe("meetingReviewApiClient", () => {
         meetingId: "sess_1",
         fetcher,
       }),
-    ).resolves.toMatchObject({ meeting: { meeting_id: "sess_1" } });
+    ).resolves.toMatchObject({
+      meeting: { meeting_id: "sess_1" },
+      suggestions: [{ suggestion_id: "sug_1", sources: [{ title: "Guide" }] }],
+    });
     await expect(
       exportMeeting({
         apiBaseUrl: "http://127.0.0.1:3000",

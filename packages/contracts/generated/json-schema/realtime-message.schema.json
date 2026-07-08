@@ -1256,6 +1256,10 @@
                   "type": "string"
                 },
                 {
+                  "const": "suggestion_persistence_failed",
+                  "type": "string"
+                },
+                {
                   "const": "session_not_resumable",
                   "type": "string"
                 },

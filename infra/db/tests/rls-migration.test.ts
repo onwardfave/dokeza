@@ -6,6 +6,18 @@ const migration = readFileSync(
   resolve("migrations/0001_workspace_rls_baseline.sql"),
   "utf8",
 ).toLowerCase();
+const vectorIndexMigration = readFileSync(
+  resolve("migrations/0003_document_chunk_vector_index.sql"),
+  "utf8",
+).toLowerCase();
+const suggestionPersistenceMigration = readFileSync(
+  resolve("migrations/0004_suggestion_persistence_metadata.sql"),
+  "utf8",
+).toLowerCase();
+const userProviderIdentitiesMigration = readFileSync(
+  resolve("migrations/0005_user_provider_identities.sql"),
+  "utf8",
+).toLowerCase();
 
 const highRiskTables = [
   "workspace_policies",
@@ -42,5 +54,31 @@ describe("workspace RLS migration baseline", () => {
   it("keeps direct provider STT disabled at policy level", () => {
     expect(migration).toContain("direct_provider_stt_allowed boolean not null default false");
     expect(migration).toContain("check (direct_provider_stt_allowed = false)");
+  });
+
+  it("stores and indexes document chunk embeddings for workspace-scoped vector search", () => {
+    expect(migration).toContain('create extension if not exists "vector"');
+    expect(migration).toContain("embedding vector(1536)");
+    expect(vectorIndexMigration).toContain("using hnsw (embedding vector_cosine_ops)");
+    expect(vectorIndexMigration).toContain("where embedding is not null");
+    expect(vectorIndexMigration).toContain("document_chunks_workspace_document_idx");
+  });
+
+  it("adds suggestion metadata for meeting review persistence", () => {
+    expect(suggestionPersistenceMigration).toContain("alter table suggestions");
+    expect(suggestionPersistenceMigration).toContain("request_id text");
+    expect(suggestionPersistenceMigration).toContain("sources_json text not null default '[]'");
+    expect(suggestionPersistenceMigration).toContain("server_seq integer");
+    expect(suggestionPersistenceMigration).toContain("suggestions_workspace_meeting_seq_idx");
+  });
+
+  it("adds provider identity mapping without customer content columns", () => {
+    expect(userProviderIdentitiesMigration).toContain("create table user_provider_identities");
+    expect(userProviderIdentitiesMigration).toContain("provider_issuer text not null");
+    expect(userProviderIdentitiesMigration).toContain("provider_subject text not null");
+    expect(userProviderIdentitiesMigration).toContain("user_id text not null references users(id)");
+    expect(userProviderIdentitiesMigration).not.toContain("token");
+    expect(userProviderIdentitiesMigration).not.toContain("transcript");
+    expect(userProviderIdentitiesMigration).not.toContain("document");
   });
 });

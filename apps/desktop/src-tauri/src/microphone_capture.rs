@@ -50,7 +50,9 @@ pub struct MicrophoneCaptureDevice {
 #[tauri::command]
 pub fn list_microphone_capture_devices() -> Result<Vec<MicrophoneCaptureDevice>, String> {
     let host = cpal::default_host();
-    let default_name = host.default_input_device().and_then(|device| device.name().ok());
+    let default_name = host
+        .default_input_device()
+        .and_then(|device| device.name().ok());
     let devices = host.input_devices().map_err(|error| error.to_string())?;
 
     Ok(devices

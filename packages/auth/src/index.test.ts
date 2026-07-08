@@ -1,5 +1,7 @@
+import { createSign, generateKeyPairSync, type KeyObject } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createDokezaAuthTokenService } from "./index.js";
+import { OidcJwtProviderVerifier, type JwksKey } from "./index.js";
 import type { Actor } from "@dokeza/authz";
 
 const actor: Actor = {
@@ -103,3 +105,130 @@ describe("DokezaAuthTokenService", () => {
     ).toThrow("workspace_access_denied:no_membership");
   });
 });
+
+describe("OidcJwtProviderVerifier", () => {
+  const fixedNow = new Date("2026-07-02T00:00:00.000Z");
+
+  it("validates RS256 provider tokens through JWKS without leaking token content", async () => {
+    const key = createProviderKey("kid_1");
+    const token = createProviderJwt({
+      privateKey: key.privateKey,
+      kid: "kid_1",
+      payload: {
+        iss: "https://idp.example.com/",
+        aud: "dokeza-api",
+        sub: "provider_user_1",
+        email: "user@example.com",
+        name: "Provider User",
+        iat: 1782950400,
+        exp: 1782954000,
+      },
+    });
+    const verifier = new OidcJwtProviderVerifier({
+      issuer: "https://idp.example.com/",
+      audience: "dokeza-api",
+      jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+      now: () => fixedNow,
+      jwksTransport: async () => ({ keys: [key.publicJwk] }),
+    });
+
+    const result = await verifier.verify(token);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.identity).toEqual({
+        providerSubject: "provider_user_1",
+        email: "user@example.com",
+        displayName: "Provider User",
+      });
+    }
+    expect(JSON.stringify(result)).not.toContain(token);
+  });
+
+  it("rejects expired, wrong-audience, wrong-issuer, and unknown-key provider tokens", async () => {
+    const key = createProviderKey("kid_1");
+    const verifier = new OidcJwtProviderVerifier({
+      issuer: "https://idp.example.com/",
+      audience: "dokeza-api",
+      jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+      now: () => fixedNow,
+      jwksTransport: async () => ({ keys: [key.publicJwk] }),
+    });
+    const basePayload = {
+      iss: "https://idp.example.com/",
+      aud: "dokeza-api",
+      sub: "provider_user_1",
+      iat: 1782950400,
+      exp: 1782954000,
+    };
+
+    await expect(
+      verifier.verify(
+        createProviderJwt({
+          privateKey: key.privateKey,
+          kid: "kid_1",
+          payload: { ...basePayload, exp: 1 },
+        }),
+      ),
+    ).resolves.toEqual({ ok: false, reason: "expired" });
+
+    await expect(
+      verifier.verify(
+        createProviderJwt({
+          privateKey: key.privateKey,
+          kid: "kid_1",
+          payload: { ...basePayload, aud: "other" },
+        }),
+      ),
+    ).resolves.toEqual({ ok: false, reason: "invalid_audience" });
+
+    await expect(
+      verifier.verify(
+        createProviderJwt({
+          privateKey: key.privateKey,
+          kid: "kid_1",
+          payload: { ...basePayload, iss: "https://other.example.com/" },
+        }),
+      ),
+    ).resolves.toEqual({ ok: false, reason: "invalid_issuer" });
+
+    await expect(
+      verifier.verify(
+        createProviderJwt({
+          privateKey: key.privateKey,
+          kid: "kid_other",
+          payload: basePayload,
+        }),
+      ),
+    ).resolves.toEqual({ ok: false, reason: "unknown_key" });
+  });
+});
+
+function createProviderKey(kid: string): { privateKey: KeyObject; publicJwk: JwksKey } {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const publicJwk = publicKey.export({ format: "jwk" }) as JwksKey;
+  publicJwk.kid = kid;
+  publicJwk.alg = "RS256";
+  publicJwk.use = "sig";
+  return { privateKey, publicJwk };
+}
+
+function createProviderJwt(input: {
+  privateKey: KeyObject;
+  kid: string;
+  payload: Record<string, unknown>;
+}): string {
+  const header = base64UrlEncode(JSON.stringify({ alg: "RS256", typ: "JWT", kid: input.kid }));
+  const payload = base64UrlEncode(JSON.stringify(input.payload));
+  const signed = `${header}.${payload}`;
+  const signature = createSign("RSA-SHA256").update(signed).sign(input.privateKey);
+  return `${signed}.${base64UrlEncode(signature)}`;
+}
+
+function base64UrlEncode(input: string | Buffer): string {
+  return Buffer.from(input)
+    .toString("base64")
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}

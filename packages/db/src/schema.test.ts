@@ -3,6 +3,8 @@ import {
   documentChunks,
   integrationConnections,
   meetingSessions,
+  suggestions,
+  userProviderIdentities,
   workspacePolicies,
 } from "./schema.js";
 
@@ -27,6 +29,10 @@ describe("database schema", () => {
   });
 
   it("models migration array fields for permissions and integration scopes", () => {
+    expect(column(documentChunks.embedding).columnType).toBe("PgCustomColumn");
+    expect(column(documentChunks.embedding).dataType).toBe("custom");
+    expect(column(documentChunks.embedding).notNull).toBe(false);
+
     expect(column(documentChunks.permissionTags).columnType).toBe("PgArray");
     expect(column(documentChunks.permissionTags).notNull).toBe(true);
     expect(column(documentChunks.permissionTags).hasDefault).toBe(true);
@@ -40,6 +46,23 @@ describe("database schema", () => {
     expect(column(meetingSessions.lastClientSeq).columnType).toBe("PgInteger");
     expect(column(meetingSessions.lastServerSeq).columnType).toBe("PgInteger");
     expect(column(meetingSessions.connectionId).columnType).toBe("PgText");
+  });
+
+  it("includes suggestion persistence metadata columns", () => {
+    expect(column(suggestions.requestId).columnType).toBe("PgText");
+    expect(column(suggestions.sourcesJson).columnType).toBe("PgText");
+    expect(column(suggestions.sourcesJson).notNull).toBe(true);
+    expect(column(suggestions.sourcesJson).hasDefault).toBe(true);
+    expect(column(suggestions.serverSeq).columnType).toBe("PgInteger");
+  });
+
+  it("includes hosted provider identity columns", () => {
+    expect(column(userProviderIdentities.providerIssuer).columnType).toBe("PgText");
+    expect(column(userProviderIdentities.providerIssuer).notNull).toBe(true);
+    expect(column(userProviderIdentities.providerSubject).columnType).toBe("PgText");
+    expect(column(userProviderIdentities.providerSubject).notNull).toBe(true);
+    expect(column(userProviderIdentities.userId).columnType).toBe("PgText");
+    expect(column(userProviderIdentities.userId).notNull).toBe(true);
   });
 
   it("keeps generated-id defaults where the SQL migration defines them", () => {

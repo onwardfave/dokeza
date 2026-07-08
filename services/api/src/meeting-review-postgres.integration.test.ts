@@ -75,6 +75,41 @@ describePostgres("PostgreSQL meeting review repository integration", () => {
       values
         (${`gap_${suffix}_recent`}, ${workspaceA}, ${`sess_${suffix}_recent`}, 'microphone', 1300, 1500, 2, 'user_paused_capture', ${userA})
     `;
+    await pool`
+      insert into suggestions (
+        id, workspace_id, meeting_session_id, request_id, kind, content, sources_json, confidence,
+        prompt_version, model, server_seq, created_by
+      )
+      values
+        (
+          ${`sug_${suffix}_recent`},
+          ${workspaceA},
+          ${`sess_${suffix}_recent`},
+          'sreq_recent',
+          'answer_question',
+          'Offer the deployment checklist.',
+          '[{"document_id":"doc_deploy","title":"Deployment Guide","chunk_id":"chunk_deploy"}]',
+          'high',
+          'live.answer.v1',
+          'deterministic-live-v1',
+          8,
+          ${userA}
+        ),
+        (
+          ${`sug_${suffix}_other`},
+          ${workspaceB},
+          ${`sess_${suffix}_other`},
+          'sreq_other',
+          'answer_question',
+          'Workspace B suggestion.',
+          '[]',
+          'medium',
+          'live.answer.v1',
+          'deterministic-live-v1',
+          8,
+          ${userB}
+        )
+    `;
   });
 
   afterAll(async () => {
@@ -94,6 +129,21 @@ describePostgres("PostgreSQL meeting review repository integration", () => {
     const detail = await repository.getMeetingDetail(workspaceA, `sess_${suffix}_recent`);
     expect(detail?.transcript.segments[0]?.text).toBe("recent deployment transcript");
     expect(detail?.transcript.gaps).toHaveLength(1);
+    expect(detail?.suggestions).toMatchObject([
+      {
+        suggestion_id: `sug_${suffix}_recent`,
+        request_id: "sreq_recent",
+        content: "Offer the deployment checklist.",
+        sources: [
+          {
+            document_id: "doc_deploy",
+            title: "Deployment Guide",
+            chunk_id: "chunk_deploy",
+          },
+        ],
+        server_seq: 8,
+      },
+    ]);
 
     const exported = await repository.exportMeeting(
       workspaceA,
@@ -101,6 +151,7 @@ describePostgres("PostgreSQL meeting review repository integration", () => {
       "markdown",
     );
     expect(exported?.content).toContain("recent deployment transcript");
+    expect(exported?.content).toContain("Offer the deployment checklist.");
 
     await expect(repository.deleteMeeting(workspaceA, `sess_${suffix}_recent`)).resolves.toEqual({
       meeting_id: `sess_${suffix}_recent`,

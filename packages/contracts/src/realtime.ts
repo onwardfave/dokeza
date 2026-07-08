@@ -42,6 +42,7 @@ const ErrorCode = Type.Union([
   Type.Literal("stt_provider_timeout"),
   Type.Literal("session_persistence_failed"),
   Type.Literal("transcript_persistence_failed"),
+  Type.Literal("suggestion_persistence_failed"),
   Type.Literal("session_not_resumable"),
   Type.Literal("feature_unavailable"),
   Type.Literal("llm_provider_timeout"),

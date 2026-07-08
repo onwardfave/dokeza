@@ -1,0 +1,83 @@
+{
+  "type": "object",
+  "required": [
+    "token",
+    "token_type",
+    "expires_at",
+    "user",
+    "workspaces"
+  ],
+  "properties": {
+    "token": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "token_type": {
+      "const": "Bearer",
+      "type": "string"
+    },
+    "expires_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "user": {
+      "type": "object",
+      "required": [
+        "user_id",
+        "display_name",
+        "development_only"
+      ],
+      "properties": {
+        "user_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "display_name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "development_only": {
+          "const": false,
+          "type": "boolean"
+        }
+      }
+    },
+    "workspaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "name",
+          "role"
+        ],
+        "properties": {
+          "workspace_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "const": "owner",
+                "type": "string"
+              },
+              {
+                "const": "admin",
+                "type": "string"
+              },
+              {
+                "const": "member",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

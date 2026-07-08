@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  exchangeProviderAuthToken,
   requestDevelopmentApiToken,
   requestRealtimeSessionToken,
   type AuthApiFetch,
@@ -84,6 +85,68 @@ describe("authApiClient", () => {
         }),
       },
     ]);
+  });
+
+  it("exchanges a provider token for a Dokeza API token and workspaces", async () => {
+    const calls: Array<{ input: string; body?: string }> = [];
+    const fetcher: AuthApiFetch = async (input, init) => {
+      calls.push({ input, ...(init?.body === undefined ? {} : { body: init.body }) });
+      return okJson({
+        token: "api_secret_token",
+        expires_at: "2026-07-02T01:00:00.000Z",
+        user: {
+          user_id: "user_1",
+          display_name: "Provider User",
+          development_only: false,
+        },
+        workspaces: [{ workspace_id: "ws_1", name: "Workspace 1", role: "owner" }],
+      });
+    };
+
+    await expect(
+      exchangeProviderAuthToken({
+        apiBaseUrl: "http://127.0.0.1:3000",
+        providerToken: "provider_secret_token",
+        deviceId: "dev_desktop_preview",
+        fetcher,
+      }),
+    ).resolves.toEqual({
+      token: "api_secret_token",
+      expiresAt: "2026-07-02T01:00:00.000Z",
+      user: {
+        userId: "user_1",
+        displayName: "Provider User",
+        developmentOnly: false,
+      },
+      workspaces: [{ workspaceId: "ws_1", name: "Workspace 1", role: "owner" }],
+    });
+    expect(calls).toEqual([
+      {
+        input: "http://127.0.0.1:3000/v1/auth/provider/exchange",
+        body: JSON.stringify({
+          provider_token: "provider_secret_token",
+          device_id: "dev_desktop_preview",
+        }),
+      },
+    ]);
+  });
+
+  it("throws sanitized provider exchange failures", async () => {
+    const failingFetcher: AuthApiFetch = async () => ({
+      ok: false,
+      status: 401,
+      async json() {
+        return { error: "auth_invalid", provider_token: "do_not_leak" };
+      },
+    });
+
+    await expect(
+      exchangeProviderAuthToken({
+        apiBaseUrl: "http://127.0.0.1:3000",
+        providerToken: "provider_secret_token",
+        fetcher: failingFetcher,
+      }),
+    ).rejects.toThrow("auth_api_provider_exchange_failed:401");
   });
 
   it("throws sanitized failures for unsuccessful responses and invalid bodies", async () => {

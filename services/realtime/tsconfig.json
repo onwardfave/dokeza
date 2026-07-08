@@ -13,6 +13,7 @@
     { "path": "../../packages/config" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/db" },
+    { "path": "../knowledge" },
     { "path": "../../packages/telemetry" },
     { "path": "../../packages/test-fixtures" }
   ]

@@ -19,6 +19,21 @@ export interface DevelopmentApiToken {
   userId: string;
 }
 
+export interface ProviderApiToken {
+  token: string;
+  expiresAt: string;
+  user: {
+    userId: string;
+    displayName: string;
+    developmentOnly: false;
+  };
+  workspaces: Array<{
+    workspaceId: string;
+    name: string;
+    role: "owner" | "admin" | "member";
+  }>;
+}
+
 export interface RealtimeSessionToken {
   token: string;
   expiresAt: string;
@@ -40,6 +55,13 @@ export interface RealtimeTokenRequest {
   fetcher?: AuthApiFetch;
 }
 
+export interface ProviderTokenExchangeRequest {
+  apiBaseUrl: string;
+  providerToken: string;
+  deviceId?: string;
+  fetcher?: AuthApiFetch;
+}
+
 function trimBaseUrl(apiBaseUrl: string): string {
   return apiBaseUrl.replace(/\/+$/, "");
 }
@@ -54,6 +76,56 @@ function requireStringField(body: unknown, field: string): string {
   }
 
   return body[field];
+}
+
+function requireWorkspaceRole(value: unknown): "owner" | "admin" | "member" {
+  if (value === "owner" || value === "admin" || value === "member") {
+    return value;
+  }
+
+  throw new Error("auth_api_invalid_response");
+}
+
+export async function exchangeProviderAuthToken(
+  input: ProviderTokenExchangeRequest,
+): Promise<ProviderApiToken> {
+  const fetcher = input.fetcher ?? fetch;
+  const response = await fetcher(`${trimBaseUrl(input.apiBaseUrl)}/v1/auth/provider/exchange`, {
+    method: "POST",
+    body: JSON.stringify({
+      provider_token: input.providerToken,
+      ...(input.deviceId === undefined ? {} : { device_id: input.deviceId }),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`auth_api_provider_exchange_failed:${response.status}`);
+  }
+
+  const body = await response.json();
+  if (!isRecord(body) || !isRecord(body.user) || !Array.isArray(body.workspaces)) {
+    throw new Error("auth_api_invalid_response");
+  }
+
+  return {
+    token: requireStringField(body, "token"),
+    expiresAt: requireStringField(body, "expires_at"),
+    user: {
+      userId: requireStringField(body.user, "user_id"),
+      displayName: requireStringField(body.user, "display_name"),
+      developmentOnly: false,
+    },
+    workspaces: body.workspaces.map((workspace) => {
+      if (!isRecord(workspace)) {
+        throw new Error("auth_api_invalid_response");
+      }
+      return {
+        workspaceId: requireStringField(workspace, "workspace_id"),
+        name: requireStringField(workspace, "name"),
+        role: requireWorkspaceRole(workspace.role),
+      };
+    }),
+  };
 }
 
 export async function requestDevelopmentApiToken(

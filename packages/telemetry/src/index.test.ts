@@ -12,16 +12,22 @@ describe("telemetry redaction", () => {
         workspaceId: "ws_a",
         transcriptText: "customer secret",
         prompt: "answer from this document",
+        providerToken: "provider-token-value",
+        api_key: "secret-key",
         nested: {
           suggestionContent: "say this",
+          realtime_token: "realtime-token-value",
         },
       }),
     ).toEqual({
       workspaceId: "ws_a",
       transcriptText: "[REDACTED]",
       prompt: "[REDACTED]",
+      providerToken: "[REDACTED]",
+      api_key: "[REDACTED]",
       nested: {
         suggestionContent: "[REDACTED]",
+        realtime_token: "[REDACTED]",
       },
     });
   });

@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "required": [
+    "user_id",
+    "email",
+    "role"
+  ],
+  "properties": {
+    "user_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "email": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "display_name": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "role": {
+      "anyOf": [
+        {
+          "const": "owner",
+          "type": "string"
+        },
+        {
+          "const": "admin",
+          "type": "string"
+        },
+        {
+          "const": "member",
+          "type": "string"
+        }
+      ]
+    }
+  }
+}

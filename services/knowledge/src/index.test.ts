@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  DeterministicKnowledgeEmbeddingProvider,
   InMemoryKnowledgeRepository,
+  KnowledgeEmbeddingError,
+  OpenAiKnowledgeEmbeddingProvider,
   KnowledgeRepositoryError,
   chunkDocumentText,
   createRetrievalRequest,
+  type KnowledgeEmbeddingInput,
+  type KnowledgeEmbeddingProvider,
+  type KnowledgeEmbeddingResult,
 } from "./index.js";
 
 describe("knowledge service boundary", () => {
@@ -157,6 +163,185 @@ describe("knowledge service boundary", () => {
     });
   });
 
+  it("uses embeddings for vector matches when keyword search misses", async () => {
+    const embeddingProvider = new AxisEmbeddingProvider((input) => {
+      if (input.text.toLowerCase().includes("expansion")) {
+        return vectorOnAxis(0);
+      }
+      if (input.text.toLowerCase().includes("renewal")) {
+        return vectorOnAxis(0);
+      }
+      return vectorOnAxis(1);
+    });
+    const repository = new InMemoryKnowledgeRepository({
+      embeddingProvider,
+      now: () => new Date("2026-07-04T00:00:00.000Z"),
+      idGenerator: createSequenceIds("doc", "chunk"),
+    });
+
+    const uploaded = await repository.uploadDocument({
+      workspaceId: "ws_1",
+      actorUserId: "user_1",
+      title: "Expansion Playbook",
+      source: "manual_upload",
+      text: "Expansion playbook for account planning.",
+    });
+
+    await expect(
+      repository.search({ workspaceId: "ws_1", query: "renewal", topK: 1 }),
+    ).resolves.toMatchObject({
+      results: [
+        {
+          document_id: uploaded.document.document_id,
+          chunk_id: uploaded.chunks[0]?.chunk_id,
+          score: 1,
+        },
+      ],
+    });
+  });
+
+  it("blocks no-storage uploads before embedding provider submission", async () => {
+    const embeddingProvider = new AxisEmbeddingProvider(() => vectorOnAxis(0));
+    const repository = new InMemoryKnowledgeRepository({
+      retentionMode: "local_only",
+      embeddingProvider,
+    });
+
+    await expect(
+      repository.uploadDocument({
+        workspaceId: "ws_1",
+        actorUserId: "user_1",
+        title: "Blocked",
+        source: "manual_upload",
+        text: "Do not embed this document.",
+      }),
+    ).rejects.toMatchObject(new KnowledgeRepositoryError("knowledge_storage_blocked"));
+    expect(embeddingProvider.calls).toHaveLength(0);
+  });
+
+  it("falls back to keyword retrieval when embedding generation fails", async () => {
+    const repository = new InMemoryKnowledgeRepository({
+      embeddingProvider: new FailingEmbeddingProvider(),
+      now: () => new Date("2026-07-04T00:00:00.000Z"),
+      idGenerator: createSequenceIds("doc", "chunk"),
+    });
+
+    await repository.uploadDocument({
+      workspaceId: "ws_1",
+      actorUserId: "user_1",
+      title: "Pricing FAQ",
+      source: "manual_upload",
+      text: "Pricing terms renew quarterly.",
+    });
+
+    await expect(repository.search({ workspaceId: "ws_1", query: "pricing" })).resolves.toEqual({
+      workspace_id: "ws_1",
+      query: "pricing",
+      results: [
+        {
+          document_id: "doc_doc",
+          title: "Pricing FAQ",
+          source: "manual_upload",
+          chunk_id: "chunk_chunk",
+          chunk_index: 0,
+          text: "Pricing terms renew quarterly.",
+          score: 1,
+        },
+      ],
+    });
+  });
+
+  it("creates deterministic credential-free embeddings", async () => {
+    const provider = new DeterministicKnowledgeEmbeddingProvider(1536);
+    const first = await provider.embed({
+      workspaceId: "ws_1",
+      route: "search_query",
+      text: "pricing security",
+    });
+    const second = await provider.embed({
+      workspaceId: "ws_1",
+      route: "search_query",
+      text: "pricing security",
+    });
+
+    expect(first.vector).toHaveLength(1536);
+    expect(first.vector).toEqual(second.vector);
+    expect(first.provider).toBe("deterministic");
+  });
+
+  it("maps OpenAI embedding responses through a fake transport", async () => {
+    const captured: { url?: string; body?: unknown; authorization?: string } = {};
+    const provider = new OpenAiKnowledgeEmbeddingProvider({
+      apiKey: "sk-test-secret",
+      baseUrl: "https://api.openai.com/v1",
+      model: "embedding-test",
+      timeoutMs: 1000,
+      dimensions: 1536,
+      transport: async (url, init) => {
+        captured.url = url;
+        captured.body = JSON.parse(init.body) as unknown;
+        captured.authorization = init.headers.authorization ?? "";
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ embedding: vectorOnAxis(0) }] }),
+        };
+      },
+    });
+
+    await expect(
+      provider.embed({
+        workspaceId: "ws_1",
+        route: "document_chunk",
+        documentId: "doc_1",
+        chunkId: "chunk_1",
+        text: "Sensitive customer content",
+      }),
+    ).resolves.toMatchObject({
+      provider: "openai",
+      model: "embedding-test",
+      dimensions: 1536,
+      vector: vectorOnAxis(0),
+    });
+    expect(captured.url).toBe("https://api.openai.com/v1/embeddings");
+    expect(captured.authorization).toBe("Bearer sk-test-secret");
+    expect(captured.body).toEqual({
+      model: "embedding-test",
+      input: "Sensitive customer content",
+      dimensions: 1536,
+    });
+  });
+
+  it("sanitizes OpenAI embedding provider failures", async () => {
+    const provider = new OpenAiKnowledgeEmbeddingProvider({
+      apiKey: "sk-test-secret",
+      baseUrl: "https://api.openai.com/v1",
+      model: "embedding-test",
+      timeoutMs: 1000,
+      dimensions: 1536,
+      transport: async () => ({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: { message: "provider details" } }),
+      }),
+    });
+
+    await expect(
+      provider.embed({
+        workspaceId: "ws_1",
+        route: "document_chunk",
+        text: "Sensitive customer content",
+      }),
+    ).rejects.toMatchObject(new KnowledgeEmbeddingError("embedding_provider_unavailable"));
+    await expect(
+      provider.embed({
+        workspaceId: "ws_1",
+        route: "document_chunk",
+        text: "Sensitive customer content",
+      }),
+    ).rejects.not.toThrow(/Sensitive customer content|sk-test-secret/);
+  });
+
   it("blocks cloud document persistence when retention mode is live-only or local-only", async () => {
     const repository = new InMemoryKnowledgeRepository({ retentionMode: "live_only" });
 
@@ -192,4 +377,40 @@ describe("knowledge service boundary", () => {
 function createSequenceIds(...ids: string[]): () => string {
   let index = 0;
   return () => ids[index++] ?? `extra_${index}`;
+}
+
+class AxisEmbeddingProvider implements KnowledgeEmbeddingProvider {
+  readonly provider = "deterministic" as const;
+  readonly model = "axis-test";
+  readonly dimensions = 1536;
+  readonly calls: KnowledgeEmbeddingInput[] = [];
+  private readonly vectorFor: (input: KnowledgeEmbeddingInput) => number[];
+
+  constructor(vectorFor: (input: KnowledgeEmbeddingInput) => number[]) {
+    this.vectorFor = vectorFor;
+  }
+
+  async embed(input: KnowledgeEmbeddingInput): Promise<KnowledgeEmbeddingResult> {
+    this.calls.push(input);
+    return {
+      vector: this.vectorFor(input),
+      provider: this.provider,
+      model: this.model,
+      dimensions: this.dimensions,
+    };
+  }
+}
+
+class FailingEmbeddingProvider implements KnowledgeEmbeddingProvider {
+  readonly provider = "deterministic" as const;
+  readonly model = "failing-test";
+  readonly dimensions = 1536;
+
+  async embed(): Promise<KnowledgeEmbeddingResult> {
+    throw new KnowledgeEmbeddingError("embedding_provider_unavailable");
+  }
+}
+
+function vectorOnAxis(axis: number): number[] {
+  return Array.from({ length: 1536 }, (_, index) => (index === axis ? 1 : 0));
 }

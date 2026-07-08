@@ -21,12 +21,17 @@ export interface TelemetryResourceInput {
 
 const restrictedKeyFragments = [
   "audio",
+  "credential",
   "content",
   "document",
+  "key",
+  "password",
   "prompt",
   "raw",
+  "secret",
   "suggestion",
   "text",
+  "token",
   "transcript",
 ];
 

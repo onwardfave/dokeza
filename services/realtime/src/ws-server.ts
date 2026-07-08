@@ -10,6 +10,7 @@ import {
   ModelGatewayError,
   type LiveSuggestionEvent,
   type LiveSuggestionInput,
+  type LiveSuggestionSourceChunk,
   type TranscriptContextSegment,
 } from "@dokeza/ai-orchestrator";
 import type { Actor } from "@dokeza/authz";
@@ -34,6 +35,7 @@ import {
 } from "./transcript-retention-policy.js";
 import { TranscriptProcessor } from "./transcript-processor.js";
 import type { SessionStore } from "./session-store.js";
+import type { SuggestionSink } from "./suggestion-sink.js";
 
 export interface TokenValidator {
   validate(token: string): Promise<RealtimeAuthContext | undefined>;
@@ -53,11 +55,21 @@ export interface RealtimeServerOptions {
   sttAdapter?: SttAdapter;
   transcriptTimelineSink?: TranscriptTimelineSink;
   transcriptRetentionMode?: TranscriptRetentionMode;
+  suggestionSink?: SuggestionSink;
   sessionStore?: SessionStore;
   liveSuggestionService?: {
     streamLiveSuggestion(input: LiveSuggestionInput): AsyncIterable<LiveSuggestionEvent>;
   };
+  liveSuggestionSourceRetriever?: LiveSuggestionSourceRetriever;
   liveSuggestionExternalCallEnabled?: boolean;
+}
+
+export interface LiveSuggestionSourceRetriever {
+  search(input: {
+    workspaceId: string;
+    query: string;
+    topK: number;
+  }): Promise<{ results: LiveSuggestionSourceChunk[] }>;
 }
 
 export interface RealtimeServerHandle {
@@ -82,6 +94,7 @@ type ErrorCode = Extract<RealtimeJsonMessage, { type: "error" }>["payload"]["cod
 type ReplayableTranscriptMessage = Extract<RealtimeJsonMessage, { type: "transcript.final" }>;
 
 const MAX_REPLAYABLE_TRANSCRIPTS_PER_SESSION = 1000;
+const LIVE_SUGGESTION_SOURCE_TOP_K = 3;
 
 function mapEndReasonToClosedReason(reason: SessionEndReason): SessionClosedReason {
   switch (reason) {
@@ -97,14 +110,64 @@ function mapEndReasonToClosedReason(reason: SessionEndReason): SessionClosedReas
   }
 }
 
+async function retrieveLiveSuggestionSources(input: {
+  retriever: LiveSuggestionSourceRetriever | undefined;
+  workspaceId: string;
+  includeSources: boolean;
+  userPrompt: string | undefined;
+  transcriptSegments: readonly TranscriptContextSegment[];
+}): Promise<LiveSuggestionSourceChunk[]> {
+  if (!input.includeSources || input.retriever === undefined) {
+    return [];
+  }
+
+  const query = buildLiveSuggestionRetrievalQuery(input.userPrompt, input.transcriptSegments);
+  if (query.length === 0) {
+    return [];
+  }
+
+  try {
+    const response = await input.retriever.search({
+      workspaceId: input.workspaceId,
+      query,
+      topK: LIVE_SUGGESTION_SOURCE_TOP_K,
+    });
+    return response.results;
+  } catch {
+    return [];
+  }
+}
+
+function buildLiveSuggestionRetrievalQuery(
+  userPrompt: string | undefined,
+  transcriptSegments: readonly TranscriptContextSegment[],
+): string {
+  const parts: string[] = [];
+  const prompt = userPrompt?.trim();
+  if (prompt !== undefined && prompt.length > 0) {
+    parts.push(prompt);
+  }
+
+  const recentTranscript = transcriptSegments
+    .filter((segment) => segment.final)
+    .slice(-3)
+    .map((segment) => segment.text.trim())
+    .filter((text) => text.length > 0);
+  parts.push(...recentTranscript);
+
+  return parts.join("\n").slice(0, 1000);
+}
+
 export function createRealtimeServer(options: RealtimeServerOptions): RealtimeServerHandle {
   const sessionManager = new SessionManager();
   const sttAdapter = options.sttAdapter ?? new DeterministicSttAdapter();
   const transcriptTimelineSink =
     options.transcriptTimelineSink ?? new InMemoryTranscriptTimelineSink();
   const transcriptRetentionMode = options.transcriptRetentionMode ?? "7_days";
+  const suggestionSink = options.suggestionSink;
   const sessionStore = options.sessionStore;
   const liveSuggestionService = options.liveSuggestionService ?? new LiveSuggestionService();
+  const liveSuggestionSourceRetriever = options.liveSuggestionSourceRetriever;
   const liveSuggestionExternalCallEnabled = options.liveSuggestionExternalCallEnabled ?? false;
   const replayableTranscriptsBySession = new Map<string, ReplayableTranscriptMessage[]>();
   const transcriptContextBySession = new Map<string, TranscriptContextSegment[]>();
@@ -195,7 +258,13 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       sendJson(message);
     };
 
-    const sendSuggestionEvent = (sessionId: string, event: LiveSuggestionEvent): void => {
+    const sendSuggestionEvent = (
+      sessionId: string,
+      event: LiveSuggestionEvent,
+    ): Extract<
+      RealtimeJsonMessage,
+      { type: "suggestion.stream_token" | "suggestion.complete" }
+    > => {
       const seq = sessionManager.nextServerSeq(sessionId);
       const message =
         event.type === "token"
@@ -231,6 +300,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
             } satisfies RealtimeJsonMessage);
 
       sendJson(message);
+      return message;
     };
 
     const sendTranscriptPersistenceError = (sessionId: string) => {
@@ -240,6 +310,15 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       sendError("transcript_persistence_failed", "Transcript persistence failed.", true, sessionId);
+    };
+
+    const sendSuggestionPersistenceError = (sessionId: string) => {
+      const session = sessionManager.getSession(sessionId);
+      if (session === undefined || session.state !== "active") {
+        return;
+      }
+
+      sendError("suggestion_persistence_failed", "Suggestion persistence failed.", true, sessionId);
     };
 
     const sendSessionPersistenceError = (sessionId: string) => {
@@ -311,6 +390,32 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         });
       } catch {
         sendTranscriptPersistenceError(sessionId);
+      }
+    };
+
+    const persistSuggestionMessage = async (
+      sessionId: string,
+      message: Extract<RealtimeJsonMessage, { type: "suggestion.complete" }>,
+    ): Promise<void> => {
+      if (suggestionSink === undefined) {
+        return;
+      }
+
+      const session = sessionManager.getSession(sessionId);
+      if (session === undefined || session.state !== "active") {
+        return;
+      }
+
+      try {
+        await suggestionSink.recordSuggestion({
+          workspaceId: session.workspaceId,
+          sessionId,
+          actorUserId: session.actor.userId,
+          serverSeq: message.seq,
+          payload: message.payload,
+        });
+      } catch {
+        sendSuggestionPersistenceError(sessionId);
       }
     };
 
@@ -664,6 +769,13 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
 
         try {
           const transcriptSegments = transcriptContextBySession.get(session.sessionId) ?? [];
+          const sourceChunks = await retrieveLiveSuggestionSources({
+            retriever: liveSuggestionSourceRetriever,
+            workspaceId: session.workspaceId,
+            includeSources: frameResult.message.payload.include_sources,
+            userPrompt: frameResult.message.payload.user_prompt,
+            transcriptSegments,
+          });
           for await (const event of liveSuggestionService.streamLiveSuggestion({
             workspaceId: session.workspaceId,
             sessionId: session.sessionId,
@@ -674,8 +786,12 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
               : { userPrompt: frameResult.message.payload.user_prompt }),
             includeSources: frameResult.message.payload.include_sources,
             transcriptSegments,
+            sourceChunks,
           })) {
-            sendSuggestionEvent(session.sessionId, event);
+            const sentMessage = sendSuggestionEvent(session.sessionId, event);
+            if (sentMessage.type === "suggestion.complete") {
+              await persistSuggestionMessage(session.sessionId, sentMessage);
+            }
           }
         } catch (err) {
           const code =

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dokeza RAG Source Grounding"
+  short_description: "Plan and verify grounded retrieval work"
+  default_prompt: "Use $dokeza-rag-source-grounding to plan source-grounded suggestions with retrieval, citations, and authorization tests."

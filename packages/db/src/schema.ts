@@ -11,6 +11,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   integer,
   numeric,
   pgTable,
@@ -18,7 +19,17 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+
+const vector1536 = customType<{ data: number[]; driverData: string }>({
+  dataType() {
+    return "vector(1536)";
+  },
+  toDriver(value: number[]): string {
+    return `[${value.map((entry) => Number(entry).toFixed(8)).join(",")}]`;
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Core identity
@@ -54,6 +65,28 @@ export const workspaceMemberships = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.userId] })],
+);
+
+export const userProviderIdentities = pgTable(
+  "user_provider_identities",
+  {
+    providerIssuer: text("provider_issuer").notNull(),
+    providerSubject: text("provider_subject").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    email: text("email"),
+    displayName: text("display_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.providerIssuer, table.providerSubject] }),
+    uniqueIndex("user_provider_identities_user_provider_idx").on(
+      table.userId,
+      table.providerIssuer,
+    ),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -154,11 +187,14 @@ export const suggestions = pgTable("suggestions", {
   meetingSessionId: text("meeting_session_id")
     .notNull()
     .references(() => meetingSessions.id, { onDelete: "cascade" }),
+  requestId: text("request_id"),
   kind: text("kind").notNull(),
   content: text("content").notNull(),
+  sourcesJson: text("sources_json").notNull().default("[]"),
   confidence: text("confidence").notNull(),
   promptVersion: text("prompt_version").notNull(),
   model: text("model").notNull(),
+  serverSeq: integer("server_seq"),
   createdBy: text("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -194,7 +230,7 @@ export const documentChunks = pgTable(
       .references(() => documents.id, { onDelete: "cascade" }),
     chunkIndex: integer("chunk_index").notNull(),
     text: text("text").notNull(),
-    // embedding: vector(1536) — pgvector column added via SQL migration, not modeled in Drizzle
+    embedding: vector1536("embedding"),
     permissionTags: text("permission_tags")
       .array()
       .notNull()

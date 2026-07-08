@@ -19,6 +19,7 @@ Read the relevant docs before changing code:
 - `docs/security/threat_model.md`
 - `docs/testing/testing_strategy.md`
 - `docs/development/agent_workflow.md`
+- `docs/development/progress.md`
 
 `docs/development/agent_workflow.md` is the controlling execution playbook for multi-step agent work. For implementation turns, follow its planning, checkpoint commit, verification, documentation, living-lessons, and handoff rules before final response.
 
@@ -33,6 +34,7 @@ Use the project-local skills in `.codex/skills/` when relevant:
 - `dokeza-verification-before-completion` for evidence-based completion claims.
 - `dokeza-provider-integration` for external provider adapters, credentials, telemetry, retries, and data-flow updates.
 - `dokeza-data-governance` for retention, deletion, no-storage, export, and sensitive-content persistence changes.
+- `dokeza-rag-source-grounding` for embeddings, retrieval, source injection, citations, retrieval evals, and source-grounded suggestion safety.
 
 ## Current Technology Decisions
 
@@ -43,6 +45,13 @@ Use the project-local skills in `.codex/skills/` when relevant:
 - Infrastructure: Terraform-first.
 - Realtime transport: WebSocket over TLS.
 
+## Current Execution Gate
+
+- Near-term work follows `docs/development/plans/2026-07-06-production-alpha-gate.md`.
+- Full SRS/MVP and production-alpha completion status is tracked in `docs/development/progress.md`; update it in the same commit when a slice changes what is done, partial, alpha-deferred, or open.
+- The active bottleneck is Alpha.1 production auth and onboarding, then desktop productization, native microphone stream hardening, M2 usage guardrails, alpha E2E verification, and knowledge upload UI.
+- Hosted identity is implemented through a provider-neutral OIDC/JWKS verification boundary at the API service; Dokeza-owned workspace membership remains authoritative.
+
 ## Hard Rules
 
 - Keep workspace isolation explicit in every data access path.
@@ -50,5 +59,6 @@ Use the project-local skills in `.codex/skills/` when relevant:
 - Do not add a new external data flow without updating `docs/security/data_flows.md`.
 - Do not change realtime messages without updating `docs/architecture/realtime_protocol.md`.
 - Do not add a failure behavior without updating `docs/architecture/failure_modes.md`.
+- Do not mark a feature complete without updating `docs/development/progress.md` when the completion state changes.
 - Do not finish an implementation turn with verified but uncommitted work when the user asked for commits; either commit coherent checkpoints or explicitly report the blocking reason.
 - Do not implement evasion-oriented undetectability features.

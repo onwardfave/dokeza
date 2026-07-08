@@ -36,6 +36,7 @@ Use this loop for every non-trivial feature.
 
 1. Identify the slice.
    - Start from `docs/development/plans/2026-06-25-production-vertical-roadmap.md`.
+   - Check `docs/development/progress.md` for the current checklist state.
    - Name the milestone, requirement IDs, user-visible behavior, and acceptance criteria.
    - Prefer the smallest vertical step that makes the product more complete.
 
@@ -46,9 +47,10 @@ Use this loop for every non-trivial feature.
 
 3. Reconstruct loop state.
    - Confirm the current roadmap status.
+   - Confirm the current progress checklist status.
    - Read the active slice plan, if one exists.
    - Review recent commits and `git status --short`.
-   - If the current state cannot be understood from roadmap, plan, and git state, simplify or document it before coding.
+   - If the current state cannot be understood from progress, roadmap, plan, and git state, simplify or document it before coding.
 
 4. Load context.
    - Read `AGENTS.md`.
@@ -85,6 +87,7 @@ Use this loop for every non-trivial feature.
 
 9. Update docs.
    - Update roadmap status after a slice lands.
+   - Update `docs/development/progress.md` in the same commit when feature completion state changes.
    - Update architecture, protocol, failure-mode, data-flow, testing, or DevOps docs when their governed behavior changes.
    - Update this workflow when a repeated lesson should become standard practice.
 
@@ -122,10 +125,12 @@ The agent must be able to recover from a lost session by reading a small set of 
 For Dokeza, the canonical state is:
 
 1. The roadmap: `docs/development/plans/2026-06-25-production-vertical-roadmap.md`.
-2. The active slice plan under `docs/development/plans/`.
-3. Git history and worktree state.
+2. The active execution gate: `docs/development/plans/2026-07-06-production-alpha-gate.md` while production alpha is in progress.
+3. The progress tracker: `docs/development/progress.md`.
+4. The active slice plan under `docs/development/plans/`.
+5. Git history and worktree state.
 
-Use these instead of introducing ad hoc progress files by default. Add a temporary progress file only when a slice genuinely cannot be recovered from roadmap, plan, and git state.
+Use these instead of introducing ad hoc progress files by default. Add a temporary progress file only when a slice genuinely cannot be recovered from progress, roadmap, plan, and git state.
 
 If state spreads across many chat messages, scratch notes, or implicit assumptions, write it down in the plan or roadmap before continuing.
 
@@ -142,7 +147,7 @@ Use this matrix to decide which docs and skills to load.
 | Database, retention, deletion, export, transcript persistence | `docs/security/data_flows.md`, `docs/security/threat_model.md`, `docs/architecture/multi_tenancy.md`, `docs/architecture/failure_modes.md` | `dokeza-data-governance`, `dokeza-tdd-execution` |
 | External providers | `docs/security/data_flows.md`, `docs/security/threat_model.md`, provider ADRs, affected architecture docs | `dokeza-provider-integration`, `dokeza-data-governance` when customer content crosses provider boundary |
 | Reliability, reconnect, queues, distributed state | `docs/architecture/failure_modes.md`, `docs/testing/testing_strategy.md`, relevant property catalogs | `dokeza-reliability-testing`, `dokeza-systematic-debugging` |
-| AI prompts, retrieval, suggestions | `docs/security/threat_model.md`, `docs/testing/testing_strategy.md`, AI/retrieval architecture docs | `dokeza-data-governance`, `dokeza-provider-integration` when model providers are used |
+| AI prompts, retrieval, suggestions | `docs/security/threat_model.md`, `docs/testing/testing_strategy.md`, AI/retrieval architecture docs | `dokeza-rag-source-grounding`, `dokeza-data-governance`, `dokeza-provider-integration` when model providers are used |
 | Infrastructure, CI, release | `docs/devops/infrastructure_architecture.md`, `docs/devops/ci_cd_release.md`, `docs/security/threat_model.md` | `dokeza-implementation-planning`, provider/security skills as needed |
 
 If the user asks for a review rather than implementation, use a code-review stance: findings first, ordered by severity, with file and line references.
@@ -294,6 +299,16 @@ Roadmap status updates should be concrete:
 - `Partially implemented` when contracts/UI/fakes exist but production storage, provider, policy, or operational wiring remains.
 - Follow-up gaps should be explicit enough to choose the next slice.
 
+Progress tracker updates should be checkbox-compatible and conservative:
+
+- Use `[x]` only for verified, durable implementation state.
+- Use `[ ] Partial:` when a foundation exists but production storage, provider, policy, UX, or operational wiring remains.
+- Use `[ ] Alpha-deferred:` for real SRS/MVP roadmap work that is intentionally outside the current production-alpha gate.
+- Preserve SRS requirement IDs on MVP/full-SRS checklist items whenever practical.
+- Keep the SRS/MVP dashboard, MVP acceptance checklist, requirement coverage, and alpha gate sections in sync when a slice changes product status.
+- Split mixed items instead of combining done and open work in one checkbox.
+- Keep broad verification such as `pnpm check` in the "Latest Broad Verification" section, not as a permanent feature item.
+
 ## 13. Commit Discipline
 
 Commit as work progresses:
@@ -302,6 +317,7 @@ Commit as work progresses:
 - Commit contracts and generated artifacts together.
 - Commit tests with the implementation they verify.
 - Commit docs/roadmap updates after the behavior lands.
+- Commit `docs/development/progress.md` updates with the slice that changes completion state.
 - Commit formatting cleanup separately if it is not part of the behavioral diff.
 - Commit workflow/process updates when the turn exposes a missed operating rule, such as skipped commits, missing living-document updates, weak handoff state, or ambiguous slice boundaries.
 
@@ -377,6 +393,10 @@ Record repeated process lessons here so future sessions start stronger.
 - A verified implementation without commits is still an incomplete agent handoff when commits were requested. Make the repository state durable before claiming the slice is done.
 - Broad multi-slice prompts need stricter, not looser, checkpoint discipline. Batch execution should produce a sequence of small reviewed commits and roadmap updates.
 - When an agent misses a process step, update this workflow in the same repair turn so the harness captures the lesson instead of relying on memory.
+- Source-grounded retrieval work needs one explicit checklist that couples authorization, retrieval quality, prompt safety, citations, evals, provider data flow, and retention behavior; use `dokeza-rag-source-grounding` for those slices.
+- Production alpha work starts from `docs/development/plans/2026-07-06-production-alpha-gate.md`; do not widen into billing, broad admin governance, CRM/email writeback, analytics, role packs, full macOS product support, or local-first processing until the alpha gate is reliable.
+- Hosted identity provider tokens belong at the API exchange boundary only. Realtime, meeting review, knowledge, and other resource APIs should continue to accept Dokeza-issued tokens, with workspace membership resolved through Dokeza-owned identity state.
+- `docs/development/progress.md` is the compact checklist for full SRS/MVP and production-alpha completion state. Keep it checkbox-compatible, include SRS IDs for MVP/full-SRS items, split partial work from completed foundations, and update it with the same commit as the implementation that changes status.
 
 ## 17. Updating This Workflow
 

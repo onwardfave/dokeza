@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": [
+    "workspace_id",
+    "user_id",
+    "deleted"
+  ],
+  "properties": {
+    "workspace_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "user_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "deleted": {
+      "type": "boolean"
+    }
+  }
+}

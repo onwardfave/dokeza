@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": [
+    "provider_token"
+  ],
+  "properties": {
+    "provider_token": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "device_id": {
+      "minLength": 1,
+      "type": "string"
+    }
+  }
+}

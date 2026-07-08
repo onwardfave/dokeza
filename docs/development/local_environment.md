@@ -69,6 +69,46 @@ Default local auth settings:
 
 Production-like environments require `DOKEZA_AUTH_SIGNING_SECRET` and reject `DOKEZA_DEV_AUTH_ENABLED=true`.
 
+Hosted provider auth can be enabled for staging or production-alpha API testing with:
+
+```powershell
+$env:DOKEZA_HOSTED_AUTH_ENABLED = "true"
+$env:DOKEZA_HOSTED_AUTH_ISSUER = "https://<auth0-tenant-domain>/"
+$env:DOKEZA_HOSTED_AUTH_AUDIENCE = "dokeza-api"
+$env:DOKEZA_HOSTED_AUTH_JWKS_URL = "https://<auth0-tenant-domain>/.well-known/jwks.json"
+```
+
+For production-alpha Auth0 setup:
+
+1. Create an Auth0 Native Application for the desktop client.
+2. Configure the Auth0 API audience to match `DOKEZA_HOSTED_AUTH_AUDIENCE`.
+3. Configure an exact Allowed Callback URL for the desktop loopback redirect, for example `http://127.0.0.1:57619/auth/callback`.
+4. Do not configure or ship a desktop client secret.
+5. Keep `DOKEZA_DEV_AUTH_ENABLED=false` for hosted-auth smoke tests and production-like environments.
+
+The current desktop hosted-auth flow exposes Auth0 domain, client ID, audience, redirect URI, and callback URL fields in the live-session panel. Under Tauri, starting hosted auth opens the browser, waits for the local loopback callback, exchanges the provider token with the API, and stores the resulting Dokeza API session plus provider refresh metadata through secure token storage. When the stored Dokeza API session is expired or near expiry, the desktop can refresh through Auth0 and rotate the stored refresh token if Auth0 returns one. Browser preview can still use the callback field as a manual smoke-test fallback because it cannot bind a native loopback listener.
+
+For the desktop hosted-auth product path, set these Vite variables before starting the desktop dev server when the defaults are not suitable:
+
+```powershell
+$env:VITE_DOKEZA_API_ENDPOINT = "http://127.0.0.1:3000"
+$env:VITE_DOKEZA_REALTIME_ENDPOINT = "ws://127.0.0.1:3001/realtime"
+$env:VITE_DOKEZA_AUTH0_DOMAIN = "https://<auth0-tenant-domain>"
+$env:VITE_DOKEZA_AUTH0_CLIENT_ID = "<auth0-native-app-client-id>"
+$env:VITE_DOKEZA_AUTH0_AUDIENCE = "dokeza-api"
+$env:VITE_DOKEZA_AUTH0_REDIRECT_URI = "http://127.0.0.1:57619/auth/callback"
+```
+
+Development-token controls remain available only inside the live-session panel's developer configuration disclosure for local/test fallback.
+
+When hosted auth is enabled, the API accepts provider tokens only at:
+
+```text
+POST /v1/auth/provider/exchange
+```
+
+The exchange verifies the provider token and returns a Dokeza API token plus Dokeza-owned workspace memberships. Realtime and resource APIs continue to require Dokeza-issued API or realtime tokens. Development auth is not a production fallback.
+
 Request a synthetic local API token:
 
 ```powershell

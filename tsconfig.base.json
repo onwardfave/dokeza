@@ -26,6 +26,7 @@
       "@dokeza/contracts": ["packages/contracts/src/index.ts"],
       "@dokeza/db": ["packages/db/src/index.ts"],
       "@dokeza/db/schema": ["packages/db/src/schema.ts"],
+      "@dokeza/knowledge": ["services/knowledge/src/index.ts"],
       "@dokeza/telemetry": ["packages/telemetry/src/index.ts"],
       "@dokeza/test-fixtures": ["packages/test-fixtures/src/index.ts"]
     },

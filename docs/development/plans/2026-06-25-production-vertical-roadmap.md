@@ -6,6 +6,21 @@ Build Dokeza into a production-ready application by proving one complete vertica
 
 This roadmap is the implementation basis for future feature slices. Each slice must stay independently verifiable and should not widen into later milestones until the current vertical gate is working end to end.
 
+## Current Execution Gate
+
+The next execution gate is the Production Alpha Gate in `docs/development/plans/2026-07-06-production-alpha-gate.md`.
+
+That gate narrows near-term work to a controlled Windows alpha workflow:
+
+- production-capable auth and workspace onboarding;
+- desktop productization of the live session, overlay, meeting review, and diagnostics surfaces;
+- long-lived native microphone capture hardening;
+- M2 usage, rate, and cost guardrails;
+- end-to-end alpha verification with synthetic and real microphone-backed sessions;
+- desktop knowledge upload UI using the existing text document and source-grounding contracts.
+
+Billing, broad admin governance, CRM/email writeback, analytics, role packs, full macOS product support, and local-first processing remain deferred until the production alpha workflow is reliable.
+
 ## Requirements and Milestone
 
 - Milestone 1: desktop shell, onboarding, audio capture, STT, session lifecycle, live transcript.
@@ -44,16 +59,17 @@ Implemented foundation:
 - Bounded native default-microphone capture can produce protocol-compatible mono 16 kHz PCM chunks and feed them into the desktop realtime client.
 - Auth architecture baseline exists for hosted identity, Dokeza-owned workspace membership, and short-lived realtime session tokens.
 - Development-only auth token path exists: the API can issue synthetic API tokens, exchange them for short-lived workspace-scoped realtime tokens, realtime validates token purpose/workspace/device context, and the desktop can request local dev realtime tokens.
+- Production auth foundation has started: the API can verify hosted provider tokens through a provider-neutral OIDC/JWKS boundary at `POST /v1/auth/provider/exchange`, resolve Dokeza-owned workspace memberships through an injectable identity repository, and issue short-lived Dokeza API tokens. The desktop auth API client can call that exchange route.
 - Local development PostgreSQL and pgvector stack.
 
 Key gaps:
 
 - Continuous desktop audio capture still uses repeated bounded native capture windows; long-lived native streaming and system-audio capture remain.
-- No implemented hosted auth provider, durable user/workspace provisioning, or production onboarding flow.
+- Hosted auth is only partially implemented. Provider-token verification and API exchange exist, but hosted IdP vendor selection, desktop redirect/SDK flow, durable PostgreSQL user/workspace provisioning, secure desktop token storage, and production onboarding UI remain.
 - Reconnect/resume is implemented for in-process realtime recovery with original session reattachment, final-transcript replay by server sequence, and safe invalid-resume failure behavior; durable replay after realtime process restart still needs persisted server-sequence metadata.
 - Live transcript and meeting review UI exist for local/dev verticals but need production onboarding, hosted auth, and product polish.
-- Manual live suggestion streaming exists; durable suggestion persistence, source grounding, automatic triggers, debounce/rate limits, cost ledger storage, and eval datasets remain.
-- No knowledge ingestion or retrieval pipeline.
+- Manual live suggestion streaming exists; source grounding for manual requests can now use hybrid keyword/vector retrieval; completed suggestions and citation metadata persist into meeting review when retention permits. Automatic triggers, debounce/rate limits, cost ledger storage, reranking, and eval datasets remain.
+- Knowledge text upload, chunking, keyword retrieval, embedding generation, and pgvector-backed retrieval exist; reranking, document upload UI, and richer permission policy remain follow-up work.
 - No post-call processing, admin policy management, billing, production deployment, or cross-service E2E tests.
 
 ## Affected Architecture
@@ -268,7 +284,7 @@ Tasks:
 
 Goal: manual suggestions stream from transcript context through a model gateway.
 
-Status: partially implemented. `@dokeza/ai-orchestrator` now provides a versioned live prompt registry, bounded final-transcript context assembly, deterministic credential-free local streaming, an OpenAI Responses streaming adapter boundary with injectable transport, metadata-only telemetry, and recoverable provider failure mapping. `services/realtime` handles manual `suggestion.request` messages with authenticated workspace/session context and emits `suggestion.stream_token` plus `suggestion.complete`; configured realtime startup wires deterministic local mode or OpenAI streaming mode from typed config and fails closed when OpenAI is selected without server-side credentials. Realtime advertises `cloud_llm_allowed` and blocks external live suggestion calls when workspace policy disables cloud LLM. The desktop live session client and panel can request and display streaming suggestions. Durable suggestion persistence, source grounding, automatic suggestion triggers, debounce/rate limits, cost ledger storage, and eval datasets remain follow-up work.
+Status: partially implemented. `@dokeza/ai-orchestrator` now provides a versioned live prompt registry, bounded final-transcript context assembly, deterministic credential-free local streaming, an OpenAI Responses streaming adapter boundary with injectable transport, metadata-only telemetry, source-material prompt delimiting, and recoverable provider failure mapping. `services/realtime` handles manual `suggestion.request` messages with authenticated workspace/session context and emits `suggestion.stream_token` plus `suggestion.complete`; when `include_sources` is true, the realtime service queries the server-side knowledge repository, passes authorized chunks to the AI orchestrator as untrusted source material, and returns citation metadata through the existing realtime contract. Configured realtime startup wires deterministic local mode or OpenAI streaming mode from typed config and fails closed when OpenAI is selected without server-side credentials. Realtime advertises `cloud_llm_allowed` and blocks external live suggestion calls when workspace policy disables cloud LLM. Completed suggestions persist to workspace-scoped meeting review records with request ID, server sequence, prompt/model metadata, and citation metadata when retention permits; `live_only` and `local_only` keep them transient. The desktop live session client and meeting review panel can display suggestions with source cues. Automatic suggestion triggers, debounce/rate limits, cost ledger storage, reranking, and eval datasets remain follow-up work.
 
 Tasks:
 
@@ -278,22 +294,23 @@ Tasks:
 4. `suggestion.request` routing. Done for manual realtime requests.
 5. `suggestion.stream_token` and `suggestion.complete` emission. Done.
 6. Cost and latency telemetry. Partially done for metadata-only route/latency/token-count events; durable usage ledger remains.
-7. Suggestion UI. Done for first desktop live-session panel display.
+7. Suggestion UI. Done for first desktop live-session panel display, including citation cues when source metadata is returned.
+8. Durable suggestion persistence. Done for completed manual suggestions, citation metadata, prompt/model metadata, meeting detail, export, and desktop review display; cost ledger and replay-after-process-restart remain later.
 
 ### M3 - Knowledge Base and Source Grounding
 
 Goal: uploaded knowledge can be retrieved and cited in live suggestions.
 
-Status: partially implemented for the foundation slice. `@dokeza/contracts` defines knowledge document upload/list/detail/search schemas with generated JSON Schema artifacts; `services/knowledge` owns deterministic text chunking plus in-memory and PostgreSQL repositories over existing workspace-scoped `documents` and `document_chunks`; `services/api` exposes authenticated workspace-authorized document and keyword-search routes. Search returns source metadata for matching chunks, list responses omit document content, and `live_only` / `local_only` retention modes block cloud document persistence. Embeddings, hybrid retrieval, reranking, full document permission evaluation, desktop/web upload UI, and source injection into live suggestions remain follow-up work.
+Status: partially implemented for the foundation, source-grounding bridge, and embeddings slices. `@dokeza/contracts` defines knowledge document upload/list/detail/search schemas with generated JSON Schema artifacts; `services/knowledge` owns deterministic text chunking plus in-memory and PostgreSQL repositories over existing workspace-scoped `documents` and `document_chunks`; `services/api` exposes authenticated workspace-authorized document and search routes. Search returns source metadata for matching chunks, list responses omit document content, and `live_only` / `local_only` retention modes block cloud document persistence and derived embedding persistence. The knowledge service now has deterministic local/test embeddings, an OpenAI embedding adapter boundary, pgvector storage/indexing, hybrid keyword/vector search, and keyword-only fallback when embedding generation fails. Manual live suggestions can request source retrieval through the realtime service and show source cues in the desktop live panel. Reranking, full document permission evaluation, desktop/web upload UI, and retrieval eval sets remain follow-up work.
 
 Tasks:
 
 1. Document upload and storage. Partially done for text upload through workspace-scoped API repositories; binary file/object storage remains later.
 2. Parsing and chunking. Partially done for deterministic plain-text chunking; PDF/DOCX/HTML parsers remain later.
-3. Embeddings and pgvector storage.
-4. Hybrid retrieval and reranking.
+3. Embeddings and pgvector storage. Done for deterministic local/test embeddings, OpenAI provider adapter boundary, pgvector column wiring, and vector index migration.
+4. Hybrid retrieval and reranking. Partially done for hybrid keyword/vector retrieval; reranking remains later.
 5. Permission-aware retrieval. Partially done for workspace isolation and explicit allowed-document filtering; document-level permission policy remains later.
-6. Source metadata in suggestions. Source metadata exists in knowledge search results; realtime suggestion grounding remains later.
+6. Source metadata in suggestions. Done for manual live suggestions using repository retrieval and existing `suggestion.complete.sources`; embedding-backed repository results can now feed that path.
 7. Retrieval eval set.
 
 ### Later Milestones

@@ -36,6 +36,7 @@ Critical assets:
 | Insider transcript access | Information disclosure | Internal DB query | Privacy violation | Least privilege, audit logs, restricted production access |
 | Replay of audio frames | Spoofing | Captured frames resent | Corrupt transcript/session | Session tokens, sequence numbers, timestamps |
 | Fake client session | Spoofing | Stolen or forged token | Unauthorized processing | Short-lived tokens, device binding where feasible |
+| Desktop OAuth callback interception | Spoofing / Elevation of privilege | Malicious local process races the loopback callback or injects a forged authorization response | Account compromise or wrong account binding | Authorization Code with PKCE, high-entropy state/nonce, exact callback allowlist, short listener lifetime, no client secret, sanitized retry |
 | LLM provider outage | Denial of service | Provider failure | Suggestions unavailable | Provider abstraction, fallback models, degraded mode |
 | Cost abuse | Denial of wallet | Excessive requests | Margin loss | Rate limits, quotas, debounce, usage metering |
 | Integration writeback mistake | Tampering | Bad generated CRM update | Customer system corruption | User approval, audit logs, structured validation |
@@ -57,6 +58,7 @@ Mitigations:
 - Short-lived session tokens.
 - TLS everywhere.
 - OAuth state verification.
+- PKCE and nonce validation for desktop hosted sign-in.
 - Signed webhook verification.
 - Device identity for desktop sessions where feasible.
 
@@ -168,4 +170,3 @@ Required tests and reviews:
 - Log redaction tests.
 - Retention and deletion tests.
 - Incident response tabletop exercise.
-

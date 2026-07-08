@@ -46,6 +46,64 @@ export const WorkspaceListResponseSchema = Type.Object({
   ),
 });
 
+export const WorkspaceMembershipListResponseSchema = Type.Object({
+  workspace_id: Type.String({ minLength: 1 }),
+  memberships: Type.Array(
+    Type.Object({
+      user_id: Type.String({ minLength: 1 }),
+      email: Type.Optional(Type.String({ minLength: 1 })),
+      display_name: Type.Optional(Type.String({ minLength: 1 })),
+      role: WorkspaceRole,
+    }),
+  ),
+});
+
+export const WorkspaceMembershipUpsertRequestSchema = Type.Object({
+  user_id: Type.String({ minLength: 1 }),
+  email: Type.String({ minLength: 1 }),
+  display_name: Type.Optional(Type.String({ minLength: 1 })),
+  role: WorkspaceRole,
+});
+
+export const WorkspaceMembershipResponseSchema = Type.Object({
+  workspace_id: Type.String({ minLength: 1 }),
+  membership: Type.Object({
+    user_id: Type.String({ minLength: 1 }),
+    email: Type.Optional(Type.String({ minLength: 1 })),
+    display_name: Type.Optional(Type.String({ minLength: 1 })),
+    role: WorkspaceRole,
+  }),
+});
+
+export const WorkspaceMembershipDeleteResponseSchema = Type.Object({
+  workspace_id: Type.String({ minLength: 1 }),
+  user_id: Type.String({ minLength: 1 }),
+  deleted: Type.Boolean(),
+});
+
+export const ProviderAuthExchangeRequestSchema = Type.Object({
+  provider_token: Type.String({ minLength: 1 }),
+  device_id: Type.Optional(Type.String({ minLength: 1 })),
+});
+
+export const ProviderAuthExchangeResponseSchema = Type.Object({
+  token: Type.String({ minLength: 1 }),
+  token_type: Type.Literal("Bearer"),
+  expires_at: Type.String({ minLength: 1 }),
+  user: Type.Object({
+    user_id: Type.String({ minLength: 1 }),
+    display_name: Type.String({ minLength: 1 }),
+    development_only: Type.Literal(false),
+  }),
+  workspaces: Type.Array(
+    Type.Object({
+      workspace_id: Type.String({ minLength: 1 }),
+      name: Type.String({ minLength: 1 }),
+      role: WorkspaceRole,
+    }),
+  ),
+});
+
 export const RealtimeTokenRequestSchema = Type.Object({
   workspace_id: Type.String({ minLength: 1 }),
   device_id: Type.Optional(Type.String({ minLength: 1 })),
@@ -82,6 +140,7 @@ export const AuthErrorResponseSchema = Type.Object({
     Type.Literal("method_not_allowed"),
     Type.Literal("invalid_request"),
     Type.Literal("dev_auth_unavailable"),
+    Type.Literal("auth_provider_unavailable"),
   ]),
 });
 
@@ -89,6 +148,16 @@ export type AuthWorkspaceMembership = Static<typeof AuthWorkspaceMembershipSchem
 export type AuthTokenClaims = Static<typeof AuthTokenClaimsSchema>;
 export type UserProfileResponse = Static<typeof UserProfileResponseSchema>;
 export type WorkspaceListResponse = Static<typeof WorkspaceListResponseSchema>;
+export type WorkspaceMembershipListResponse = Static<typeof WorkspaceMembershipListResponseSchema>;
+export type WorkspaceMembershipUpsertRequest = Static<
+  typeof WorkspaceMembershipUpsertRequestSchema
+>;
+export type WorkspaceMembershipResponse = Static<typeof WorkspaceMembershipResponseSchema>;
+export type WorkspaceMembershipDeleteResponse = Static<
+  typeof WorkspaceMembershipDeleteResponseSchema
+>;
+export type ProviderAuthExchangeRequest = Static<typeof ProviderAuthExchangeRequestSchema>;
+export type ProviderAuthExchangeResponse = Static<typeof ProviderAuthExchangeResponseSchema>;
 export type RealtimeTokenRequest = Static<typeof RealtimeTokenRequestSchema>;
 export type RealtimeTokenResponse = Static<typeof RealtimeTokenResponseSchema>;
 export type DevAuthTokenRequest = Static<typeof DevAuthTokenRequestSchema>;
@@ -99,6 +168,12 @@ export const authJsonSchemas = {
   "auth-token-claims": AuthTokenClaimsSchema,
   "user-profile-response": UserProfileResponseSchema,
   "workspace-list-response": WorkspaceListResponseSchema,
+  "workspace-membership-list-response": WorkspaceMembershipListResponseSchema,
+  "workspace-membership-upsert-request": WorkspaceMembershipUpsertRequestSchema,
+  "workspace-membership-response": WorkspaceMembershipResponseSchema,
+  "workspace-membership-delete-response": WorkspaceMembershipDeleteResponseSchema,
+  "provider-auth-exchange-request": ProviderAuthExchangeRequestSchema,
+  "provider-auth-exchange-response": ProviderAuthExchangeResponseSchema,
   "realtime-token-request": RealtimeTokenRequestSchema,
   "realtime-token-response": RealtimeTokenResponseSchema,
   "dev-auth-token-request": DevAuthTokenRequestSchema,
@@ -114,6 +189,18 @@ export function validateRealtimeTokenRequest(value: unknown): value is RealtimeT
   return Value.Check(RealtimeTokenRequestSchema, value);
 }
 
+export function validateProviderAuthExchangeRequest(
+  value: unknown,
+): value is ProviderAuthExchangeRequest {
+  return Value.Check(ProviderAuthExchangeRequestSchema, value);
+}
+
 export function validateDevAuthTokenRequest(value: unknown): value is DevAuthTokenRequest {
   return Value.Check(DevAuthTokenRequestSchema, value);
+}
+
+export function validateWorkspaceMembershipUpsertRequest(
+  value: unknown,
+): value is WorkspaceMembershipUpsertRequest {
+  return Value.Check(WorkspaceMembershipUpsertRequestSchema, value);
 }

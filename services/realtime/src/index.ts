@@ -84,6 +84,17 @@ export type {
 export { PgTranscriptTimelineSink } from "./pg-transcript-timeline-sink.js";
 export type { PgTranscriptTimelineSinkOptions } from "./pg-transcript-timeline-sink.js";
 
+export { InMemorySuggestionSink, PgSuggestionSink } from "./suggestion-sink.js";
+export type {
+  InMemorySuggestionSinkOptions,
+  PgSuggestionSinkOptions,
+  SuggestionRecord,
+  SuggestionSink,
+  SuggestionWriteInput,
+  SuggestionWriteResult,
+  SuggestionWriteStatus,
+} from "./suggestion-sink.js";
+
 export { evaluateTranscriptTimelinePersistence } from "./transcript-retention-policy.js";
 export type {
   TranscriptRetentionMode,

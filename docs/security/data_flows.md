@@ -53,8 +53,9 @@ flowchart LR
         Email[Email]
     end
 
-    DesktopAuth -->|sign-in redirect or provider SDK| IdP
-    IdP -->|auth code or provider token| API
+    DesktopAuth -->|Auth0 system-browser PKCE sign-in| IdP
+    IdP -->|auth code to loopback callback| DesktopAuth
+    DesktopAuth -->|provider token exchange| API
     API -->|workspace list and realtime session token| DesktopAuth
     Mic -->|audio chunks| RT
     Sys -->|audio chunks| RT
@@ -89,16 +90,28 @@ Initial cloud STT implementation:
 - Adapter telemetry includes provider metadata, chunk timing, stream name, event counts, and failure categories only. It must not include transcript text, raw audio bytes, prompts, documents, suggestions, or API keys.
 - Automated tests use a fake provider transport and must not call the live Deepgram service.
 
+Initial hosted auth implementation:
+
+- The selected production-alpha hosted identity provider is Auth0.
+- The desktop starts an Auth0 Native Application Authorization Code with PKCE flow in the OS browser.
+- The production-alpha callback is an exact loopback redirect on `127.0.0.1`; desktop accepts it only for a single pending sign-in transaction with validated `state`, `nonce`, PKCE verifier binding, and a short listener lifetime.
+- The API service accepts hosted identity provider tokens only at `POST /v1/auth/provider/exchange`.
+- The API verifies configured issuer, audience, expiration, RS256 signature, and JWKS key ID through a provider-neutral OIDC/JWKS verifier.
+- Hosted provider tokens are not accepted by realtime, meeting review, knowledge, or other resource APIs.
+- After verification, the API resolves the provider subject through Dokeza-owned user/workspace membership state and issues a short-lived Dokeza API token.
+- The development-only HMAC token issuer remains available only in local/test-enabled environments and is not a production fallback.
+- Provider tokens, Dokeza API tokens, realtime tokens, and refresh tokens must not be logged, stored in diagnostics, or emitted in telemetry.
+
 Initial cloud LLM implementation:
 
 - The realtime service routes manual `suggestion.request` messages to the AI orchestrator.
-- The AI orchestrator assembles a bounded recent transcript window and a versioned live prompt, then routes generation through an internal model gateway.
+- The AI orchestrator assembles a bounded recent transcript window, optional server-retrieved source chunks labeled as untrusted source material, and a versioned live prompt, then routes generation through an internal model gateway.
 - The first production provider path targets OpenAI through the server-side Responses streaming API when `DOKEZA_LLM_PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_MODEL`, and workspace policy allow cloud LLM processing.
 - OpenAI credentials are read from server-side configuration only and are never sent to desktop or browser clients.
 - Realtime advertises `cloud_llm_allowed` in `auth.accepted` and blocks external live suggestion calls when the authenticated workspace policy disables cloud LLM.
 - Local and CI tests use deterministic or fake provider transports and must not call the live OpenAI service.
-- Adapter telemetry includes provider metadata, route, model, prompt template version, latency, token counts, status, and failure category only. It must not include transcript text, prompt text, generated suggestion content, raw audio bytes, document text, or API keys.
-- Suggestions from the M2 realtime path are transient unless a later governed persistence slice adds durable suggestion storage, retention, deletion, and export behavior.
+- Adapter telemetry includes provider metadata, route, model, prompt template version, latency, token counts, status, and failure category only. It must not include transcript text, prompt text, retrieved chunk text, generated suggestion content, raw audio bytes, document text, or API keys.
+- Completed suggestions from the M2 realtime path are stored as workspace-scoped `suggestions` records when retention policy permits cloud persistence. Persisted suggestions include generated content, prompt/model metadata, request ID, server sequence, and citation metadata for source chunks. `live_only` and `local_only` retention modes keep live suggestions transient and block cloud suggestion persistence.
 
 Initial knowledge-base implementation:
 
@@ -106,21 +119,28 @@ Initial knowledge-base implementation:
 - Document text is chunked inside Dokeza Cloud and stored as workspace-scoped `documents` and `document_chunks` records when retention policy permits cloud persistence.
 - `live_only` and `local_only` retention modes block cloud document and chunk persistence.
 - List responses return document metadata only; authorized detail and search responses can return chunk text and source metadata.
-- Search is deterministic keyword retrieval in Dokeza Cloud for this slice. No embedding provider, reranker, object storage, or third-party knowledge provider data flow is introduced yet.
+- Search is hybrid keyword plus embedding-backed retrieval in Dokeza Cloud. Local and CI defaults use deterministic credential-free embeddings. Production embedding generation routes through OpenAI when `DOKEZA_EMBEDDING_PROVIDER=openai`, `OPENAI_API_KEY`, configured model settings, and workspace retention policy permit cloud processing.
+- OpenAI embedding credentials are read from server-side configuration only and are never sent to desktop or browser clients.
+- Upload indexing sends retained document chunks to the embedding provider. Search sends the search query to the embedding provider when semantic retrieval is enabled. Provider failures fall back to keyword-only retrieval.
+- Manual live suggestions can request top matching chunks through the realtime service for source-grounded prompt context and citation metadata.
+- No reranker, object storage, or third-party knowledge connector data flow is introduced yet.
 
 ## 4. Data Flow Table
 
 | Flow | Data | Sensitive Content | Protection | Opt-Out / Policy |
 | --- | --- | --- | --- | --- |
-| Desktop/API to identity provider | Login redirects, provider tokens, profile identifiers | Account identity, email, auth metadata | TLS, hosted IdP controls, short-lived tokens, secure local token storage | Required for cloud account usage; local-only future mode may differ |
+| Desktop to Auth0 | Login redirect, PKCE challenge, state, nonce, callback metadata, profile identifiers | Account identity, email, auth metadata | TLS, OS browser, exact redirect allowlist, PKCE, state/nonce validation, short listener lifetime | Required for cloud account usage; local-only future mode may differ |
+| Auth0 to desktop | Authorization code through loopback callback, provider tokens after code exchange | Account identity, bearer token | TLS for token exchange, no desktop client secret, platform secure storage for retained tokens, redacted diagnostics | Sign out; revoke provider session |
+| Desktop to API auth exchange | Hosted provider token, optional device ID | Account identity, bearer token | TLS, provider token verification, Dokeza-owned membership resolution, metadata-only errors | Sign out; revoke provider session |
 | API to desktop | Workspace list, user profile, short-lived realtime token | Account identity, workspace membership, bearer token | TLS, token TTL, platform secure storage, redacted diagnostics | Sign out; revoke sessions |
 | Device to realtime service | Audio chunks | Voice, meeting content, PII | TLS, session token, retention policy | Disable capture; local mode where supported |
 | Device to context service | Screen text, active window metadata | Visible documents, customer data, secrets | TLS, redaction, permission prompt | Disable screen context |
 | Realtime service to STT provider | Audio or audio stream | Voice, meeting content | TLS, provider DPA, Dokeza-managed provider credentials, retention settings | Local STT or provider disabled by policy |
 | STT provider to Dokeza | Transcript | Meeting content, PII | TLS, provider retention controls | Local STT |
 | Knowledge source to Dokeza | Documents and metadata | Company confidential data | OAuth scopes, TLS, encrypted storage | Connector disabled; document deletion |
-| Dokeza to embedding provider | Document chunks | Company confidential data | TLS, provider retention controls | Local embeddings or provider disabled |
+| Dokeza to embedding provider | Document chunks and search queries | Company confidential data, query intent | TLS, server-side credentials, provider retention controls, metadata-only telemetry, keyword fallback on failure | Local deterministic embeddings or provider disabled |
 | AI orchestrator to LLM provider | Prompt, transcript excerpts, retrieved chunks where available | Meeting content, customer data, company data | TLS, server-side credentials, context minimization, provider settings, metadata-only telemetry | Local LLM, provider disabled by policy, or deterministic local/test provider |
+| Realtime service to PostgreSQL suggestions | Completed suggestion content, source metadata, prompt/model metadata | Generated meeting assistance, customer context | Workspace-scoped rows, RLS, retention gate, deletion cascade with meeting session, metadata-only errors | Live-only or local-only retention keeps suggestions transient |
 | Workflow service to CRM/email | Summaries, drafts, structured updates | Meeting outcomes, customer data | OAuth, TLS, approval workflow | Integration disabled |
 | Backend to telemetry | Metrics and errors | Usually non-content | Content redaction, access controls | Debug telemetry disabled by default |
 

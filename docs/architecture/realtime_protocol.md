@@ -161,7 +161,7 @@ Context updates are accepted by the protocol for forward compatibility. Until sc
 
 ### 5.6 `suggestion.request`
 
-Suggestion requests are implemented for manual Milestone 2 live assistance. The server uses the authenticated session workspace, recent final transcript context, workspace cloud LLM policy, and AI orchestrator prompt routing; the client cannot provide a workspace override. If configured live suggestions require an external model provider and `cloud_llm_allowed` is false, the server returns a recoverable `feature_unavailable` error before provider submission. Source metadata remains empty until Milestone 3 retrieval/source grounding is implemented.
+Suggestion requests are implemented for manual Milestone 2 live assistance. The server uses the authenticated session workspace, recent final transcript context, workspace cloud LLM policy, and AI orchestrator prompt routing; the client cannot provide a workspace override. If configured live suggestions require an external model provider and `cloud_llm_allowed` is false, the server returns a recoverable `feature_unavailable` error before provider submission. When `include_sources` is true, the server may retrieve authorized source chunks through the knowledge service, pass them to the AI orchestrator as delimited untrusted source material, and return citation metadata in `suggestion.complete.payload.sources`. If retrieval is unavailable or no authorized chunks match, the server falls back to transcript-only suggestion behavior with an empty `sources` array.
 
 ```json
 {
@@ -330,9 +330,12 @@ Initial server error codes include:
 - `stt_provider_timeout`
 - `session_persistence_failed`
 - `transcript_persistence_failed`
+- `suggestion_persistence_failed`
 - `session_not_resumable`
 - `feature_unavailable`
 - `llm_provider_timeout`
+
+`suggestion_persistence_failed` is recoverable. The server may emit it after a `suggestion.complete` has already been delivered when durable meeting-review storage fails; clients should keep the live suggestion visible and allow normal session continuation.
 
 ### 6.8 `session.closed`
 

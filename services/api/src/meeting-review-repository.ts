@@ -3,6 +3,7 @@ import type {
   MeetingDetailResponse,
   MeetingExportResponse,
   MeetingHistoryResponse,
+  MeetingSuggestion,
   MeetingSummary,
   MeetingTranscriptGap,
   MeetingTranscriptSegment,
@@ -12,6 +13,7 @@ import {
   createDatabase,
   createPool,
   meetingSessions,
+  suggestions,
   transcriptGaps,
   transcriptSegments,
   withWorkspaceTransaction,
@@ -64,12 +66,14 @@ export interface MeetingReviewSeed {
   meeting: MeetingSummary;
   segments?: MeetingTranscriptSegment[];
   gaps?: MeetingTranscriptGap[];
+  suggestions?: MeetingSuggestion[];
 }
 
 interface StoredMeetingReview {
   meeting: MeetingSummary;
   segments: MeetingTranscriptSegment[];
   gaps: MeetingTranscriptGap[];
+  suggestions: MeetingSuggestion[];
 }
 
 export interface InMemoryMeetingReviewRepositoryOptions {
@@ -98,6 +102,7 @@ export class InMemoryMeetingReviewRepository implements MeetingReviewRepository 
       },
       segments: [...(seed.segments ?? [])],
       gaps: [...(seed.gaps ?? [])],
+      suggestions: [...(seed.suggestions ?? [])],
     });
   }
 
@@ -134,6 +139,7 @@ export class InMemoryMeetingReviewRepository implements MeetingReviewRepository 
           (left, right) => left.start_ms - right.start_ms || left.end_ms - right.end_ms,
         ),
       },
+      suggestions: [...stored.suggestions].sort(compareMeetingSuggestions),
     };
   }
 
@@ -159,6 +165,7 @@ export class InMemoryMeetingReviewRepository implements MeetingReviewRepository 
               {
                 meeting: detail.meeting,
                 transcript: detail.transcript,
+                suggestions: detail.suggestions,
               },
               null,
               2,
@@ -286,7 +293,7 @@ export class PgMeetingReviewRepository implements MeetingReviewRepository {
         return undefined;
       }
 
-      const [segmentRows, gapRows] = await Promise.all([
+      const [segmentRows, gapRows, suggestionRows] = await Promise.all([
         tx
           .select()
           .from(transcriptSegments)
@@ -307,6 +314,16 @@ export class PgMeetingReviewRepository implements MeetingReviewRepository {
             ),
           )
           .orderBy(transcriptGaps.startMs, transcriptGaps.endMs),
+        tx
+          .select()
+          .from(suggestions)
+          .where(
+            and(
+              eq(suggestions.workspaceId, workspaceId),
+              eq(suggestions.meetingSessionId, meetingId),
+            ),
+          )
+          .orderBy(suggestions.serverSeq, suggestions.createdAt, suggestions.id),
       ]);
 
       return {
@@ -315,6 +332,7 @@ export class PgMeetingReviewRepository implements MeetingReviewRepository {
           segments: segmentRows.map(toTranscriptSegment),
           gaps: gapRows.map(toTranscriptGap),
         },
+        suggestions: suggestionRows.map(toMeetingSuggestion),
       };
     });
   }
@@ -459,6 +477,14 @@ function compareMeetingSummaries(left: MeetingSummary, right: MeetingSummary): n
   return rightTime.localeCompare(leftTime) || right.meeting_id.localeCompare(left.meeting_id);
 }
 
+function compareMeetingSuggestions(left: MeetingSuggestion, right: MeetingSuggestion): number {
+  return (
+    (left.server_seq ?? Number.MAX_SAFE_INTEGER) - (right.server_seq ?? Number.MAX_SAFE_INTEGER) ||
+    (left.created_at ?? "").localeCompare(right.created_at ?? "") ||
+    left.suggestion_id.localeCompare(right.suggestion_id)
+  );
+}
+
 function normalizeSearchQuery(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
@@ -490,6 +516,7 @@ function toExportResponse(
             {
               meeting: detail.meeting,
               transcript: detail.transcript,
+              suggestions: detail.suggestions,
             },
             null,
             2,
@@ -648,6 +675,61 @@ function toTranscriptGap(row: typeof transcriptGaps.$inferSelect): MeetingTransc
   };
 }
 
+function toMeetingSuggestion(row: typeof suggestions.$inferSelect): MeetingSuggestion {
+  const suggestion: MeetingSuggestion = {
+    suggestion_id: row.id,
+    kind: row.kind as MeetingSuggestion["kind"],
+    content: row.content,
+    sources: readSuggestionSources(row.sourcesJson),
+    confidence: row.confidence as MeetingSuggestion["confidence"],
+    prompt_version: row.promptVersion,
+    model: row.model,
+  };
+
+  if (row.requestId !== null) {
+    suggestion.request_id = row.requestId;
+  }
+  if (row.serverSeq !== null) {
+    suggestion.server_seq = row.serverSeq;
+  }
+  if (row.createdAt !== null) {
+    suggestion.created_at = row.createdAt.toISOString();
+  }
+
+  return suggestion;
+}
+
+function readSuggestionSources(value: string): MeetingSuggestion["sources"] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.flatMap((source) => {
+      if (
+        typeof source !== "object" ||
+        source === null ||
+        typeof (source as { document_id?: unknown }).document_id !== "string" ||
+        typeof (source as { title?: unknown }).title !== "string" ||
+        typeof (source as { chunk_id?: unknown }).chunk_id !== "string"
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          document_id: (source as { document_id: string }).document_id,
+          title: (source as { title: string }).title,
+          chunk_id: (source as { chunk_id: string }).chunk_id,
+        },
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
 function toMarkdownExport(detail: MeetingDetailResponse): string {
   const lines = [
     `# Meeting ${detail.meeting.meeting_id}`,
@@ -680,6 +762,23 @@ function toMarkdownExport(detail: MeetingDetailResponse): string {
       lines.push(
         `- ${gap.start_ms}-${gap.end_ms} ms ${gap.stream}: ${gap.reason} (${gap.dropped_chunks} chunks)`,
       );
+    }
+  }
+
+  lines.push("", "## Suggestions", "");
+
+  if (detail.suggestions.length === 0) {
+    lines.push("_No live suggestions._");
+  } else {
+    for (const suggestion of detail.suggestions) {
+      lines.push(`- [${suggestion.kind}] ${suggestion.content}`);
+      if (suggestion.sources.length > 0) {
+        lines.push(
+          `  Sources: ${suggestion.sources
+            .map((source) => `${source.title} (${source.document_id}/${source.chunk_id})`)
+            .join(", ")}`,
+        );
+      }
     }
   }
 
