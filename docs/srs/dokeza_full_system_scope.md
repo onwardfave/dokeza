@@ -1,5 +1,7 @@
 # Dokeza Full System Scope and Delivery Plan
 
+> **Document status (2026-07-08): frozen until production-alpha exit.** This document describes the full product vision and is intentionally not maintained against implementation progress. Do not spend implementation turns aligning it with the SRS or code. Live execution state lives in `docs/development/progress.md` and the current gate plan; live requirements live in `realtime_meeting_copilot_srs.md`. Revisit this document when the production alpha gate closes.
+
 ## 1. Purpose
 
 Dokeza is a real-time AI work copilot for live professional conversations. It listens to authorized meeting context, understands active work, retrieves relevant organizational knowledge, and helps users respond, decide, follow up, and improve.

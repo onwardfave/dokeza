@@ -1,5 +1,7 @@
 # Software Requirements Specification: Real-Time Meeting Copilot
 
+> **Document status (2026-07-08): stable.** Requirement IDs are the reference for traceability and remain authoritative. Until production-alpha exit, edit this document only for explicit scope decisions (recorded inline with dates, like 9.1.1) — not for routine alignment with the scope document or implementation state. Execution state lives in `docs/development/progress.md`.
+
 ## 1. Introduction
 
 ### 1.1 Purpose
