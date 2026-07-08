@@ -56,6 +56,7 @@ import {
   toLiveSuggestionCards,
   toLiveTranscriptRows,
 } from "./liveSessionViewModel.js";
+import { getOverlayView } from "./overlayViewModel.js";
 import { selectDesktopSurface } from "./surfaces.js";
 
 const initialLiveSessionSnapshot: DesktopRealtimeSnapshot = {
@@ -1341,9 +1342,7 @@ function DiagnosticsPanel() {
 
 function OverlaySurface() {
   const [snapshot, setSnapshot] = useState<DesktopRealtimeSnapshot>(initialLiveSessionSnapshot);
-  const status = getLiveSessionStatusView(snapshot.status);
-  const transcriptRows = toLiveTranscriptRows(snapshot.transcripts);
-  const latestTranscript = transcriptRows.at(-1);
+  const overlay = getOverlayView(snapshot);
 
   useEffect(() => {
     const channel = openLiveSessionBroadcastChannel();
@@ -1363,17 +1362,11 @@ function OverlaySurface() {
   return (
     <main className="overlay-shell" data-tauri-drag-region>
       <section className="overlay-panel" data-tauri-drag-region>
-        <div className={`overlay-status ${status.tone}`} aria-label="Capture status" />
+        <div className={`overlay-status ${overlay.tone}`} aria-label="Capture status" />
         <div>
           <p className="overlay-eyebrow">Dokeza</p>
-          <p className="overlay-title">
-            {latestTranscript?.text ?? (snapshot.status === "idle" ? "Ready" : status.label)}
-          </p>
-          <p className="overlay-meta">
-            {latestTranscript === undefined
-              ? status.label
-              : `${latestTranscript.speaker} / ${latestTranscript.state}`}
-          </p>
+          <p className="overlay-title">{overlay.title}</p>
+          <p className="overlay-meta">{overlay.meta}</p>
         </div>
       </section>
     </main>
