@@ -19,7 +19,7 @@
     "@dokeza/db": "workspace:*",
     "@dokeza/knowledge": "workspace:*",
     "@dokeza/telemetry": "workspace:*",
-    "drizzle-orm": "^0.44.0",
+    "drizzle-orm": "^0.45.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
