@@ -23,6 +23,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## Latest Broad Verification
 
+- [x] 2026-07-08, meeting review state view model: `pnpm check` passed.
 - [x] 2026-07-08, overlay degraded/reconnect states: `pnpm check` passed.
 - [x] 2026-07-08, live suggestion copy/source controls: `pnpm check` passed.
 - [x] 2026-07-08, capture consent gate: `pnpm check` passed.
@@ -363,7 +364,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Collapse endpoint/workspace/token controls behind config + auth state
 - [ ] Partial: Improved session controls include start/pause/resume/stop, request suggestion, copy suggestion, and inspect sources; remaining polish open
 - [x] Overlay state for capture, reconnecting, degraded, suggestions unavailable
-- [ ] Empty / loading / degraded / failed states for review + knowledge
+- [ ] Partial: Empty / loading / degraded / failed states exist for meeting review; knowledge UI states remain open
 - [ ] UI tests for view models + client state transitions
 
 ### Alpha.3 — Native Microphone Stream Hardening

@@ -57,6 +57,7 @@ import {
   toLiveTranscriptRows,
 } from "./liveSessionViewModel.js";
 import { getOverlayView } from "./overlayViewModel.js";
+import { getMeetingReviewView, type MeetingReviewLoadState } from "./meetingReviewViewModel.js";
 import { selectDesktopSurface } from "./surfaces.js";
 
 const initialLiveSessionSnapshot: DesktopRealtimeSnapshot = {
@@ -811,6 +812,7 @@ function MeetingReviewPanel() {
   const [workspaceId, setWorkspaceId] = useState("ws_dev");
   const [apiToken, setApiToken] = useState("");
   const [message, setMessage] = useState("No meeting history loaded");
+  const [reviewState, setReviewState] = useState<MeetingReviewLoadState>("idle");
   const [transcriptQuery, setTranscriptQuery] = useState("");
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState("");
@@ -819,6 +821,13 @@ function MeetingReviewPanel() {
   const [exportContent, setExportContent] = useState("");
   const nativeRuntimeAvailable = useMemo(() => isTauriRuntime(), []);
   const canCallApi = apiToken.trim().length > 0 && workspaceId.trim().length > 0;
+  const reviewView = getMeetingReviewView({
+    state: reviewState,
+    meetings,
+    detail,
+    hasAuth: canCallApi,
+    message,
+  });
   const selectedMeeting =
     meetings.find((meeting) => meeting.meeting_id === selectedMeetingId) ?? null;
 
@@ -840,8 +849,10 @@ function MeetingReviewPanel() {
       setApiToken(activeSession.token);
       setWorkspaceId(activeSession.workspaceId);
       setMessage(`Stored API session ready for ${activeSession.userId}`);
+      setReviewState("ready");
     } catch {
       setMessage("Secure token storage unavailable");
+      setReviewState("degraded");
     }
   }
 
@@ -864,9 +875,11 @@ function MeetingReviewPanel() {
         }).catch(() => undefined);
       }
       setMessage(`API token ready for ${token.userId}`);
+      setReviewState("ready");
     } catch {
       setApiToken("");
       setMessage("API token request failed");
+      setReviewState("failed");
     }
   }
 
@@ -882,14 +895,17 @@ function MeetingReviewPanel() {
     }
 
     setMessage("API token cleared");
+    setReviewState("idle");
   }
 
   async function refreshMeetings() {
     if (!canCallApi) {
       setMessage("API token required");
+      setReviewState("idle");
       return;
     }
 
+    setReviewState("loading");
     try {
       const nextMeetings = await listMeetings({
         apiBaseUrl: apiEndpoint,
@@ -905,15 +921,19 @@ function MeetingReviewPanel() {
       setMessage(`${nextMeetings.length} meetings loaded`);
       if (nextSelectedId !== "") {
         await loadMeeting(nextSelectedId);
+      } else {
+        setReviewState("ready");
       }
     } catch {
       setMessage("Meeting history unavailable");
+      setReviewState("failed");
     }
   }
 
   async function loadMeeting(meetingId: string) {
     if (!canCallApi) {
       setMessage("API token required");
+      setReviewState("idle");
       return;
     }
 
@@ -929,9 +949,15 @@ function MeetingReviewPanel() {
       });
       setDetail(nextDetail);
       setMessage(`Meeting ${meetingId} loaded`);
+      setReviewState(
+        nextDetail.transcript.gaps.length > 0 && nextDetail.transcript.segments.length === 0
+          ? "degraded"
+          : "ready",
+      );
     } catch {
       setDetail(null);
       setMessage("Meeting detail unavailable");
+      setReviewState("failed");
     }
   }
 
@@ -1074,7 +1100,11 @@ function MeetingReviewPanel() {
           >
             Clear token
           </button>
-          <button type="button" disabled={!canCallApi} onClick={() => void refreshMeetings()}>
+          <button
+            type="button"
+            disabled={!canCallApi || !reviewView.canRefresh}
+            onClick={() => void refreshMeetings()}
+          >
             Refresh history
           </button>
           <button
@@ -1100,7 +1130,7 @@ function MeetingReviewPanel() {
           </button>
         </div>
       </div>
-      <p className="meeting-review-detail">{message}</p>
+      <p className={`meeting-review-detail ${reviewView.state}`}>{reviewView.detailText}</p>
       <dl className="meeting-review-stats">
         <div>
           <dt>Selected</dt>
@@ -1121,9 +1151,9 @@ function MeetingReviewPanel() {
       </dl>
       <div className="meeting-review-transcript" aria-live="polite">
         {detail === null ? (
-          <p className="meeting-review-empty">No meeting selected</p>
+          <p className={`meeting-review-empty ${reviewView.state}`}>{reviewView.emptyText}</p>
         ) : detail.transcript.segments.length === 0 ? (
-          <p className="meeting-review-empty">Transcript empty</p>
+          <p className={`meeting-review-empty ${reviewView.state}`}>{reviewView.emptyText}</p>
         ) : (
           detail.transcript.segments.map((segment) => (
             <article className="transcript-row final" key={segment.segment_id}>

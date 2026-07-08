@@ -165,7 +165,7 @@ Acceptance criteria:
 
 Goal: make the current desktop flow usable by a non-developer in the alpha cohort.
 
-Status: partially implemented. The main desktop surface is live-session-first with meeting review beneath it, diagnostics are available through the secondary `#/qa` surface, endpoint/workspace/token controls are behind hosted auth state plus developer configuration, microphone start is gated on explicit capture consent, live suggestion cards support copy plus source inspection, and the overlay distinguishes capture/reconnect/degraded/suggestions-unavailable states. Full OS permission guidance and broader empty/degraded state polish remain open.
+Status: partially implemented. The main desktop surface is live-session-first with meeting review beneath it, diagnostics are available through the secondary `#/qa` surface, endpoint/workspace/token controls are behind hosted auth state plus developer configuration, microphone start is gated on explicit capture consent, live suggestion cards support copy plus source inspection, the overlay distinguishes capture/reconnect/degraded/suggestions-unavailable states, and meeting review has explicit empty/loading/degraded/failed states. Full OS permission guidance and knowledge UI state polish remain open.
 
 Tasks:
 
