@@ -148,7 +148,52 @@ Each evaluation should record:
 - Human or automated score.
 - Failure classification.
 
-## 7. Release Test Gates
+## 7. Production Alpha E2E and Failure Injection
+
+This section defines the verification approach for the production alpha gate (`docs/development/plans/2026-07-06-production-alpha-gate.md`). It exists before the tests do; alpha slices check items off against it.
+
+### 7.1 Real-provider smoke test
+
+The synthetic/fake-verified pipeline must be proven against real providers before further product surface lands:
+
+- One documented end-to-end run: real microphone → Deepgram STT → live transcript → OpenAI suggestion with retrieved sources → stop → meeting review, under a real hosted-IdP (Auth0) tenant.
+- Run manually with real credentials from local config; credentials never enter the repo or CI.
+- Evidence: a dated entry in `docs/development/progress.md` plus a QA note recording latency observations and any provider-behavior deviations from the fake-backed assumptions. No transcript or suggestion content in the evidence.
+- Repeat after any change to provider adapters, auth token flow, or the realtime protocol.
+
+### 7.2 Automated service-level E2E
+
+- A cross-service test path: API auth (dev issuer) → realtime token → WebSocket session → fake STT transcript → manual suggestion (deterministic local mode) → persistence → meeting review routes.
+- Runs against the local PostgreSQL stack; CI-executable with the existing `DOKEZA_PG_INTEGRATION=1` harness.
+- Uses synthetic audio and deterministic providers only; no external network calls.
+- Planned home: `tests/e2e/` per the code architecture layout.
+
+### 7.3 Failure injection
+
+Minimum injected-failure cases for alpha exit, each asserting explicit degraded state and zero content leakage in errors/telemetry:
+
+- Network drop mid-session → reconnect/resume preserves session identity; dropped buffered audio produces `audio.gap`.
+- Realtime token issuance failure → live session marked unavailable; signed-in state preserved.
+- STT provider timeout → session stays open; transcript state shows provider degradation.
+- LLM provider timeout/rate limit → session stays open; suggestions show unavailable/degraded state.
+- Retrieval failure → suggestion falls back to transcript-only with empty sources.
+- Microphone device unavailable/disconnected → capture pauses with device prompt; no crash.
+- Realtime process restart → documented recovery behavior (durable replay is a known open gap until timeline rows carry server-seq metadata).
+
+### 7.4 Manual Windows alpha QA
+
+- A documented manual checklist covering install/run, hosted sign-in, workspace selection, a sustained microphone session (30-minute minimum target), pause/resume/stop, suggestion request, review/export/delete.
+- Follows the format of `docs/development/windows_audio_diagnostics_manual_qa.md`, which covers only the diagnostics panel and does not count as live-session QA.
+
+### 7.5 Alpha-scope prompt and source-grounding evals
+
+Full evaluation sets (section 6) are post-alpha. The alpha slice is intentionally small:
+
+- A seed set of source-grounded Q&A cases over synthetic workspace documents.
+- Assertions: answers cite only authorized retrieved sources; empty-retrieval responses do not fabricate citations; prompt-injection strings inside documents and transcripts do not override system policy.
+- Deterministic local providers first so the eval harness runs in CI; real-model scoring is a manual, recorded run.
+
+## 8. Release Test Gates
 
 Before internal beta:
 

@@ -420,7 +420,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] Update `failure_modes.md` with usage guardrail and desktop capture failures
 - [x] Update `multi_tenancy.md` with durable provider identity mapping
 - [x] Update `multi_tenancy.md` with full membership administration
-- [ ] Update `code_architecture.md` with `packages/db`, `packages/auth`
-- [ ] Update `testing_strategy.md` with alpha E2E, failure injection, prompt/source evals
+- [x] Update `code_architecture.md` with `packages/db`, `packages/auth`
+- [x] Update `testing_strategy.md` with alpha E2E, failure injection, prompt/source evals
 - [x] Update `local_environment.md` with provider-neutral hosted auth env vars
 - [x] Update `local_environment.md` with selected IdP local setup

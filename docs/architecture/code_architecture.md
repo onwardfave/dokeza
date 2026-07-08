@@ -20,6 +20,7 @@ services/
   knowledge/            # Ingestion, chunking, embeddings, retrieval
 packages/
   contracts/            # Shared API and realtime schemas
+  auth/                 # Dokeza token signing/validation and hosted-IdP verification helpers
   authz/                # Workspace authorization helpers
   telemetry/            # Shared tracing and metrics helpers
   config/               # Typed configuration and environment parsing
@@ -70,7 +71,9 @@ Go remains acceptable for later performance-sensitive services, but only behind 
 
 - UI layers may depend on contracts, UI components, and service clients.
 - Desktop native modules may depend on platform adapters and protocol clients.
-- Backend services may depend on contracts, authz, telemetry, and config packages.
+- Backend services may depend on contracts, auth, authz, telemetry, config, and db packages.
+- Token signing/validation logic lives in `packages/auth`; services must not implement ad-hoc token handling.
+- Database access goes through `packages/db` workspace-scoped transaction helpers; services must not open raw connections that bypass RLS context.
 - Domain logic must not depend directly on framework request/response objects.
 - Services must not call each other's databases directly.
 - Retrieval and prompt assembly must not accept arbitrary document text from clients.
