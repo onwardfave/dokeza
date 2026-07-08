@@ -16,7 +16,7 @@ Checkbox tracker for full SRS/MVP completion, derived from the [SRS](../srs/real
 ## Completion Definitions
 
 - **Production alpha complete:** the controlled Windows alpha workflow in `plans/2026-07-06-production-alpha-gate.md` is usable by a design partner with explicit degraded states.
-- **MVP complete:** all SRS 9.1 must-haves and SRS 11.1 acceptance criteria are satisfied for Windows and macOS where required by the SRS.
+- **MVP complete:** all SRS 9.1 must-haves and SRS 11.1 acceptance criteria are satisfied for Windows; macOS is deferred to a fast-follow release per SRS 9.1.1 (2026-07-08).
 - **Full SRS complete:** all SRS `Must` requirements are satisfied, and `Should` / `Could` requirements are either implemented or explicitly accepted as post-release scope in the SRS/traceability matrix.
 
 Current status: production alpha is still open, MVP is not complete, and full SRS completion is not complete.
@@ -43,13 +43,13 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 ## SRS/MVP Dashboard
 
 - [ ] Production alpha complete: Alpha.1 through Alpha.6 remain open.
-- [ ] MVP complete: key blockers remain in auth/onboarding, macOS support, system audio, desktop productization, usage guardrails, post-call outputs, document upload UI/parsing, and E2E verification.
+- [ ] MVP complete: key blockers remain in system audio, desktop productization, usage guardrails, post-call outputs, document upload UI/parsing, deployment/signed install, and E2E verification. macOS is deferred out of MVP per SRS 9.1.1.
 - [ ] Full SRS completion: post-call, calendar/pre-call, admin/audit, mandatory cost controls, billing/usage `Should` items, and cross-platform release readiness remain open.
 - [x] Foundation architecture aligns with the SRS traceability matrix: desktop shell, realtime protocol, workspace isolation, provider abstraction, retention-aware persistence, and source-grounded retrieval foundations exist.
 
 ## MVP Scope Checklist (SRS 9.1)
 
-- [ ] Windows and macOS desktop client.
+- [ ] Windows desktop client; macOS deferred to post-MVP fast-follow (SRS 9.1.1).
 - [ ] Authenticated user account.
 - [ ] Partial: manual meeting start and stop exist in local/dev flow; production-authenticated UX remains open.
 - [ ] Partial: microphone capture exists for bounded Windows capture; long-lived stream and QA remain open.
@@ -68,7 +68,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## MVP Acceptance Checklist (SRS 11.1)
 
-- [ ] FR-001, FR-007, FR-009, FR-010, FR-011: user can install the desktop app on Windows and macOS through a release/update channel.
+- [ ] FR-001, FR-007, FR-009, FR-010, FR-011: user can install the desktop app on Windows through a release/update channel; macOS deferred per SRS 9.1.1.
 - [ ] FR-020, NFR-042, NFR-080: user can authenticate, complete onboarding, select a workspace, and store tokens in platform-secure storage.
 - [ ] Partial: FR-100, NFR-084: user can manually start, pause, and stop a meeting session in the local/dev vertical; production-authenticated product flow remains open.
 - [ ] Partial: FR-040, FR-060 to FR-063: permitted microphone audio can produce a live transcript in the Windows/local vertical; long-lived native streaming, system audio, macOS, and alpha QA remain open.
@@ -83,7 +83,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 ### Desktop Application Shell (FR-001 to FR-011)
 
 - [ ] Partial: Windows Tauri shell and diagnostics foundation exist.
-- [ ] macOS validation and installable macOS release path.
+- [ ] Deferred post-MVP (SRS 9.1.1): macOS validation and installable macOS release path.
 - [ ] Main app window covering onboarding, settings, integrations, billing, and meeting history.
 - [ ] Global hotkeys for opening assistant, requesting suggestions, dismissing suggestions, and muting capture.
 - [ ] Customizable hotkeys.
@@ -104,7 +104,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] Partial: Windows selected/default microphone capture with protocol-compatible chunks exists.
 - [ ] Long-lived native microphone stream.
 - [ ] System audio capture where supported and authorized by the OS.
-- [ ] macOS audio capture validation.
+- [ ] Deferred post-MVP (SRS 9.1.1): macOS audio capture validation.
 - [ ] VAD/silence detection to reduce unnecessary processing.
 - [ ] Clear productized error states for missing permissions, unavailable loopback audio, and disconnected devices.
 - [ ] Durable reconnect/replay after realtime process restart.
@@ -248,7 +248,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] `audio.gap` for user pause and device capture failure
 - [ ] Replace repeated bounded capture windows with long-lived native stream
 - [ ] Alpha-deferred: system audio capture (Windows WASAPI loopback); open for SRS/MVP
-- [ ] Alpha-deferred: macOS system audio capture; open for SRS/MVP
+- [ ] Deferred post-MVP (SRS 9.1.1): macOS system audio capture
 
 ## M1A.Auth — Minimum Auth and Workspace Token Path
 

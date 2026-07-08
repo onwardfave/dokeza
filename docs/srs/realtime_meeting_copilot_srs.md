@@ -670,7 +670,7 @@ Such controls must be documented transparently and must not be positioned as und
 
 The MVP shall include:
 
-- Windows and macOS desktop client.
+- Windows desktop client (macOS deferred; see 9.1.1).
 - Authenticated user account.
 - Manual meeting start and stop.
 - Microphone capture.
@@ -686,6 +686,10 @@ The MVP shall include:
 - Action item extraction.
 - Follow-up email draft.
 - Basic settings and capture controls.
+
+#### 9.1.1 Scope Decision: macOS Deferral (2026-07-08)
+
+The first MVP release is Windows-only. macOS remains a `Must` for the full product (FR-001) but is deferred to a fast-follow release after the Windows MVP ships. Rationale: no macOS validation has occurred (the Tauri spike passed on Windows only), macOS system-audio capture carries its own platform risk (ScreenCaptureKit or approved audio routing), and keeping macOS inside the MVP definition made "MVP complete" unmeasurable against actual execution. MVP acceptance criteria in 11.1 apply to Windows; macOS acceptance is evaluated at its own release gate.
 
 ### 9.2 MVP Exclusions
 
@@ -722,7 +726,7 @@ Potential future releases may include:
 
 The MVP is acceptable when:
 
-- A user can install the desktop app on Windows and macOS.
+- A user can install the desktop app on Windows (macOS deferred per 9.1.1).
 - A user can authenticate and complete onboarding.
 - A user can start a meeting session manually.
 - The app captures permitted audio and produces a live transcript.
