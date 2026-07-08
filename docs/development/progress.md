@@ -23,6 +23,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## Latest Broad Verification
 
+- [x] 2026-07-08, live suggestion debounce/session cap: `pnpm generate:schemas` completed; `pnpm check` passed.
 - [x] 2026-07-08, meeting review state view model: `pnpm check` passed.
 - [x] 2026-07-08, overlay degraded/reconnect states: `pnpm check` passed.
 - [x] 2026-07-08, live suggestion copy/source controls: `pnpm check` passed.
@@ -309,7 +310,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Meeting review shows persisted suggestions
 - [x] Cost/latency telemetry metadata events
 - [ ] Automatic suggestion triggers
-- [ ] Debounce / per-session rate limits
+- [x] Debounce / per-session rate limits (server-enforced defaults: 2000 ms debounce, 30 requests/session; `suggestion_rate_limited` error)
 - [ ] Cost ledger storage
 - [ ] Replay suggestions after process restart
 
@@ -377,12 +378,12 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] Windows manual QA with real microphone (30-minute session target)
 
 ### Alpha.4 — M2 Usage Guardrails
-- [ ] Manual suggestion debounce + per-session request cap
+- [x] Manual suggestion debounce + per-session request cap
 - [ ] Token/context budgets (transcript, sources, prompt, output)
 - [ ] Durable usage ledger
 - [ ] Provider timeout/rate-limit → safe degraded states
 - [ ] Metadata-only telemetry (latency, token counts, model, status)
-- [ ] Tests for budget enforcement, debounce, rate-limit, redaction
+- [ ] Partial: debounce, rate-limit, and redaction tests exist; budget enforcement tests remain
 
 ### Alpha.5a — Real-Provider Smoke Test (pulled forward, next slice)
 - [ ] One documented real end-to-end session: real mic → Deepgram → transcript → OpenAI suggestion with sources → review, under a real Auth0 tenant

@@ -160,6 +160,8 @@ describe("createRealtimeServer", () => {
       liveSuggestionService?: RealtimeServerOptions["liveSuggestionService"];
       liveSuggestionExternalCallEnabled?: boolean;
       liveSuggestionSourceRetriever?: RealtimeServerOptions["liveSuggestionSourceRetriever"];
+      liveSuggestionGuardrails?: RealtimeServerOptions["liveSuggestionGuardrails"];
+      now?: RealtimeServerOptions["now"];
     } = {},
   ): Promise<{ port: number }> {
     const serverOptions: RealtimeServerOptions = {
@@ -188,6 +190,12 @@ describe("createRealtimeServer", () => {
     }
     if (options.liveSuggestionSourceRetriever !== undefined) {
       serverOptions.liveSuggestionSourceRetriever = options.liveSuggestionSourceRetriever;
+    }
+    if (options.liveSuggestionGuardrails !== undefined) {
+      serverOptions.liveSuggestionGuardrails = options.liveSuggestionGuardrails;
+    }
+    if (options.now !== undefined) {
+      serverOptions.now = options.now;
     }
 
     handle = createRealtimeServer(serverOptions);
@@ -959,6 +967,127 @@ describe("createRealtimeServer", () => {
     });
 
     expect(closedResponse.type).toBe("session.closed");
+  });
+
+  function createStubLiveSuggestionService(): NonNullable<
+    RealtimeServerOptions["liveSuggestionService"]
+  > & {
+    requestIds: string[];
+  } {
+    const requestIds: string[] = [];
+    return {
+      requestIds,
+      async *streamLiveSuggestion(input) {
+        requestIds.push(input.requestId);
+        yield {
+          type: "complete",
+          requestId: input.requestId,
+          suggestionId: `sug_${input.requestId}`,
+          kind: input.kind,
+          content: "Stub answer",
+          sources: [],
+          confidence: "medium",
+          promptVersion: "live.answer.v1",
+          model: "deterministic-live-v1",
+          telemetry: [],
+        };
+      },
+    };
+  }
+
+  function buildSuggestionRequest(sessionId: string, seq: number, requestId: string) {
+    return {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "suggestion.request",
+      seq,
+      session_id: sessionId,
+      sent_at: new Date().toISOString(),
+      payload: {
+        request_id: requestId,
+        kind: "answer_question",
+        user_prompt: "sensitive prompt content that must not leak",
+        include_sources: false,
+      },
+    };
+  }
+
+  it("debounces manual suggestion requests below the minimum interval", async () => {
+    let nowMs = 100_000;
+    const liveSuggestionService = createStubLiveSuggestionService();
+    const { port } = await startServer({
+      liveSuggestionService,
+      liveSuggestionGuardrails: { minIntervalMs: 2000, maxRequestsPerSession: 30 },
+      now: () => nowMs,
+    });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const first = await sendAndReceive(ws, buildSuggestionRequest(sessionId, 2, "sreq_one"));
+    expect(first.type).toBe("suggestion.complete");
+
+    nowMs += 500;
+    const debounced = await sendAndReceive(ws, buildSuggestionRequest(sessionId, 3, "sreq_two"));
+    expect(debounced.type).toBe("error");
+    expect(debounced.payload).toMatchObject({
+      code: "suggestion_rate_limited",
+      recoverable: true,
+      retry_after_ms: 1500,
+    });
+    expect(JSON.stringify(debounced)).not.toContain("sensitive prompt content");
+
+    nowMs += 1500;
+    const afterInterval = await sendAndReceive(
+      ws,
+      buildSuggestionRequest(sessionId, 4, "sreq_three"),
+    );
+    expect(afterInterval.type).toBe("suggestion.complete");
+    expect(liveSuggestionService.requestIds).toEqual(["sreq_one", "sreq_three"]);
+  });
+
+  it("caps manual suggestion requests per session", async () => {
+    let nowMs = 100_000;
+    const liveSuggestionService = createStubLiveSuggestionService();
+    const { port } = await startServer({
+      liveSuggestionService,
+      liveSuggestionGuardrails: { minIntervalMs: 0, maxRequestsPerSession: 2 },
+      now: () => nowMs,
+    });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const first = await sendAndReceive(ws, buildSuggestionRequest(sessionId, 2, "sreq_one"));
+    expect(first.type).toBe("suggestion.complete");
+    nowMs += 10;
+    const second = await sendAndReceive(ws, buildSuggestionRequest(sessionId, 3, "sreq_two"));
+    expect(second.type).toBe("suggestion.complete");
+
+    nowMs += 10;
+    const capped = await sendAndReceive(ws, buildSuggestionRequest(sessionId, 4, "sreq_three"));
+    expect(capped.type).toBe("error");
+    expect(capped.payload).toMatchObject({
+      code: "suggestion_rate_limited",
+      recoverable: true,
+    });
+    expect(JSON.stringify(capped)).not.toContain("sensitive prompt content");
+    expect(liveSuggestionService.requestIds).toEqual(["sreq_one", "sreq_two"]);
+  });
+
+  it("falls back to strict guardrail defaults for invalid configuration", async () => {
+    const liveSuggestionService = createStubLiveSuggestionService();
+    const { port } = await startServer({
+      liveSuggestionService,
+      liveSuggestionGuardrails: { minIntervalMs: Number.NaN, maxRequestsPerSession: 0 },
+    });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const first = await sendAndReceive(ws, buildSuggestionRequest(sessionId, 2, "sreq_one"));
+    expect(first.type).toBe("suggestion.complete");
+
+    // Immediate second request hits the default 2000 ms debounce.
+    const debounced = await sendAndReceive(ws, buildSuggestionRequest(sessionId, 3, "sreq_two"));
+    expect(debounced.type).toBe("error");
+    expect(debounced.payload).toMatchObject({ code: "suggestion_rate_limited" });
   });
 
   it("retrieves authenticated workspace sources for source-enabled manual suggestions", async () => {

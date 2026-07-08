@@ -112,6 +112,21 @@ describe("realtime contracts", () => {
     ).toBe(true);
   });
 
+  it("accepts recoverable suggestion rate limit errors", () => {
+    expect(
+      validateRealtimeJsonMessage({
+        ...base,
+        type: "error",
+        payload: {
+          code: "suggestion_rate_limited",
+          message: "Live suggestion requests are rate limited.",
+          recoverable: true,
+          retry_after_ms: 1500,
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("accepts recoverable LLM provider timeout errors", () => {
     expect(
       validateRealtimeJsonMessage({

@@ -46,6 +46,7 @@ const ErrorCode = Type.Union([
   Type.Literal("session_not_resumable"),
   Type.Literal("feature_unavailable"),
   Type.Literal("llm_provider_timeout"),
+  Type.Literal("suggestion_rate_limited"),
 ]);
 
 const SessionMode = Type.Union([

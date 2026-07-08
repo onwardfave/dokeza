@@ -62,6 +62,13 @@ export interface RealtimeServerOptions {
   };
   liveSuggestionSourceRetriever?: LiveSuggestionSourceRetriever;
   liveSuggestionExternalCallEnabled?: boolean;
+  liveSuggestionGuardrails?: LiveSuggestionGuardrailOptions;
+  now?: () => number;
+}
+
+export interface LiveSuggestionGuardrailOptions {
+  minIntervalMs?: number;
+  maxRequestsPerSession?: number;
 }
 
 export interface LiveSuggestionSourceRetriever {
@@ -95,6 +102,37 @@ type ReplayableTranscriptMessage = Extract<RealtimeJsonMessage, { type: "transcr
 
 const MAX_REPLAYABLE_TRANSCRIPTS_PER_SESSION = 1000;
 const LIVE_SUGGESTION_SOURCE_TOP_K = 3;
+const DEFAULT_LIVE_SUGGESTION_MIN_INTERVAL_MS = 2000;
+const DEFAULT_LIVE_SUGGESTION_MAX_REQUESTS_PER_SESSION = 30;
+
+interface LiveSuggestionGuardrails {
+  minIntervalMs: number;
+  maxRequestsPerSession: number;
+}
+
+interface LiveSuggestionGuardrailState {
+  lastAcceptedAtMs: number | undefined;
+  acceptedCount: number;
+}
+
+// Invalid values fall back to the stricter defaults rather than disabling limits.
+function resolveLiveSuggestionGuardrails(
+  options: LiveSuggestionGuardrailOptions | undefined,
+): LiveSuggestionGuardrails {
+  const minIntervalMs =
+    options?.minIntervalMs !== undefined &&
+    Number.isFinite(options.minIntervalMs) &&
+    options.minIntervalMs >= 0
+      ? options.minIntervalMs
+      : DEFAULT_LIVE_SUGGESTION_MIN_INTERVAL_MS;
+  const maxRequestsPerSession =
+    options?.maxRequestsPerSession !== undefined &&
+    Number.isInteger(options.maxRequestsPerSession) &&
+    options.maxRequestsPerSession >= 1
+      ? options.maxRequestsPerSession
+      : DEFAULT_LIVE_SUGGESTION_MAX_REQUESTS_PER_SESSION;
+  return { minIntervalMs, maxRequestsPerSession };
+}
 
 function mapEndReasonToClosedReason(reason: SessionEndReason): SessionClosedReason {
   switch (reason) {
@@ -169,8 +207,13 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   const liveSuggestionService = options.liveSuggestionService ?? new LiveSuggestionService();
   const liveSuggestionSourceRetriever = options.liveSuggestionSourceRetriever;
   const liveSuggestionExternalCallEnabled = options.liveSuggestionExternalCallEnabled ?? false;
+  const liveSuggestionGuardrails = resolveLiveSuggestionGuardrails(
+    options.liveSuggestionGuardrails,
+  );
+  const now = options.now ?? Date.now;
   const replayableTranscriptsBySession = new Map<string, ReplayableTranscriptMessage[]>();
   const transcriptContextBySession = new Map<string, TranscriptContextSegment[]>();
+  const suggestionGuardrailStateBySession = new Map<string, LiveSuggestionGuardrailState>();
   const httpServer = createServer((_req, res) => {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not_found" }));
@@ -767,6 +810,39 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           return;
         }
 
+        const guardrailState = suggestionGuardrailStateBySession.get(session.sessionId) ?? {
+          lastAcceptedAtMs: undefined,
+          acceptedCount: 0,
+        };
+        if (guardrailState.acceptedCount >= liveSuggestionGuardrails.maxRequestsPerSession) {
+          sendError(
+            "suggestion_rate_limited",
+            "Live suggestion limit reached for this session.",
+            true,
+            session.sessionId,
+          );
+          return;
+        }
+        const nowMs = now();
+        if (guardrailState.lastAcceptedAtMs !== undefined) {
+          const elapsedMs = nowMs - guardrailState.lastAcceptedAtMs;
+          if (elapsedMs < liveSuggestionGuardrails.minIntervalMs) {
+            sendError(
+              "suggestion_rate_limited",
+              "Live suggestion requests are too frequent.",
+              true,
+              session.sessionId,
+              liveSuggestionGuardrails.minIntervalMs - elapsedMs,
+            );
+            return;
+          }
+        }
+        // Count the attempt before streaming so provider failures still consume budget.
+        suggestionGuardrailStateBySession.set(session.sessionId, {
+          lastAcceptedAtMs: nowMs,
+          acceptedCount: guardrailState.acceptedCount + 1,
+        });
+
         try {
           const transcriptSegments = transcriptContextBySession.get(session.sessionId) ?? [];
           const sourceChunks = await retrieveLiveSuggestionSources({
@@ -866,6 +942,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         const session = sessionManager.getSessionByConnection(connectionId);
         if (session !== undefined && session.state === "ended") {
           transcriptContextBySession.delete(session.sessionId);
+          suggestionGuardrailStateBySession.delete(session.sessionId);
         }
         sessionManager.removeConnection(connectionId);
       });
@@ -876,6 +953,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         const session = sessionManager.getSessionByConnection(connectionId);
         if (session !== undefined && session.state === "ended") {
           transcriptContextBySession.delete(session.sessionId);
+          suggestionGuardrailStateBySession.delete(session.sessionId);
         }
         sessionManager.removeConnection(connectionId);
       });

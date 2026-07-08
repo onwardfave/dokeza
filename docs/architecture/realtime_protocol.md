@@ -334,6 +334,9 @@ Initial server error codes include:
 - `session_not_resumable`
 - `feature_unavailable`
 - `llm_provider_timeout`
+- `suggestion_rate_limited`
+
+`suggestion_rate_limited` is recoverable. The server emits it for a `suggestion.request` that is either faster than the per-session debounce interval (with `retry_after_ms` indicating when the next request may be accepted) or beyond the per-session request cap (no `retry_after_ms`; further manual suggestions are unavailable for the rest of the session). The live session, capture, and transcript flow remain active; error messages exclude prompt content. Server defaults are a 2000 ms debounce and 30 accepted requests per session; invalid configuration falls back to these defaults rather than disabling limits. Accepted requests consume budget even if the provider call later fails, so retry storms cannot multiply provider spend.
 
 `suggestion_persistence_failed` is recoverable. The server may emit it after a `suggestion.complete` has already been delivered when durable meeting-review storage fails; clients should keep the live suggestion visible and allow normal session continuation.
 

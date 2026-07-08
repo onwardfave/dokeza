@@ -1270,6 +1270,10 @@
                 {
                   "const": "llm_provider_timeout",
                   "type": "string"
+                },
+                {
+                  "const": "suggestion_rate_limited",
+                  "type": "string"
                 }
               ]
             },
