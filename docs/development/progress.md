@@ -23,6 +23,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## Latest Broad Verification
 
+- [x] 2026-07-08, capture consent gate: `pnpm check` passed.
 - [x] 2026-07-08, live-session-first desktop surface: `pnpm check` passed.
 - [x] 2026-07-08, workspace membership administration: `pnpm generate:schemas` completed; `pnpm check` passed.
 - [x] 2026-07-06, hosted-auth product flow default: `pnpm check` passed.
@@ -356,7 +357,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 ### Alpha.2 — Desktop Productization Pass
 - [x] Live-session-first application surface (replace diagnostics-first layout)
 - [x] Diagnostics behind secondary QA surface
-- [ ] First-run capture explanation + permission UX
+- [ ] Partial: First-run capture consent gate exists; full OS permission guidance remains open
 - [x] Collapse endpoint/workspace/token controls behind config + auth state
 - [ ] Improved session controls (start, pause, resume, stop, request suggestion, copy, inspect sources)
 - [ ] Overlay state for capture, reconnecting, degraded, suggestions unavailable

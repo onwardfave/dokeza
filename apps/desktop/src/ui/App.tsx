@@ -42,6 +42,7 @@ import {
   type NativeMicrophoneCaptureDevice,
 } from "../protocol/nativeMicrophoneSource.js";
 import { clearApiSession, loadApiSession, saveApiSession } from "../protocol/secureTokenStorage.js";
+import { readCaptureConsent, writeCaptureConsent } from "./captureConsent.js";
 import {
   formatDiagnosticDetails,
   isTauriRuntime,
@@ -152,6 +153,9 @@ function LiveSessionPanel() {
   );
   const [auth0CallbackUrl, setAuth0CallbackUrl] = useState("");
   const [pendingHostedAuth, setPendingHostedAuth] = useState<PendingHostedAuth | null>(null);
+  const [captureConsentAccepted, setCaptureConsentAccepted] = useState(() =>
+    readCaptureConsent(globalThis.localStorage),
+  );
   const [snapshot, setSnapshot] = useState<DesktopRealtimeSnapshot>(initialLiveSessionSnapshot);
   const [microphoneDevices, setMicrophoneDevices] = useState<NativeMicrophoneCaptureDevice[]>([]);
   const [selectedMicrophoneDeviceId, setSelectedMicrophoneDeviceId] = useState("");
@@ -174,6 +178,7 @@ function LiveSessionPanel() {
   const canStart =
     snapshot.status === "idle" || snapshot.status === "closed" || snapshot.status === "failed";
   const canStartWithToken = canStart && token.trim().length > 0;
+  const canStartMicrophone = canStartWithToken && nativeRuntimeAvailable && captureConsentAccepted;
   const canStop =
     snapshot.status === "connecting" ||
     snapshot.status === "connected" ||
@@ -280,6 +285,11 @@ function LiveSessionPanel() {
   }
 
   async function startMicrophoneSession() {
+    if (!captureConsentAccepted) {
+      setAuthMessage("Capture consent required");
+      return;
+    }
+
     captureControllerRef.current?.stop();
 
     const client = new DesktopRealtimeSessionClient({
@@ -381,6 +391,11 @@ function LiveSessionPanel() {
       setToken("");
       setAuthMessage("Auth token request failed");
     }
+  }
+
+  function updateCaptureConsent(accepted: boolean) {
+    setCaptureConsentAccepted(accepted);
+    writeCaptureConsent(globalThis.localStorage, accepted);
   }
 
   async function startHostedSignIn() {
@@ -518,6 +533,14 @@ function LiveSessionPanel() {
           <span>Workspace</span>
           <strong>{workspaceId}</strong>
         </div>
+        <label className="capture-consent">
+          <input
+            type="checkbox"
+            checked={captureConsentAccepted}
+            onChange={(event) => updateCaptureConsent(event.currentTarget.checked)}
+          />
+          <span>I have consent to capture this meeting.</span>
+        </label>
         <div className="live-session-buttons">
           <button
             type="button"
@@ -538,7 +561,7 @@ function LiveSessionPanel() {
           </button>
           <button
             type="button"
-            disabled={!canStartWithToken || !nativeRuntimeAvailable}
+            disabled={!canStartMicrophone}
             onClick={() => void startMicrophoneSession()}
           >
             Start microphone
