@@ -446,6 +446,43 @@ h2 {
   line-height: 1.45;
 }
 
+.suggestion-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.suggestion-actions button {
+  min-height: 32px;
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  color: #17202a;
+  background: #ffffff;
+  padding: 0 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.suggestion-actions button:hover:not(:disabled) {
+  border-color: #2563eb;
+  color: #174ea6;
+  background: #eff6ff;
+}
+
+.suggestion-actions button:disabled {
+  color: #7b8492;
+  background: #edf1f6;
+  cursor: not-allowed;
+}
+
+.suggestion-source-details summary {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
 .suggestion-sources {
   display: flex;
   flex-wrap: wrap;

@@ -23,6 +23,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## Latest Broad Verification
 
+- [x] 2026-07-08, live suggestion copy/source controls: `pnpm check` passed.
 - [x] 2026-07-08, capture consent gate: `pnpm check` passed.
 - [x] 2026-07-08, live-session-first desktop surface: `pnpm check` passed.
 - [x] 2026-07-08, workspace membership administration: `pnpm generate:schemas` completed; `pnpm check` passed.
@@ -359,7 +360,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Diagnostics behind secondary QA surface
 - [ ] Partial: First-run capture consent gate exists; full OS permission guidance remains open
 - [x] Collapse endpoint/workspace/token controls behind config + auth state
-- [ ] Improved session controls (start, pause, resume, stop, request suggestion, copy, inspect sources)
+- [ ] Partial: Improved session controls include start/pause/resume/stop, request suggestion, copy suggestion, and inspect sources; remaining polish open
 - [ ] Overlay state for capture, reconnecting, degraded, suggestions unavailable
 - [ ] Empty / loading / degraded / failed states for review + knowledge
 - [ ] UI tests for view models + client state transitions

@@ -166,6 +166,7 @@ function LiveSessionPanel() {
     "answer_question" | "summarize_so_far" | "suggest_follow_up" | "objection_response"
   >("answer_question");
   const [suggestionPrompt, setSuggestionPrompt] = useState("Suggest an answer");
+  const [suggestionActionMessage, setSuggestionActionMessage] = useState("No suggestion action");
   const clientRef = useRef<DesktopRealtimeSessionClient | null>(null);
   const captureControllerRef = useRef<ContinuousMicrophoneCaptureController | null>(null);
   const refreshTimerRef = useRef<number | undefined>(undefined);
@@ -356,6 +357,24 @@ function LiveSessionPanel() {
       includeSources: false,
     });
     refreshSnapshot();
+  }
+
+  async function copyLiveSuggestion(content: string) {
+    if (
+      content.length === 0 ||
+      content === "Waiting for suggestion" ||
+      navigator.clipboard === undefined
+    ) {
+      setSuggestionActionMessage("Suggestion unavailable");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(content);
+      setSuggestionActionMessage("Suggestion copied");
+    } catch {
+      setSuggestionActionMessage("Suggestion copy failed");
+    }
   }
 
   async function requestDevRealtimeToken() {
@@ -758,17 +777,30 @@ function LiveSessionPanel() {
                 <strong>{suggestion.meta}</strong>
               </div>
               <p>{suggestion.content}</p>
+              <div className="suggestion-actions">
+                <button
+                  type="button"
+                  disabled={suggestion.content === "Waiting for suggestion"}
+                  onClick={() => void copyLiveSuggestion(suggestion.content)}
+                >
+                  Copy
+                </button>
+              </div>
               {suggestion.sources.length > 0 ? (
-                <ul className="suggestion-sources">
-                  {suggestion.sources.map((source) => (
-                    <li key={source}>{source}</li>
-                  ))}
-                </ul>
+                <details className="suggestion-source-details">
+                  <summary>Sources</summary>
+                  <ul className="suggestion-sources">
+                    {suggestion.sources.map((source) => (
+                      <li key={source.id}>{source.label}</li>
+                    ))}
+                  </ul>
+                </details>
               ) : null}
             </article>
           ))
         )}
       </div>
+      <p className="live-session-detail">{suggestionActionMessage}</p>
     </section>
   );
 }

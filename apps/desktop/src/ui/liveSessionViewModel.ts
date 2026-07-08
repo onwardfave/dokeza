@@ -23,7 +23,10 @@ export interface LiveSuggestionCard {
   content: string;
   state: "streaming" | "complete";
   meta: string;
-  sources: string[];
+  sources: Array<{
+    id: string;
+    label: string;
+  }>;
 }
 
 const statusLabels: Record<DesktopRealtimeStatus, LiveSessionStatusView> = {
@@ -96,6 +99,9 @@ export function toLiveSuggestionCards(
       suggestion.promptVersion === undefined || suggestion.model === undefined
         ? suggestion.status
         : `${suggestion.promptVersion} / ${suggestion.model}`,
-    sources: suggestion.sources.map((source) => `${source.title} (${source.chunkId})`),
+    sources: suggestion.sources.map((source) => ({
+      id: `${source.documentId}:${source.chunkId}`,
+      label: `${source.title} (${source.chunkId})`,
+    })),
   }));
 }

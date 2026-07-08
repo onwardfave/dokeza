@@ -103,7 +103,7 @@ describe("live session view model", () => {
         content: "First answer",
         state: "complete",
         meta: "live.answer.v1 / deterministic-live-v1",
-        sources: ["Refund Policy (chunk_1)"],
+        sources: [{ id: "doc_1:chunk_1", label: "Refund Policy (chunk_1)" }],
       },
     ]);
   });
