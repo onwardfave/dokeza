@@ -384,6 +384,11 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] Metadata-only telemetry (latency, token counts, model, status)
 - [ ] Tests for budget enforcement, debounce, rate-limit, redaction
 
+### Alpha.5a — Real-Provider Smoke Test (pulled forward, next slice)
+- [ ] One documented real end-to-end session: real mic → Deepgram → transcript → OpenAI suggestion with sources → review, under a real Auth0 tenant
+- [ ] Content-free QA note with measured suggestion latency vs the 3-second target
+- [ ] Follow-up plan updates for every observed provider deviation
+
 ### Alpha.5 — Production Alpha E2E Verification
 - [ ] Manual E2E checklist for Windows alpha
 - [ ] Automated service-level E2E (API auth → realtime → transcript → suggestion → review)
@@ -396,6 +401,15 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Source cues in manual suggestions
 - [ ] Source selection controls for knowledge-backed suggestions
 - [ ] Desktop API client tests + view-model/UI tests
+
+### Alpha.7 — Deployment and Signed Install (added 2026-07-08)
+- [ ] Select initial cloud provider and stand up minimal alpha environment (managed PG + pgvector, API, realtime, TLS)
+- [ ] Production Auth0 tenant configured for the alpha cohort
+- [ ] Server-side provider credentials in environment secret store
+- [ ] Signed Windows installer with stable-channel updater wiring
+- [ ] Desktop alpha build pointed at hosted environment
+- [ ] Hosted-environment E2E checklist run
+- [ ] Or: explicit recorded decision to re-scope the gate to supervised local install
 
 ---
 

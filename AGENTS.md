@@ -49,7 +49,7 @@ Use the project-local skills in `.codex/skills/` when relevant:
 
 - Near-term work follows `docs/development/plans/2026-07-06-production-alpha-gate.md`.
 - Full SRS/MVP and production-alpha completion status is tracked in `docs/development/progress.md`; update it in the same commit when a slice changes what is done, partial, alpha-deferred, or open.
-- The active bottleneck is Alpha.1 production auth and onboarding, then desktop productization, native microphone stream hardening, M2 usage guardrails, alpha E2E verification, and knowledge upload UI.
+- Alpha.1 production auth is complete. The active bottleneck order (revised 2026-07-08) is: Alpha.5a real-provider smoke test, Alpha.3 native microphone stream hardening, Alpha.4 usage guardrails, Alpha.7 deployment and signed install, then full Alpha.5 E2E verification, Alpha.6 knowledge upload UI, and remaining Alpha.2 polish.
 - Hosted identity is implemented through a provider-neutral OIDC/JWKS verification boundary at the API service; Dokeza-owned workspace membership remains authoritative.
 
 ## Hard Rules

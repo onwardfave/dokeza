@@ -121,6 +121,18 @@ Trust-boundary notes:
 
 ## Implementation Tasks
 
+### Slice Order (revised 2026-07-08)
+
+The 2026-07-08 project audit re-sequenced the remaining slices by risk retired per unit of work. Alpha.1 is complete and Alpha.2 is partially complete; the remaining order is:
+
+1. **Alpha.5a — Real-provider smoke test.** One real end-to-end session (real microphone, Deepgram, OpenAI, Auth0 tenant) before any further product surface. Everything green so far was verified with fakes and synthetic transports; this retires the largest unknown first.
+2. **Alpha.3 — Native microphone stream hardening.** The hardest remaining engineering item; everything else depends on capture being trustworthy for 30+ minute sessions.
+3. **Alpha.4 — M2 usage guardrails.** Must land before any external demo; live provider adapters currently have no debounce, cap, or budget.
+4. **Alpha.7 — Deployment and signed install.** The gate exit criteria require a design partner to install and sign in; that requires hosted services and a signed installer that do not exist yet.
+5. **Alpha.5 — Full E2E verification**, then **Alpha.6 — Knowledge upload UI**, then remaining **Alpha.2** polish (OS permission guidance, knowledge UI states, UI tests).
+
+Rationale: the previous implicit order (finish Alpha.2 polish, then 3 → 4 → 5 → 6) deferred the three items with the most unknown-unknowns — real-provider behavior, long-session native capture, and production deployment — behind UI work.
+
 ### Alpha.0 - Gate and Roadmap Alignment
 
 Goal: make this production alpha gate the durable source of near-term execution state.
@@ -227,6 +239,25 @@ Acceptance criteria:
 - Provider failure leaves the live session active and shows safe unavailable/degraded UI.
 - Workspace policy that disables cloud LLM continues to block external calls.
 
+### Alpha.5a - Real-Provider Smoke Test (pulled forward)
+
+Goal: prove the synthetically verified pipeline against real providers once, early, before further surface work.
+
+Tasks:
+
+1. Configure real credentials locally (Auth0 tenant, Deepgram key, OpenAI key); credentials never enter the repo, CI, or telemetry.
+2. Run one full session: hosted sign-in → workspace selection → real microphone capture → live Deepgram transcript → manual OpenAI suggestion with retrieved sources → stop → meeting review/export/delete.
+3. Record a dated, content-free QA note: observed latencies, provider-behavior deviations from fake-backed assumptions, and any defects found.
+4. File follow-up issues/plan updates for every deviation before resuming feature work.
+
+Acceptance criteria:
+
+- The full path works with real providers, or every failure is documented with a follow-up.
+- Measured manual-suggestion latency is recorded against the 3-second target (NFR-001), even if it fails.
+- No credential, transcript, prompt, or suggestion content appears in the recorded evidence.
+
+See `docs/testing/testing_strategy.md` section 7.1 for the standing definition of this check.
+
 ### Alpha.5 - Production Alpha E2E Verification
 
 Goal: prove the coherent alpha workflow end to end before adding more product surface.
@@ -265,6 +296,27 @@ Acceptance criteria:
 - A source-enabled manual suggestion can cite that document.
 - Cross-workspace document reads and search remain blocked.
 - `live_only` and `local_only` retention modes block cloud document/chunk/embedding persistence.
+
+### Alpha.7 - Deployment and Signed Install
+
+Goal: close the gap between the gate's exit criteria ("a real user can install the Windows app and sign in") and the current state, in which Terraform defines no resources, no cloud provider is selected, and release operations are a validation proof without live credentials. Added by the 2026-07-08 audit: this was the largest unscheduled block of work in the gate.
+
+Tasks:
+
+1. Select the initial cloud provider (open decision; see Open Questions) and stand up a minimal alpha environment with Terraform: managed PostgreSQL with pgvector, the API service, and the realtime service behind TLS.
+2. Configure a production Auth0 tenant for the alpha cohort: application, callback rules for the loopback flow, token lifetimes, and JWKS wiring into the API environment.
+3. Provision server-side provider credentials (Deepgram, OpenAI) through the environment's secret store; never in repo or images.
+4. Produce a signed Windows installer through the existing release-operations configuration, including updater endpoint wiring for the stable channel.
+5. Point a desktop alpha build at the hosted environment through build-time configuration.
+6. Update `docs/devops/infrastructure_architecture.md`, `docs/devops/desktop_release_operations.md`, `docs/security/data_flows.md`, and `docs/development/local_environment.md` for the hosted environment.
+7. Run the Alpha.5 E2E checklist against the hosted environment, not only local.
+
+Acceptance criteria:
+
+- A design partner machine with no dev tooling can install the signed build, sign in through Auth0, and run the alpha workflow against hosted services.
+- All service credentials live in the environment secret store; the repo and installer contain none.
+- TLS covers desktop-to-API and desktop-to-realtime traffic.
+- Alternatively, if the team explicitly re-scopes the gate to a supervised local install, this slice records that decision and the gate exit criteria are amended — the gap must be closed in one direction or the other.
 
 ## Tests and Verification
 
@@ -370,3 +422,4 @@ Rollback strategy:
 6. Should system audio be required for the first alpha cohort, or is microphone-only acceptable with clear limitations?
 7. Should knowledge upload UI stay desktop-only for alpha, or should a minimal web workspace be introduced earlier?
 8. What provider cost threshold should block or warn during alpha if measured usage exceeds the planning assumption?
+9. Which cloud provider hosts the alpha environment (Alpha.7), and does the first alpha ship a hosted install or an explicitly re-scoped supervised local install?

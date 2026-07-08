@@ -10,14 +10,15 @@ This roadmap is the implementation basis for future feature slices. Each slice m
 
 The next execution gate is the Production Alpha Gate in `docs/development/plans/2026-07-06-production-alpha-gate.md`.
 
-That gate narrows near-term work to a controlled Windows alpha workflow:
+That gate narrows near-term work to a controlled Windows alpha workflow. Production auth (Alpha.1) is complete and desktop productization (Alpha.2) is partially complete; the remaining slice order was revised by the 2026-07-08 audit to retire risk first:
 
-- production-capable auth and workspace onboarding;
-- desktop productization of the live session, overlay, meeting review, and diagnostics surfaces;
+- a one-time real-provider smoke test (real microphone, Deepgram, OpenAI, Auth0) before further product surface;
 - long-lived native microphone capture hardening;
 - M2 usage, rate, and cost guardrails;
+- deployment and signed install (hosted alpha environment or an explicit re-scope to supervised local install);
 - end-to-end alpha verification with synthetic and real microphone-backed sessions;
-- desktop knowledge upload UI using the existing text document and source-grounding contracts.
+- desktop knowledge upload UI using the existing text document and source-grounding contracts;
+- remaining desktop productization polish.
 
 Billing, broad admin governance, CRM/email writeback, analytics, role packs, full macOS product support, and local-first processing remain deferred until the production alpha workflow is reliable.
 
