@@ -23,6 +23,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## Latest Broad Verification
 
+- [x] 2026-07-08, workspace membership administration: `pnpm generate:schemas` completed; `pnpm check` passed.
 - [x] 2026-07-06, hosted-auth product flow default: `pnpm check` passed.
 - [x] 2026-07-06, hosted IdP refresh/session renewal: `pnpm check` passed; `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` passed.
 - [x] 2026-07-06, desktop hosted-auth loopback callback: `pnpm check` passed; `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` passed.
@@ -164,7 +165,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ### Administration, Billing, and Governance (FR-260 to FR-283, NFR-040 to NFR-065, NFR-110 to NFR-113)
 
-- [ ] Durable workspace membership management with owner/admin/member roles.
+- [x] Durable workspace membership management with owner/admin/member roles.
 - [ ] Workspace-level capture and retention policies.
 - [ ] Admin audit logs.
 - [ ] Usage analytics without meeting content.
@@ -259,7 +260,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Select hosted IdP vendor (Auth0)
 - [x] Define desktop redirect/SDK strategy (system browser Authorization Code + PKCE with loopback callback for alpha)
 - [x] Desktop hosted IdP flow can open Auth0 PKCE sign-in, capture the loopback callback under Tauri, validate callback state, exchange code for provider tokens, exchange provider token for a Dokeza API session, save the API session, and request realtime tokens.
-- [ ] Full durable workspace provisioning and membership administration
+- [x] Full durable workspace provisioning and membership administration
 - [x] Hosted IdP refresh/session renewal in desktop secure storage
 - [x] Replace visible dev-token product flow with authenticated state
 
@@ -347,7 +348,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Select hosted IdP vendor (Auth0)
 - [x] Define desktop redirect/SDK strategy
 - [x] Implement desktop redirect/SDK flow
-- [ ] Full durable workspace provisioning and membership administration
+- [x] Full durable workspace provisioning and membership administration
 - [x] Hosted IdP refresh/session renewal in desktop secure storage
 - [x] Replace dev-token product flow
 
@@ -413,7 +414,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Update `failure_modes.md` with hosted provider token exchange rejection
 - [ ] Update `failure_modes.md` with usage guardrail and desktop capture failures
 - [x] Update `multi_tenancy.md` with durable provider identity mapping
-- [ ] Update `multi_tenancy.md` with full membership administration
+- [x] Update `multi_tenancy.md` with full membership administration
 - [ ] Update `code_architecture.md` with `packages/db`, `packages/auth`
 - [ ] Update `testing_strategy.md` with alpha E2E, failure injection, prompt/source evals
 - [x] Update `local_environment.md` with provider-neutral hosted auth env vars

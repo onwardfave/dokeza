@@ -19,6 +19,21 @@ export interface IdentityPrincipal {
   email?: string;
 }
 
+export interface WorkspaceMembershipRecord {
+  userId: string;
+  role: WorkspaceRole;
+  email?: string;
+  displayName?: string;
+}
+
+export interface WorkspaceMembershipUpsert {
+  workspaceId: string;
+  userId: string;
+  email: string;
+  role: WorkspaceRole;
+  displayName?: string;
+}
+
 export interface IdentityRecord {
   providerSubject: string;
   userId: string;
@@ -29,6 +44,9 @@ export interface IdentityRecord {
 
 export interface IdentityRepository {
   resolveProviderIdentity(identity: ProviderIdentity): Promise<IdentityPrincipal>;
+  listWorkspaceMemberships(workspaceId: string): Promise<WorkspaceMembershipRecord[]>;
+  upsertWorkspaceMembership(input: WorkspaceMembershipUpsert): Promise<WorkspaceMembershipRecord>;
+  deleteWorkspaceMembership(workspaceId: string, userId: string): Promise<boolean>;
 }
 
 export interface PgIdentityRepositoryOptions {
@@ -151,6 +169,84 @@ export class PgIdentityRepository implements IdentityRepository {
       };
     });
   }
+
+  async listWorkspaceMemberships(workspaceId: string): Promise<WorkspaceMembershipRecord[]> {
+    const rows = await this.db
+      .select({
+        userId: workspaceMemberships.userId,
+        role: workspaceMemberships.role,
+        email: users.email,
+        displayName: users.displayName,
+      })
+      .from(workspaceMemberships)
+      .innerJoin(users, eq(users.id, workspaceMemberships.userId))
+      .where(eq(workspaceMemberships.workspaceId, workspaceId));
+
+    return rows.map((row) => ({
+      userId: row.userId,
+      role: row.role as WorkspaceRole,
+      email: row.email,
+      ...(row.displayName === null ? {} : { displayName: row.displayName }),
+    }));
+  }
+
+  async upsertWorkspaceMembership(
+    input: WorkspaceMembershipUpsert,
+  ): Promise<WorkspaceMembershipRecord> {
+    await this.db.transaction(async (tx) => {
+      const db = tx as unknown as Database;
+      await db
+        .insert(users)
+        .values({
+          id: input.userId,
+          email: input.email,
+          displayName: input.displayName ?? input.email,
+        })
+        .onConflictDoUpdate({
+          target: users.id,
+          set: {
+            email: input.email,
+            displayName: input.displayName ?? input.email,
+            updatedAt: new Date(),
+          },
+        });
+      await db
+        .insert(workspaceMemberships)
+        .values({
+          workspaceId: input.workspaceId,
+          userId: input.userId,
+          role: input.role,
+        })
+        .onConflictDoUpdate({
+          target: [workspaceMemberships.workspaceId, workspaceMemberships.userId],
+          set: {
+            role: input.role,
+            updatedAt: new Date(),
+          },
+        });
+    });
+
+    return {
+      userId: input.userId,
+      email: input.email,
+      displayName: input.displayName ?? input.email,
+      role: input.role,
+    };
+  }
+
+  async deleteWorkspaceMembership(workspaceId: string, userId: string): Promise<boolean> {
+    const deleted = await this.db
+      .delete(workspaceMemberships)
+      .where(
+        and(
+          eq(workspaceMemberships.workspaceId, workspaceId),
+          eq(workspaceMemberships.userId, userId),
+        ),
+      )
+      .returning({ userId: workspaceMemberships.userId });
+
+    return deleted.length > 0;
+  }
 }
 
 export class InMemoryIdentityRepository implements IdentityRepository {
@@ -180,6 +276,73 @@ export class InMemoryIdentityRepository implements IdentityRepository {
     };
     this.recordsByProviderSubject.set(identity.providerSubject, record);
     return toPrincipal(record);
+  }
+
+  async listWorkspaceMemberships(workspaceId: string): Promise<WorkspaceMembershipRecord[]> {
+    const memberships: WorkspaceMembershipRecord[] = [];
+    for (const record of this.recordsByProviderSubject.values()) {
+      for (const membership of record.memberships) {
+        if (membership.workspaceId === workspaceId) {
+          memberships.push({
+            userId: membership.userId,
+            role: membership.role,
+            ...(record.email === undefined ? {} : { email: record.email }),
+            displayName: record.displayName,
+          });
+        }
+      }
+    }
+
+    return memberships;
+  }
+
+  async upsertWorkspaceMembership(
+    input: WorkspaceMembershipUpsert,
+  ): Promise<WorkspaceMembershipRecord> {
+    let record = [...this.recordsByProviderSubject.values()].find(
+      (candidate) => candidate.userId === input.userId,
+    );
+    if (record === undefined) {
+      record = {
+        providerSubject: `manual_${input.userId}`,
+        userId: input.userId,
+        email: input.email,
+        displayName: input.displayName ?? input.email,
+        memberships: [],
+      };
+      this.recordsByProviderSubject.set(record.providerSubject, record);
+    }
+
+    record.email = input.email;
+    record.displayName = input.displayName ?? input.email;
+    record.memberships = record.memberships.filter(
+      (membership) => membership.workspaceId !== input.workspaceId,
+    );
+    record.memberships.push({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      role: input.role,
+    });
+
+    return {
+      userId: input.userId,
+      email: input.email,
+      displayName: input.displayName ?? input.email,
+      role: input.role,
+    };
+  }
+
+  async deleteWorkspaceMembership(workspaceId: string, userId: string): Promise<boolean> {
+    let deleted = false;
+    for (const record of this.recordsByProviderSubject.values()) {
+      const before = record.memberships.length;
+      record.memberships = record.memberships.filter(
+        (membership) => membership.workspaceId !== workspaceId || membership.userId !== userId,
+      );
+      deleted ||= record.memberships.length !== before;
+    }
+
+    return deleted;
   }
 }
 

@@ -244,6 +244,105 @@ describe("API HTTP Server", () => {
     });
   });
 
+  it("lets workspace admins manage durable memberships", async () => {
+    const identityRepository = new InMemoryIdentityRepository([
+      {
+        providerSubject: "provider_admin",
+        userId: "user_admin",
+        email: "admin@example.com",
+        displayName: "Admin User",
+        memberships: [{ userId: "user_admin", workspaceId: "ws_1", role: "admin" }],
+      },
+    ]);
+    handle = createHttpServer({
+      env: defaultEnv,
+      now: () => fixedNow,
+      meetingRepository,
+      knowledgeRepository,
+      identityRepository,
+    });
+    await new Promise<void>((resolve) => {
+      handle!.server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const port = getPort(handle);
+    const token = issueApiToken({
+      userId: "user_admin",
+      memberships: [{ userId: "user_admin", workspaceId: "ws_1", role: "admin" }],
+    });
+
+    const upsert = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/memberships`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        user_id: "user_member",
+        email: "member@example.com",
+        display_name: "Member User",
+        role: "member",
+      }),
+    });
+    expect(upsert.status).toBe(200);
+    expect(await upsert.json()).toEqual({
+      workspace_id: "ws_1",
+      membership: {
+        user_id: "user_member",
+        email: "member@example.com",
+        display_name: "Member User",
+        role: "member",
+      },
+    });
+
+    const list = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/memberships`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(list.status).toBe(200);
+    expect(await list.json()).toEqual({
+      workspace_id: "ws_1",
+      memberships: [
+        {
+          user_id: "user_admin",
+          email: "admin@example.com",
+          display_name: "Admin User",
+          role: "admin",
+        },
+        {
+          user_id: "user_member",
+          email: "member@example.com",
+          display_name: "Member User",
+          role: "member",
+        },
+      ],
+    });
+
+    const deleted = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/memberships/user_member`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual({
+      workspace_id: "ws_1",
+      user_id: "user_member",
+      deleted: true,
+    });
+  });
+
+  it("denies membership management to non-admin workspace members", async () => {
+    const port = await startServer();
+    const token = issueApiToken({
+      userId: "user_member",
+      memberships: [{ userId: "user_member", workspaceId: "ws_1", role: "member" }],
+    });
+
+    const response = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/memberships`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "workspace_access_denied" });
+  });
+
   it("exchanges a hosted provider token for a Dokeza API token and workspace list", async () => {
     const identityRepository = new InMemoryIdentityRepository([
       {

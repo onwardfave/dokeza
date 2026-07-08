@@ -13,6 +13,7 @@ import {
   validateKnowledgeDocumentUploadRequest,
   validateProviderAuthExchangeRequest,
   validateRealtimeTokenRequest,
+  validateWorkspaceMembershipUpsertRequest,
   type DevAuthTokenRequest,
 } from "@dokeza/contracts";
 import {
@@ -220,6 +221,11 @@ interface KnowledgeRouteMatch {
   action?: "search";
 }
 
+interface WorkspaceMembershipRouteMatch {
+  workspaceId: string;
+  userId?: string;
+}
+
 function matchMeetingRoute(pathname: string): MeetingRouteMatch | undefined {
   const parts = pathname.split("/").filter((part) => part.length > 0);
   if (parts[0] !== "v1" || parts[1] !== "workspaces" || parts[3] !== "meetings") {
@@ -280,6 +286,27 @@ function matchKnowledgeRoute(pathname: string): KnowledgeRouteMatch | undefined 
   }
 
   return undefined;
+}
+
+function matchWorkspaceMembershipRoute(
+  pathname: string,
+): WorkspaceMembershipRouteMatch | undefined {
+  const parts = pathname.split("/").filter((part) => part.length > 0);
+  if (parts[0] !== "v1" || parts[1] !== "workspaces" || parts[3] !== "memberships") {
+    return undefined;
+  }
+
+  const workspaceId = decodeURIComponent(parts[2] ?? "");
+  if (workspaceId.length === 0 || parts.length > 5) {
+    return undefined;
+  }
+
+  if (parts.length === 4) {
+    return { workspaceId };
+  }
+
+  const userId = decodeURIComponent(parts[4] ?? "");
+  return userId.length === 0 ? undefined : { workspaceId, userId };
 }
 
 function readMeetingExportFormat(url: URL): MeetingExportFormat | undefined {
@@ -789,6 +816,99 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
           });
           sendJson(res, 400, { error: "invalid_request" });
         });
+      return;
+    }
+
+    const membershipRoute = matchWorkspaceMembershipRoute(url.pathname);
+    if (membershipRoute !== undefined) {
+      const auth = authenticateApiRequest(req, runtime.tokenService);
+      if ("error" in auth) {
+        sendJson(res, 401, { error: auth.error });
+        return;
+      }
+
+      const authorization = authorizeWorkspace(auth.actor, membershipRoute.workspaceId, "admin");
+      if (!authorization.allowed) {
+        sendJson(res, 403, { error: "workspace_access_denied" });
+        return;
+      }
+
+      const identityRepository = getIdentityRepository(runtime.config);
+
+      if (membershipRoute.userId === undefined) {
+        if (req.method === "GET") {
+          void identityRepository
+            .listWorkspaceMemberships(membershipRoute.workspaceId)
+            .then((memberships) =>
+              sendJson(res, 200, {
+                workspace_id: membershipRoute.workspaceId,
+                memberships: memberships.map((membership) => ({
+                  user_id: membership.userId,
+                  ...(membership.email === undefined ? {} : { email: membership.email }),
+                  ...(membership.displayName === undefined
+                    ? {}
+                    : { display_name: membership.displayName }),
+                  role: membership.role,
+                })),
+              }),
+            )
+            .catch(() => sendJson(res, 503, { error: "service_unavailable" }));
+          return;
+        }
+
+        if (req.method === "PUT") {
+          void readJsonBody(req)
+            .then((body) => {
+              if (!validateWorkspaceMembershipUpsertRequest(body)) {
+                sendJson(res, 400, { error: "invalid_request" });
+                return;
+              }
+
+              return identityRepository
+                .upsertWorkspaceMembership({
+                  workspaceId: membershipRoute.workspaceId,
+                  userId: body.user_id,
+                  email: body.email,
+                  role: body.role,
+                  ...(body.display_name === undefined ? {} : { displayName: body.display_name }),
+                })
+                .then((membership) =>
+                  sendJson(res, 200, {
+                    workspace_id: membershipRoute.workspaceId,
+                    membership: {
+                      user_id: membership.userId,
+                      ...(membership.email === undefined ? {} : { email: membership.email }),
+                      ...(membership.displayName === undefined
+                        ? {}
+                        : { display_name: membership.displayName }),
+                      role: membership.role,
+                    },
+                  }),
+                );
+            })
+            .catch(() => sendJson(res, 400, { error: "invalid_request" }));
+          return;
+        }
+
+        methodNotAllowed(res);
+        return;
+      }
+
+      if (req.method === "DELETE") {
+        void identityRepository
+          .deleteWorkspaceMembership(membershipRoute.workspaceId, membershipRoute.userId)
+          .then((deleted) =>
+            sendJson(res, 200, {
+              workspace_id: membershipRoute.workspaceId,
+              user_id: membershipRoute.userId,
+              deleted,
+            }),
+          )
+          .catch(() => sendJson(res, 503, { error: "service_unavailable" }));
+        return;
+      }
+
+      methodNotAllowed(res);
       return;
     }
 

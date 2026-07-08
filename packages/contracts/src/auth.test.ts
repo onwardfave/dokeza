@@ -4,6 +4,7 @@ import {
   validateDevAuthTokenRequest,
   validateProviderAuthExchangeRequest,
   validateRealtimeTokenRequest,
+  validateWorkspaceMembershipUpsertRequest,
 } from "./auth.js";
 
 describe("auth contracts", () => {
@@ -55,5 +56,30 @@ describe("auth contracts", () => {
       }),
     ).toBe(true);
     expect(validateProviderAuthExchangeRequest({ provider_token: "" })).toBe(false);
+  });
+
+  it("accepts workspace membership upsert requests", () => {
+    expect(
+      validateWorkspaceMembershipUpsertRequest({
+        user_id: "user_2",
+        email: "user2@example.com",
+        display_name: "User Two",
+        role: "admin",
+      }),
+    ).toBe(true);
+    expect(
+      validateWorkspaceMembershipUpsertRequest({
+        user_id: "user_2",
+        email: "user2@example.com",
+        role: "owner",
+      }),
+    ).toBe(true);
+    expect(
+      validateWorkspaceMembershipUpsertRequest({
+        user_id: "user_2",
+        email: "user2@example.com",
+        role: "superuser",
+      }),
+    ).toBe(false);
   });
 });

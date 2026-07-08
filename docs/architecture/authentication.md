@@ -32,7 +32,7 @@ Production alpha uses Auth0 as the hosted IdP, configured behind the existing pr
 
 Hosted provider tokens are not accepted directly by realtime or resource APIs. They are accepted only by the API exchange endpoint, verified against configured issuer, audience, expiration, RS256 signature, and JWKS key ID, then mapped to a Dokeza-owned user/workspace membership record before a Dokeza API token is issued.
 
-When PostgreSQL persistence is enabled, hosted provider identities are stored in `user_provider_identities`, keyed by provider issuer and provider subject, and linked to Dokeza-owned `users`. Workspace access is still resolved from `workspace_memberships`; provider claims do not grant workspace membership directly. The first durable provisioning slice creates a single owner workspace for a newly resolved provider identity so production-alpha onboarding can proceed before full admin-managed membership workflows exist.
+When PostgreSQL persistence is enabled, hosted provider identities are stored in `user_provider_identities`, keyed by provider issuer and provider subject, and linked to Dokeza-owned `users`. Workspace access is still resolved from `workspace_memberships`; provider claims do not grant workspace membership directly. New provider identities get a first owner workspace for production-alpha onboarding, and workspace admins/owners can manage durable memberships through Dokeza API routes.
 
 ## 4. Token Requirements
 
@@ -85,6 +85,8 @@ Loopback callbacks are acceptable for the controlled production alpha only with 
 - If workspace membership cannot be verified, access fails closed.
 - If a development API token is presented outside local/test-enabled config, API access fails closed.
 
+Workspace membership administration is Dokeza-owned. Workspace admins and owners can list, upsert, and remove memberships through workspace-scoped API routes under `/v1/workspaces/{workspace_id}/memberships`; ordinary members are denied before repository access. Hosted IdP claims can identify a user, but they do not grant or mutate workspace membership directly.
+
 ## 8. Security and Privacy
 
 - Authentication verifies identity; Dokeza authorization still enforces workspace isolation.
@@ -110,7 +112,6 @@ Required tests before production auth is considered complete:
 
 ## 10. Open Decisions
 
-- Full admin-managed identity and workspace provisioning workflow beyond the first PostgreSQL provider identity mapping and first-workspace provisioning path.
 - Device-binding strength for first beta.
 - Enterprise SSO timing and required providers.
 

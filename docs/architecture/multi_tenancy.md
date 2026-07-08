@@ -25,6 +25,8 @@ For user-private data, resources shall also include `owner_user_id`.
 
 Hosted identity metadata is stored separately from customer-owned workspace resources. `user_provider_identities` maps a configured provider issuer and provider subject to a Dokeza `users.id`; it does not contain tokens or meeting content and does not grant workspace access by itself. Workspace access remains authoritative in `workspace_memberships`.
 
+Workspace admins and owners manage durable memberships through `/v1/workspaces/{workspace_id}/memberships`. These routes require an authenticated Dokeza API token and an `admin` or `owner` role in the target workspace before repository access. Upserts create or update Dokeza-owned user rows and membership rows; deletes remove only the workspace membership row. Provider claims do not bypass these role checks.
+
 ## 4. Relational Data Isolation
 
 Baseline:
@@ -146,3 +148,4 @@ Required tests:
 - Integration credential for workspace A cannot be used for workspace B.
 - Signed object URLs cannot be generated without workspace authorization.
 - Admin role boundaries are enforced.
+- Workspace members without admin/owner role cannot list or mutate memberships.

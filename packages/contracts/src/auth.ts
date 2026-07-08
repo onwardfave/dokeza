@@ -46,6 +46,41 @@ export const WorkspaceListResponseSchema = Type.Object({
   ),
 });
 
+export const WorkspaceMembershipListResponseSchema = Type.Object({
+  workspace_id: Type.String({ minLength: 1 }),
+  memberships: Type.Array(
+    Type.Object({
+      user_id: Type.String({ minLength: 1 }),
+      email: Type.Optional(Type.String({ minLength: 1 })),
+      display_name: Type.Optional(Type.String({ minLength: 1 })),
+      role: WorkspaceRole,
+    }),
+  ),
+});
+
+export const WorkspaceMembershipUpsertRequestSchema = Type.Object({
+  user_id: Type.String({ minLength: 1 }),
+  email: Type.String({ minLength: 1 }),
+  display_name: Type.Optional(Type.String({ minLength: 1 })),
+  role: WorkspaceRole,
+});
+
+export const WorkspaceMembershipResponseSchema = Type.Object({
+  workspace_id: Type.String({ minLength: 1 }),
+  membership: Type.Object({
+    user_id: Type.String({ minLength: 1 }),
+    email: Type.Optional(Type.String({ minLength: 1 })),
+    display_name: Type.Optional(Type.String({ minLength: 1 })),
+    role: WorkspaceRole,
+  }),
+});
+
+export const WorkspaceMembershipDeleteResponseSchema = Type.Object({
+  workspace_id: Type.String({ minLength: 1 }),
+  user_id: Type.String({ minLength: 1 }),
+  deleted: Type.Boolean(),
+});
+
 export const ProviderAuthExchangeRequestSchema = Type.Object({
   provider_token: Type.String({ minLength: 1 }),
   device_id: Type.Optional(Type.String({ minLength: 1 })),
@@ -113,6 +148,14 @@ export type AuthWorkspaceMembership = Static<typeof AuthWorkspaceMembershipSchem
 export type AuthTokenClaims = Static<typeof AuthTokenClaimsSchema>;
 export type UserProfileResponse = Static<typeof UserProfileResponseSchema>;
 export type WorkspaceListResponse = Static<typeof WorkspaceListResponseSchema>;
+export type WorkspaceMembershipListResponse = Static<typeof WorkspaceMembershipListResponseSchema>;
+export type WorkspaceMembershipUpsertRequest = Static<
+  typeof WorkspaceMembershipUpsertRequestSchema
+>;
+export type WorkspaceMembershipResponse = Static<typeof WorkspaceMembershipResponseSchema>;
+export type WorkspaceMembershipDeleteResponse = Static<
+  typeof WorkspaceMembershipDeleteResponseSchema
+>;
 export type ProviderAuthExchangeRequest = Static<typeof ProviderAuthExchangeRequestSchema>;
 export type ProviderAuthExchangeResponse = Static<typeof ProviderAuthExchangeResponseSchema>;
 export type RealtimeTokenRequest = Static<typeof RealtimeTokenRequestSchema>;
@@ -125,6 +168,10 @@ export const authJsonSchemas = {
   "auth-token-claims": AuthTokenClaimsSchema,
   "user-profile-response": UserProfileResponseSchema,
   "workspace-list-response": WorkspaceListResponseSchema,
+  "workspace-membership-list-response": WorkspaceMembershipListResponseSchema,
+  "workspace-membership-upsert-request": WorkspaceMembershipUpsertRequestSchema,
+  "workspace-membership-response": WorkspaceMembershipResponseSchema,
+  "workspace-membership-delete-response": WorkspaceMembershipDeleteResponseSchema,
   "provider-auth-exchange-request": ProviderAuthExchangeRequestSchema,
   "provider-auth-exchange-response": ProviderAuthExchangeResponseSchema,
   "realtime-token-request": RealtimeTokenRequestSchema,
@@ -150,4 +197,10 @@ export function validateProviderAuthExchangeRequest(
 
 export function validateDevAuthTokenRequest(value: unknown): value is DevAuthTokenRequest {
   return Value.Check(DevAuthTokenRequestSchema, value);
+}
+
+export function validateWorkspaceMembershipUpsertRequest(
+  value: unknown,
+): value is WorkspaceMembershipUpsertRequest {
+  return Value.Check(WorkspaceMembershipUpsertRequestSchema, value);
 }

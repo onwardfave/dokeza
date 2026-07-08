@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "required": [
+    "workspace_id",
+    "membership"
+  ],
+  "properties": {
+    "workspace_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "membership": {
+      "type": "object",
+      "required": [
+        "user_id",
+        "role"
+      ],
+      "properties": {
+        "user_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "email": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "display_name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "const": "owner",
+              "type": "string"
+            },
+            {
+              "const": "admin",
+              "type": "string"
+            },
+            {
+              "const": "member",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
