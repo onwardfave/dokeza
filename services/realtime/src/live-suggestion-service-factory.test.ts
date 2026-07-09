@@ -92,6 +92,50 @@ describe("createLiveSuggestionServiceFromConfig", () => {
     expect(String(requests[0]?.init.body)).not.toContain("sk-test-secret");
   });
 
+  it("uses OpenAI-compatible chat completions (e.g. NVIDIA) when provider is openai_chat", async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const config = requireConfig(
+      parseConfig(
+        {
+          DOKEZA_LLM_PROVIDER: "openai_chat",
+          OPENAI_API_KEY: "nvapi-test-secret",
+          OPENAI_BASE_URL: "https://integrate.api.nvidia.com/v1",
+          OPENAI_MODEL: "meta/llama-3.1-8b-instruct",
+          OPENAI_TIMEOUT_MS: "9000",
+        },
+        "realtime",
+      ),
+    );
+    const service = createLiveSuggestionServiceFromConfig(config, {
+      fetchFn: async (url, init) => {
+        requests.push({ url: String(url), init: init ?? {} });
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                'data: {"choices":[{"delta":{"content":"Configured"},"finish_reason":null}]}\n\n' +
+                  'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n' +
+                  "data: [DONE]\n\n",
+              ),
+            );
+            controller.close();
+          },
+        });
+        return new Response(body, { status: 200 });
+      },
+    });
+
+    await expect(collectSuggestionModel(service)).resolves.toBe("meta/llama-3.1-8b-instruct");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.url).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(requests[0]?.init.headers).toMatchObject({
+      Authorization: "Bearer nvapi-test-secret",
+      "Content-Type": "application/json",
+    });
+    expect(String(requests[0]?.init.body)).toContain('"messages"');
+    expect(String(requests[0]?.init.body)).not.toContain("nvapi-test-secret");
+  });
+
   it("fails closed if OpenAI live suggestion credentials are unavailable", () => {
     const localConfig = requireConfig(parseConfig({}, "realtime"));
     const config: DokezaConfig = {

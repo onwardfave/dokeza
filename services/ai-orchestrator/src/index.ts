@@ -6,7 +6,7 @@ export type SuggestionKind =
   | "suggest_follow_up"
   | "objection_response";
 
-export type ModelProvider = "openai" | "deterministic";
+export type ModelProvider = "openai" | "openai_chat" | "deterministic";
 
 export interface ModelGatewayRequest {
   workspaceId: string;
@@ -448,6 +448,154 @@ export function createOpenAiResponsesFetchTransport(options: {
       yield* parseSseJsonStream(response.body);
     },
   };
+}
+
+export interface OpenAiChatCompletionsTransportRequest {
+  model: string;
+  systemInstruction: string;
+  userInput: string;
+  maxOutputChars: number;
+}
+
+export interface OpenAiChatCompletionsTransport {
+  createStream(
+    request: OpenAiChatCompletionsTransportRequest,
+  ): AsyncIterable<Record<string, unknown>>;
+}
+
+/**
+ * OpenAI-compatible chat-completions provider. Works against any endpoint that
+ * implements the OpenAI `/chat/completions` streaming contract — OpenAI's own
+ * chat endpoint, NVIDIA NIM (integrate.api.nvidia.com), Groq, Together,
+ * OpenRouter, or a local vLLM/Ollama server — selected by base URL and model.
+ * This is distinct from `OpenAiResponsesLiveSuggestionProvider`, which uses the
+ * OpenAI Responses API (`/responses`) that those endpoints do not implement.
+ */
+export class OpenAiChatCompletionsLiveSuggestionProvider implements LiveSuggestionProvider {
+  readonly provider = "openai_chat" as const;
+  readonly externalCallEnabled = true;
+
+  constructor(
+    private readonly transport: OpenAiChatCompletionsTransport,
+    private readonly model: string,
+  ) {}
+
+  async *streamLiveSuggestion(
+    request: LiveSuggestionProviderRequest,
+  ): AsyncIterable<LiveSuggestionProviderEvent> {
+    let sawContent = false;
+    let finished = false;
+
+    for await (const event of this.transport.createStream({
+      model: this.model,
+      systemInstruction: request.prompt.systemInstruction,
+      userInput: createProviderUserInput(request),
+      maxOutputChars: request.maxOutputChars,
+    })) {
+      if ("error" in event && event.error != null) {
+        throw new ModelGatewayError(
+          "OpenAI-compatible chat provider returned an error.",
+          "llm_provider_timeout",
+        );
+      }
+
+      const choice = firstChatChoice(event);
+      const delta = readChatDelta(choice);
+      if (delta.length > 0) {
+        sawContent = true;
+        yield { type: "token", token: delta };
+      }
+      if (choice !== undefined && choice.finish_reason != null) {
+        finished = true;
+      }
+    }
+
+    if (!finished && !sawContent) {
+      throw new ModelGatewayError(
+        "OpenAI-compatible chat stream did not complete.",
+        "llm_provider_timeout",
+      );
+    }
+
+    yield { type: "complete", model: this.model, confidence: "medium" };
+  }
+}
+
+export function createOpenAiChatCompletionsFetchTransport(options: {
+  apiKey: string;
+  baseUrl?: string;
+  fetchFn?: typeof fetch;
+  timeoutMs?: number;
+}): OpenAiChatCompletionsTransport {
+  const baseUrl = options.baseUrl ?? "https://api.openai.com/v1";
+  const fetchFn = options.fetchFn ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 10000;
+
+  return {
+    async *createStream(request) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      let response: Response;
+      try {
+        response = await fetchFn(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${options.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: request.model,
+            messages: [
+              { role: "system", content: request.systemInstruction },
+              { role: "user", content: request.userInput },
+            ],
+            stream: true,
+            max_tokens: Math.max(16, Math.ceil(request.maxOutputChars / 4)),
+          }),
+        });
+      } catch {
+        throw new ModelGatewayError(
+          "OpenAI-compatible chat request failed.",
+          "llm_provider_timeout",
+        );
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (!response.ok || response.body === null) {
+        throw new ModelGatewayError(
+          "OpenAI-compatible chat request failed.",
+          "llm_provider_timeout",
+        );
+      }
+
+      yield* parseSseJsonStream(response.body);
+    },
+  };
+}
+
+function firstChatChoice(event: Record<string, unknown>): Record<string, unknown> | undefined {
+  const choices = event.choices;
+  if (!Array.isArray(choices) || choices.length === 0) {
+    return undefined;
+  }
+  const choice = choices[0];
+  return typeof choice === "object" && choice !== null
+    ? (choice as Record<string, unknown>)
+    : undefined;
+}
+
+function readChatDelta(choice: Record<string, unknown> | undefined): string {
+  if (choice === undefined) {
+    return "";
+  }
+  const delta = choice.delta;
+  if (typeof delta !== "object" || delta === null) {
+    return "";
+  }
+  const content = (delta as Record<string, unknown>).content;
+  return typeof content === "string" ? content : "";
 }
 
 function createDeterministicSuggestion(request: LiveSuggestionProviderRequest): string {

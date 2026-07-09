@@ -65,13 +65,13 @@ function synthPcmChunk(durationMs: number, freqHz = 440, sampleRateHz = 16000): 
   return new Uint8Array(buffer);
 }
 
-async function checkOpenAiSuggestion(config: DokezaConfig): Promise<void> {
-  const name = "OpenAI live suggestion (NFR-001 latency)";
-  if (config.providers.llm.provider !== "openai") {
+async function checkLiveSuggestion(config: DokezaConfig): Promise<void> {
+  const name = "Live suggestion (NFR-001 latency)";
+  if (config.providers.llm.provider === "deterministic") {
     record(
       name,
       "SKIP",
-      `llm provider is '${config.providers.llm.provider}'; set DOKEZA_LLM_PROVIDER=openai + OPENAI_API_KEY`,
+      "llm provider is 'deterministic'; set DOKEZA_LLM_PROVIDER=openai (Responses) or openai_chat (OpenAI-compatible, e.g. NVIDIA) with an API key",
     );
     return;
   }
@@ -249,7 +249,7 @@ async function main(): Promise<void> {
   );
   console.log("---");
 
-  await checkOpenAiSuggestion(config);
+  await checkLiveSuggestion(config);
   await checkOpenAiEmbeddings(config);
   await checkDeepgramConnectivity(config);
 

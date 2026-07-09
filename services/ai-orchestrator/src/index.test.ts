@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   assembleRollingTranscriptContext,
+  createOpenAiChatCompletionsFetchTransport,
   createOpenAiResponsesFetchTransport,
   DeterministicLiveSuggestionProvider,
   LiveSuggestionService,
   ModelGatewayError,
+  OpenAiChatCompletionsLiveSuggestionProvider,
   OpenAiResponsesLiveSuggestionProvider,
   routeModelRequest,
   StaticPromptRegistry,
@@ -370,5 +372,109 @@ describe("ai orchestrator boundary", () => {
         // consume stream
       }
     }).rejects.toBeInstanceOf(ModelGatewayError);
+  });
+
+  it("maps OpenAI-compatible chat-completions deltas to provider tokens", async () => {
+    const provider = new OpenAiChatCompletionsLiveSuggestionProvider(
+      {
+        async *createStream() {
+          yield { choices: [{ delta: { content: "Hello " }, finish_reason: null }] };
+          yield { choices: [{ delta: { content: "there" }, finish_reason: null }] };
+          yield { choices: [{ delta: {}, finish_reason: "stop" }] };
+        },
+      },
+      "nvidia/llama-live-test",
+    );
+
+    const events = [];
+    for await (const event of provider.streamLiveSuggestion({
+      workspaceId: "ws_a",
+      sessionId: "sess_a",
+      requestId: "sreq_a",
+      kind: "answer_question",
+      prompt: new StaticPromptRegistry().getLiveSuggestionPrompt("answer_question"),
+      transcriptContext: "remote: question",
+      sourceContext: "",
+      maxOutputChars: 100,
+    })) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      { type: "token", token: "Hello " },
+      { type: "token", token: "there" },
+      { type: "complete", model: "nvidia/llama-live-test", confidence: "medium" },
+    ]);
+  });
+
+  it("fails closed when an OpenAI-compatible chat stream reports an error event", async () => {
+    const provider = new OpenAiChatCompletionsLiveSuggestionProvider(
+      {
+        async *createStream() {
+          yield { error: { code: "insufficient_quota", message: "no quota" } };
+        },
+      },
+      "nvidia/llama-live-test",
+    );
+
+    await expect(async () => {
+      for await (const _event of provider.streamLiveSuggestion({
+        workspaceId: "ws_a",
+        sessionId: "sess_a",
+        requestId: "sreq_a",
+        kind: "answer_question",
+        prompt: new StaticPromptRegistry().getLiveSuggestionPrompt("answer_question"),
+        transcriptContext: "remote: question",
+        sourceContext: "",
+        maxOutputChars: 100,
+      })) {
+        // consume stream
+      }
+    }).rejects.toBeInstanceOf(ModelGatewayError);
+  });
+
+  it("posts chat-completions to the configured base URL without exposing credentials", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            'data: {"choices":[{"delta":{"content":"Hi"},"finish_reason":null}]}\n\n' +
+              'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n' +
+              "data: [DONE]\n\n",
+          ),
+        );
+        controller.close();
+      },
+    });
+    const urls: string[] = [];
+    const requests: RequestInit[] = [];
+    const transport = createOpenAiChatCompletionsFetchTransport({
+      apiKey: "nvapi-test-secret",
+      baseUrl: "https://integrate.api.nvidia.com/v1",
+      fetchFn: async (url, init) => {
+        urls.push(String(url));
+        requests.push(init ?? {});
+        return new Response(body, { status: 200 });
+      },
+    });
+
+    const events = [];
+    for await (const event of transport.createStream({
+      model: "meta/llama-3.1-8b-instruct",
+      systemInstruction: "Say one short thing.",
+      userInput: "Recent transcript",
+      maxOutputChars: 80,
+    })) {
+      events.push(event);
+    }
+
+    expect(urls[0]).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(requests[0]?.headers).toMatchObject({
+      Authorization: "Bearer nvapi-test-secret",
+      "Content-Type": "application/json",
+    });
+    expect(String(requests[0]?.body)).toContain('"stream":true');
+    expect(String(requests[0]?.body)).toContain('"messages"');
+    expect(events.length).toBeGreaterThan(0);
   });
 });

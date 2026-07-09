@@ -203,6 +203,39 @@ describe("parseConfig", () => {
     });
   });
 
+  it("accepts an OpenAI-compatible chat provider (e.g. NVIDIA) with a custom endpoint and model", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_LLM_PROVIDER: "openai_chat",
+        OPENAI_API_KEY: "nvapi-test-secret",
+        OPENAI_BASE_URL: "https://integrate.api.nvidia.com/v1",
+        OPENAI_MODEL: "meta/llama-3.1-8b-instruct",
+        OPENAI_TIMEOUT_MS: "12000",
+      },
+      "realtime",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.config?.providers.llm).toEqual({
+      provider: "openai_chat",
+      openai: {
+        apiKey: "nvapi-test-secret",
+        baseUrl: "https://integrate.api.nvidia.com/v1",
+        model: "meta/llama-3.1-8b-instruct",
+        timeoutMs: 12000,
+      },
+    });
+  });
+
+  it("requires an API key when the chat provider is selected", () => {
+    const result = parseConfig({ DOKEZA_LLM_PROVIDER: "openai_chat" }, "realtime");
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      "OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai or openai_chat.",
+    );
+  });
+
   it("accepts explicit OpenAI embedding settings without echoing credentials", () => {
     const result = parseConfig(
       {
@@ -245,7 +278,7 @@ describe("parseConfig", () => {
 
     expect(result.ok).toBe(false);
     expect(result.errors).toContain(
-      "OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai.",
+      "OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai or openai_chat.",
     );
     expect(result.errors).toContain(
       "OPENAI_API_KEY is required when DOKEZA_EMBEDDING_PROVIDER is openai.",
@@ -304,7 +337,7 @@ describe("parseConfig", () => {
     expect(missingKey.ok).toBe(false);
     expect(missingKey.errors).toContain("DEEPGRAM_API_KEY is required in production.");
     expect(missingKey.errors).toContain(
-      "OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai.",
+      "OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai or openai_chat.",
     );
     expect(missingKey.errors).toContain(
       "DOKEZA_AUTH_SIGNING_SECRET must be at least 32 characters outside local/test.",

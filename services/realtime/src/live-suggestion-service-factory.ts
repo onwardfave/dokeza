@@ -1,9 +1,12 @@
 import type { DokezaConfig } from "@dokeza/config";
 import {
+  createOpenAiChatCompletionsFetchTransport,
   createOpenAiResponsesFetchTransport,
   DeterministicLiveSuggestionProvider,
   LiveSuggestionService,
+  OpenAiChatCompletionsLiveSuggestionProvider,
   OpenAiResponsesLiveSuggestionProvider,
+  type LiveSuggestionProvider,
 } from "@dokeza/ai-orchestrator";
 
 export interface LiveSuggestionServiceFactoryOptions {
@@ -27,15 +30,30 @@ export function createLiveSuggestionServiceFromConfig(
     throw new Error("OPENAI_API_KEY is required for live suggestions.");
   }
 
-  return new LiveSuggestionService({
-    provider: new OpenAiResponsesLiveSuggestionProvider(
+  const fetchOverride = options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn };
+  let provider: LiveSuggestionProvider;
+
+  if (llmConfig.provider === "openai_chat") {
+    provider = new OpenAiChatCompletionsLiveSuggestionProvider(
+      createOpenAiChatCompletionsFetchTransport({
+        apiKey,
+        baseUrl: llmConfig.openai.baseUrl,
+        timeoutMs: llmConfig.openai.timeoutMs,
+        ...fetchOverride,
+      }),
+      llmConfig.openai.model,
+    );
+  } else {
+    provider = new OpenAiResponsesLiveSuggestionProvider(
       createOpenAiResponsesFetchTransport({
         apiKey,
         baseUrl: llmConfig.openai.baseUrl,
         timeoutMs: llmConfig.openai.timeoutMs,
-        ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
+        ...fetchOverride,
       }),
       llmConfig.openai.model,
-    ),
-  });
+    );
+  }
+
+  return new LiveSuggestionService({ provider });
 }

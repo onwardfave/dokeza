@@ -2,7 +2,7 @@ export type EnvironmentName = "local" | "test" | "preview" | "staging" | "produc
 export type RetentionDefault = "7_days" | "30_days" | "1_year";
 export type DeepgramEncoding = "linear16";
 export type RealtimePersistenceMode = "memory" | "postgres";
-export type LlmProvider = "deterministic" | "openai";
+export type LlmProvider = "deterministic" | "openai" | "openai_chat";
 export type EmbeddingProvider = "deterministic" | "openai";
 
 export interface DeepgramSttConfig {
@@ -176,7 +176,9 @@ function readLlmProvider(
     return environment === "production" ? "openai" : "deterministic";
   }
 
-  return value === "deterministic" || value === "openai" ? value : undefined;
+  return value === "deterministic" || value === "openai" || value === "openai_chat"
+    ? value
+    : undefined;
 }
 
 function readEmbeddingProvider(
@@ -539,10 +541,13 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     errors.push("DEEPGRAM_TIMEOUT_MS must be a positive integer.");
   }
   if (llmProvider === undefined) {
-    errors.push("DOKEZA_LLM_PROVIDER must be deterministic or openai.");
+    errors.push("DOKEZA_LLM_PROVIDER must be deterministic, openai, or openai_chat.");
   }
-  if (llmProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) {
-    errors.push("OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai.");
+  if (
+    (llmProvider === "openai" || llmProvider === "openai_chat") &&
+    (openAiApiKey === undefined || openAiApiKey.length === 0)
+  ) {
+    errors.push("OPENAI_API_KEY is required when DOKEZA_LLM_PROVIDER is openai or openai_chat.");
   }
   if (embeddingProvider === undefined) {
     errors.push("DOKEZA_EMBEDDING_PROVIDER must be deterministic or openai.");
@@ -631,7 +636,8 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     openAiEmbeddingDimensions === undefined ||
     realtimePersistence === undefined ||
     databasePoolMax === undefined ||
-    (llmProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
+    ((llmProvider === "openai" || llmProvider === "openai_chat") &&
+      (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
     (embeddingProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
     (realtimePersistence === "postgres" && databaseUrl === undefined)
   ) {
