@@ -398,9 +398,10 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] Partial: debounce, rate-limit, and redaction tests exist; budget enforcement tests remain
 
 ### Alpha.5a — Real-Provider Smoke Test (pulled forward, next slice)
-- [ ] One documented real end-to-end session: real mic → Deepgram → transcript → OpenAI suggestion with sources → review, under a real Auth0 tenant
-- [ ] Content-free QA note with measured suggestion latency vs the 3-second target
-- [ ] Follow-up plan updates for every observed provider deviation
+- [ ] Partial: automated provider-boundary harness (`services/realtime/scripts/alpha5a-provider-smoke.ts`) run 2026-07-10 (see `qa/2026-07-10-alpha5a-smoke.md`). Deepgram connect/auth/framing proven; OpenAI suggestion + embeddings blocked by an unfunded key (`insufficient_quota`); Auth0 sign-in and real-mic desktop capture still manual/open.
+- [ ] Real suggestion latency vs the 3-second target: not yet obtained (OpenAI quota); re-run with a funded key.
+- [x] Content-free QA note recorded for the 2026-07-10 partial run.
+- [ ] Two provider-error-handling deviations surfaced and filed as follow-ups (opaque `response.failed` handling; silent embedding-failure degradation).
 
 ### Alpha.5 — Production Alpha E2E Verification
 - [ ] Manual E2E checklist for Windows alpha
