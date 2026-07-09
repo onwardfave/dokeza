@@ -22,10 +22,7 @@
  */
 import { parseConfig, type DokezaConfig } from "@dokeza/config";
 import type { LiveSuggestionInput } from "@dokeza/ai-orchestrator";
-import {
-  createKnowledgeEmbeddingProviderFromConfig,
-  InMemoryKnowledgeRepository,
-} from "@dokeza/knowledge";
+import { createKnowledgeEmbeddingProviderFromConfig } from "@dokeza/knowledge";
 import { createLiveSuggestionServiceFromConfig } from "../src/live-suggestion-service-factory.js";
 import { createSttAdapterFromConfig } from "../src/stt-adapter-factory.js";
 import { supportsSttSessions } from "../src/stt-adapter.js";
@@ -130,8 +127,8 @@ async function checkOpenAiSuggestion(config: DokezaConfig): Promise<void> {
   );
 }
 
-async function checkOpenAiEmbeddingsRetrieval(config: DokezaConfig): Promise<void> {
-  const name = "OpenAI embeddings → retrieval";
+async function checkOpenAiEmbeddings(config: DokezaConfig): Promise<void> {
+  const name = "OpenAI embeddings";
   if (config.providers.embeddings.provider !== "openai") {
     record(
       name,
@@ -149,30 +146,27 @@ async function checkOpenAiEmbeddingsRetrieval(config: DokezaConfig): Promise<voi
     return;
   }
 
-  const repo = new InMemoryKnowledgeRepository({ embeddingProvider });
+  // Call the provider directly. Going through a repository would swallow a
+  // provider error (createChunkEmbeddings catches and returns an empty map),
+  // and keyword-only retrieval could then produce a misleading PASS. The only
+  // honest check is that a real embedding call returns a real vector.
   const startedAt = Date.now();
   try {
-    const upload = await repo.uploadDocument({
+    const result = await embeddingProvider.embed({
       workspaceId: "ws_smoke",
-      actorUserId: "user_smoke",
-      title: "Enterprise onboarding guide",
-      source: "smoke",
-      text: "Enterprise onboarding includes a dedicated success manager, SSO setup, and a 30-day pilot. Pricing for the enterprise plan is custom and volume-based.",
-    });
-    const search = await repo.search({
-      workspaceId: "ws_smoke",
-      query: "how does enterprise onboarding and pricing work",
-      topK: 3,
+      route: "document_chunk",
+      text: "Enterprise onboarding includes SSO setup and a 30-day pilot.",
     });
     const elapsed = Date.now() - startedAt;
-    const hit = search.results.some((result) => result.document_id === upload.document.document_id);
+    const dimsOk = result.vector.length === embeddingProvider.dimensions;
+    const nonZero = result.vector.some((value) => value !== 0);
     record(
       name,
-      hit ? "PASS" : "FAIL",
-      `provider=${embeddingProvider.provider} model=${embeddingProvider.model} dims=${embeddingProvider.dimensions} chunks=${upload.chunks.length} results=${search.results.length} retrievedUploaded=${hit} elapsed=${elapsed}ms`,
+      dimsOk && nonZero ? "PASS" : "FAIL",
+      `provider=${result.provider} model=${result.model} dims=${result.vector.length} (expected ${embeddingProvider.dimensions}) nonZero=${nonZero} elapsed=${elapsed}ms`,
     );
   } catch (error) {
-    record(name, "FAIL", `embedding/retrieval error: ${errorLabel(error)}`);
+    record(name, "FAIL", `embedding call failed: ${errorLabel(error)}`);
   }
 }
 
@@ -256,7 +250,7 @@ async function main(): Promise<void> {
   console.log("---");
 
   await checkOpenAiSuggestion(config);
-  await checkOpenAiEmbeddingsRetrieval(config);
+  await checkOpenAiEmbeddings(config);
   await checkDeepgramConnectivity(config);
 
   console.log("---");
