@@ -60,5 +60,5 @@ Use the project-local skills in `.codex/skills/` when relevant:
 - Do not change realtime messages without updating `docs/architecture/realtime_protocol.md`.
 - Do not add a failure behavior without updating `docs/architecture/failure_modes.md`.
 - Do not mark a feature complete without updating `docs/development/progress.md` when the completion state changes.
-- Do not finish an implementation turn with verified but uncommitted work when the user asked for commits; either commit coherent checkpoints or explicitly report the blocking reason.
+- Commit autonomously whenever the codebase reaches a coherent state that warrants a commit — do not wait to be asked. Group related changes into coherent checkpoint commits, keep the working tree clean at the end of an implementation turn, and only leave verified work uncommitted with an explicitly reported blocking reason (for example, failing verification).
 - Do not implement evasion-oriented undetectability features.
