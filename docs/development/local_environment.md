@@ -150,6 +150,42 @@ pnpm security:secrets
 pnpm security:vulns
 ```
 
+## Cloud AI Providers (optional, for real-provider testing)
+
+Local and CI default to deterministic, credential-free STT/LLM/embedding
+providers. To exercise the live pipeline against real providers, set
+server-side credentials in the shell that launches the services. Credentials
+must never enter the repo, CI, images, or telemetry.
+
+Live suggestions can route through either the OpenAI Responses API or any
+OpenAI-compatible chat-completions endpoint:
+
+```powershell
+# OpenAI Responses API (default production path)
+$env:DOKEZA_LLM_PROVIDER = "openai"
+$env:OPENAI_API_KEY = "<sk-...>"
+$env:OPENAI_MODEL = "gpt-4.1-mini"
+
+# OpenAI-compatible chat completions — e.g. NVIDIA NIM (free tier), Groq,
+# Together, OpenRouter, or a local vLLM/Ollama. Select provider via base URL,
+# model via OPENAI_MODEL.
+$env:DOKEZA_LLM_PROVIDER = "openai_chat"
+$env:OPENAI_BASE_URL = "https://integrate.api.nvidia.com/v1"
+$env:OPENAI_MODEL = "meta/llama-3.1-8b-instruct"
+$env:OPENAI_API_KEY = "<nvapi-...>"   # NVIDIA key from build.nvidia.com
+```
+
+Embeddings and STT are configured independently (`DOKEZA_EMBEDDING_PROVIDER`,
+`DEEPGRAM_API_KEY`); leave them deterministic to test only the LLM path.
+
+The provider-boundary smoke harness exercises whichever providers are
+configured:
+
+```powershell
+pnpm --filter @dokeza/realtime build
+pnpm --filter @dokeza/realtime exec tsx scripts/alpha5a-provider-smoke.ts
+```
+
 ## Telemetry Defaults
 
 Local telemetry and observability are for synthetic development data by default. Do not enable prompt, transcript, document, suggestion, or raw audio logging unless a workspace policy and privacy review explicitly allow it.
