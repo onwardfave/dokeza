@@ -2,7 +2,7 @@
 
 Checkbox tracker for full SRS/MVP completion, derived from the [SRS](../srs/realtime_meeting_copilot_srs.md), [traceability matrix](../srs/traceability_matrix.md), [production alpha gate plan](plans/2026-07-06-production-alpha-gate.md), and [production vertical roadmap](plans/2026-06-25-production-vertical-roadmap.md). Updated in the same commit as feature, workflow, or documentation changes that alter completion state.
 
-**Legend:** `[x]` done · `[ ]` open · `Partial:` implemented foundation exists, production/completion gap remains · `Alpha-deferred:` outside the current production-alpha gate but still open for full SRS/MVP completion.
+**Legend:** `[x]` done · `[ ]` open · `Partial:` implemented foundation exists, production/completion gap remains · `Alpha-deferred:` outside the current production-alpha gate but still open for full SRS/MVP completion · `‡` verified against fakes/synthetic transports only, not yet proven against real providers (see [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice)).
 
 ## Tracker Rules
 
@@ -20,6 +20,10 @@ Checkbox tracker for full SRS/MVP completion, derived from the [SRS](../srs/real
 - **Full SRS complete:** all SRS `Must` requirements are satisfied, and `Should` / `Could` requirements are either implemented or explicitly accepted as post-release scope in the SRS/traceability matrix.
 
 Current status: production alpha is still open, MVP is not complete, and full SRS completion is not complete.
+
+## Verification Basis
+
+`[x]` records that an item is merged and passes its automated gate. For the live pipeline, that gate has so far been **fakes and synthetic transports** (deterministic STT/LLM/embedding providers, synthetic PCM and webview transports), not real providers. Until [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice) runs, treat every `‡`-marked family as _correct against its abstractions but unproven against reality_ — the largest open risk in the tracker. The pipeline-critical families carrying this caveat are M1A.1, M1A.4, M2, and M3.
 
 ## Latest Broad Verification
 
@@ -204,6 +208,8 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## M1A.1 — PostgreSQL Session and Transcript Persistence
 
+‡ Verified with in-memory/PostgreSQL fakes and synthetic transports; not yet exercised by a real provider-backed session (see [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice)).
+
 - [x] `SessionStore` interface and `PgSessionStore` implementation
 - [x] `PgTranscriptTimelineSink` implementation
 - [x] Final transcript segments persist to `transcript_segments`
@@ -238,6 +244,8 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Connection state exposed in live-session panel
 
 ## M1A.4 — Desktop Audio Capture (Windows Mic First)
+
+‡ Verified with synthetic PCM and bounded capture windows; not yet proven with a long-lived real-microphone session (see [Alpha.3](#alpha3--native-microphone-stream-hardening) and [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice)).
 
 - [x] Enumerate selectable input devices
 - [x] Bounded selected/default microphone capture
@@ -296,6 +304,8 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## M2 — Live AI Suggestions
 
+‡ Verified with the deterministic provider and injectable transports; not yet proven against real OpenAI/Deepgram under a real session, including the 3s NFR-001 latency target (see [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice)).
+
 - [x] Prompt registry with versioned live prompt pack
 - [x] OpenAI Responses streaming adapter boundary (injectable transport)
 - [x] Bounded final-transcript context assembly
@@ -317,6 +327,8 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 ---
 
 ## M3 — Knowledge Base and Source Grounding
+
+‡ Verified with deterministic local/test embeddings and in-memory/PostgreSQL repositories; not yet proven against real OpenAI embeddings and retrieval in a live session (see [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice)).
 
 - [x] Knowledge document upload/list/detail/search contracts + JSON Schema
 - [x] Text document upload through workspace-scoped API
