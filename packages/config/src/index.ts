@@ -32,6 +32,18 @@ export interface OpenAiEmbeddingConfig {
   model: string;
   timeoutMs: number;
   dimensions: number;
+  /**
+   * Whether to send the `dimensions` request parameter. OpenAI's
+   * text-embedding-3 models accept it; some OpenAI-compatible models (for
+   * example NVIDIA `nv-embedqa-e5-v5`) reject it and return a fixed size.
+   */
+  sendDimensions: boolean;
+  /**
+   * Whether to send an `input_type` request parameter derived from the route
+   * (`passage` for documents, `query` for searches). Required by asymmetric
+   * OpenAI-compatible embedding models (for example NVIDIA retrieval models).
+   */
+  sendInputType: boolean;
 }
 
 export interface DokezaConfig {
@@ -237,8 +249,11 @@ function readPositiveInteger(value: string | undefined, defaultValue: number): n
 }
 
 function readEmbeddingDimensions(value: string | undefined): number | undefined {
-  const dimensions = readPositiveInteger(value, 1536);
-  return dimensions === 1536 ? dimensions : undefined;
+  // Any positive dimension is accepted here so OpenAI-compatible models with
+  // other sizes (for example NVIDIA's 1024-dim retrieval models) can be used.
+  // The PostgreSQL pgvector column is fixed at 1536, so that constraint is
+  // enforced separately, only for the postgres persistence path.
+  return readPositiveInteger(value, 1536);
 }
 
 function readSigningSecret(
@@ -352,12 +367,16 @@ function createOpenAiEmbeddingConfig(input: {
   model: string;
   timeoutMs: number;
   dimensions: number;
+  sendDimensions: boolean;
+  sendInputType: boolean;
 }): OpenAiEmbeddingConfig {
   const config: OpenAiEmbeddingConfig = {
     baseUrl: input.baseUrl,
     model: input.model,
     timeoutMs: input.timeoutMs,
     dimensions: input.dimensions,
+    sendDimensions: input.sendDimensions,
+    sendInputType: input.sendInputType,
   };
 
   if (input.apiKey !== undefined) {
@@ -419,6 +438,8 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   );
   const openAiEmbeddingTimeoutMs = readPositiveInteger(env.OPENAI_EMBEDDING_TIMEOUT_MS, 10000);
   const openAiEmbeddingDimensions = readEmbeddingDimensions(env.OPENAI_EMBEDDING_DIMENSIONS);
+  const openAiEmbeddingSendDimensions = readBoolean(env.OPENAI_EMBEDDING_SEND_DIMENSIONS, true);
+  const openAiEmbeddingSendInputType = readBoolean(env.OPENAI_EMBEDDING_SEND_INPUT_TYPE, false);
   const realtimePersistence = readRealtimePersistenceMode(
     env.DOKEZA_REALTIME_PERSISTENCE,
     environment,
@@ -577,7 +598,21 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     errors.push("OPENAI_EMBEDDING_TIMEOUT_MS must be a positive integer.");
   }
   if (openAiEmbeddingDimensions === undefined) {
-    errors.push("OPENAI_EMBEDDING_DIMENSIONS must be 1536 for the current pgvector schema.");
+    errors.push("OPENAI_EMBEDDING_DIMENSIONS must be a positive integer.");
+  }
+  if (openAiEmbeddingSendDimensions === undefined) {
+    errors.push("OPENAI_EMBEDDING_SEND_DIMENSIONS must be true or false.");
+  }
+  if (openAiEmbeddingSendInputType === undefined) {
+    errors.push("OPENAI_EMBEDDING_SEND_INPUT_TYPE must be true or false.");
+  }
+  if (
+    embeddingProvider === "openai" &&
+    realtimePersistence === "postgres" &&
+    openAiEmbeddingDimensions !== undefined &&
+    openAiEmbeddingDimensions !== 1536
+  ) {
+    errors.push("OPENAI_EMBEDDING_DIMENSIONS must be 1536 for the PostgreSQL pgvector schema.");
   }
   if (realtimePersistence === undefined) {
     errors.push("DOKEZA_REALTIME_PERSISTENCE must be memory or postgres.");
@@ -634,11 +669,16 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     openAiEmbeddingModel === undefined ||
     openAiEmbeddingTimeoutMs === undefined ||
     openAiEmbeddingDimensions === undefined ||
+    openAiEmbeddingSendDimensions === undefined ||
+    openAiEmbeddingSendInputType === undefined ||
     realtimePersistence === undefined ||
     databasePoolMax === undefined ||
     ((llmProvider === "openai" || llmProvider === "openai_chat") &&
       (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
     (embeddingProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
+    (embeddingProvider === "openai" &&
+      realtimePersistence === "postgres" &&
+      openAiEmbeddingDimensions !== 1536) ||
     (realtimePersistence === "postgres" && databaseUrl === undefined)
   ) {
     return { ok: false, errors };
@@ -711,6 +751,8 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
             model: openAiEmbeddingModel,
             timeoutMs: openAiEmbeddingTimeoutMs,
             dimensions: openAiEmbeddingDimensions,
+            sendDimensions: openAiEmbeddingSendDimensions,
+            sendInputType: openAiEmbeddingSendInputType,
           }),
         },
       },

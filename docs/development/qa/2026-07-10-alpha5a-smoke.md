@@ -77,6 +77,24 @@ latency without a funded OpenAI account.
 | Live suggestion        | PASS   | first token **860ms**, complete **1292ms** — within the 3s NFR-001 target; 35 tokens, 167-char output. |
 | Deepgram               | PASS   | Connected + authed; synthetic PCM accepted; 0 transcript events (~0.75s).    |
 
+### Third run (2026-07-10) — NVIDIA embeddings wired
+
+Added `input_type` (route → passage/query) and optional `dimensions` omission to
+the OpenAI-compatible embedding provider so NVIDIA retrieval models work. Reran
+with `OPENAI_EMBEDDING_MODEL=nvidia/nv-embedqa-e5-v5`, `DIMENSIONS=1024`,
+`SEND_DIMENSIONS=false`, `SEND_INPUT_TYPE=true` (memory persistence).
+
+| Boundary        | Result | Detail (content-free)                                                    |
+| --------------- | ------ | ----------------------------------------------------------------------- |
+| Live suggestion | PASS   | NVIDIA `meta/llama-3.1-8b-instruct`, complete 1154ms (within 3s).        |
+| Embeddings      | PASS   | NVIDIA `nv-embedqa-e5-v5`, 1024-dim non-zero vector, ~560ms.             |
+| Deepgram        | PASS   | Connected + authed (~1.0s).                                             |
+
+**All three provider boundaries now pass against real services.** Note: the
+1024-dim NVIDIA model is validated only for in-memory persistence; the Postgres
+pgvector column is fixed at 1536, so the Pg path still requires a 1536-dim model
+(or a schema migration) — enforced in config validation.
+
 **Outcome:** the core suggestion path is proven end-to-end against a real
 OpenAI-compatible LLM and **meets NFR-001** (1292ms << 3000ms). This confirms
 the first OpenAI failure was purely account quota, not a happy-path defect. The
@@ -87,9 +105,9 @@ a run with a valid embed model.
 
 ## Next actions
 
-1. ~~Obtain real suggestion latency vs. NFR-001~~ — done via NVIDIA
-   `openai_chat` (1292ms, within target). Still confirm real **embeddings**
-   against a funded OpenAI key or a valid NVIDIA embed model + dimensions.
+1. ~~Obtain real suggestion latency vs. NFR-001; confirm real embeddings~~ —
+   done via NVIDIA: suggestion within target and `nv-embedqa-e5-v5` embeddings
+   (1024-dim). All three provider boundaries pass against real services.
 2. ~~Address deviation #1 (surface provider error codes)~~ — done; providers
    now emit `llm_provider_error` with the provider code.
 3. ~~Address deviation #2 (signal/telemetry on embedding-provider failure)~~ —

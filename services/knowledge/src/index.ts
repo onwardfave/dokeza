@@ -158,6 +158,10 @@ export interface OpenAiKnowledgeEmbeddingProviderOptions {
   model: string;
   timeoutMs: number;
   dimensions: number;
+  /** Send the `dimensions` request parameter. Default true (OpenAI). */
+  sendDimensions?: boolean;
+  /** Send an `input_type` parameter derived from the route. Default false. */
+  sendInputType?: boolean;
   transport?: OpenAiEmbeddingTransport;
 }
 
@@ -168,6 +172,8 @@ export class OpenAiKnowledgeEmbeddingProvider implements KnowledgeEmbeddingProvi
   private readonly apiKey: string;
   private readonly endpoint: string;
   private readonly timeoutMs: number;
+  private readonly sendDimensions: boolean;
+  private readonly sendInputType: boolean;
   private readonly transport: OpenAiEmbeddingTransport;
 
   constructor(options: OpenAiKnowledgeEmbeddingProviderOptions) {
@@ -176,6 +182,8 @@ export class OpenAiKnowledgeEmbeddingProvider implements KnowledgeEmbeddingProvi
     this.model = options.model;
     this.timeoutMs = options.timeoutMs;
     this.dimensions = options.dimensions;
+    this.sendDimensions = options.sendDimensions ?? true;
+    this.sendInputType = options.sendInputType ?? false;
     this.transport = options.transport ?? defaultOpenAiEmbeddingTransport;
   }
 
@@ -184,17 +192,25 @@ export class OpenAiKnowledgeEmbeddingProvider implements KnowledgeEmbeddingProvi
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
+      const requestBody: Record<string, unknown> = {
+        model: this.model,
+        input: input.text,
+      };
+      if (this.sendDimensions) {
+        requestBody.dimensions = this.dimensions;
+      }
+      if (this.sendInputType) {
+        // Asymmetric retrieval models distinguish the document and query sides.
+        requestBody.input_type = input.route === "search_query" ? "query" : "passage";
+      }
+
       const response = await this.transport(this.endpoint, {
         method: "POST",
         headers: {
           authorization: `Bearer ${this.apiKey}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({
-          model: this.model,
-          input: input.text,
-          dimensions: this.dimensions,
-        }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
 
@@ -759,6 +775,8 @@ export function createKnowledgeEmbeddingProviderFromConfig(
     model: config.providers.embeddings.openai.model,
     timeoutMs: config.providers.embeddings.openai.timeoutMs,
     dimensions: config.providers.embeddings.openai.dimensions,
+    sendDimensions: config.providers.embeddings.openai.sendDimensions,
+    sendInputType: config.providers.embeddings.openai.sendInputType,
   });
 }
 

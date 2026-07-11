@@ -55,6 +55,8 @@ describe("parseConfig", () => {
           model: "text-embedding-3-small",
           timeoutMs: 10000,
           dimensions: 1536,
+          sendDimensions: true,
+          sendInputType: false,
         },
       },
     });
@@ -258,7 +260,33 @@ describe("parseConfig", () => {
         model: "embedding-test",
         timeoutMs: 15000,
         dimensions: 1536,
+        sendDimensions: true,
+        sendInputType: false,
       },
+    });
+  });
+
+  it("accepts an OpenAI-compatible embedding model with input_type and no dimensions", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_EMBEDDING_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-test-secret",
+        OPENAI_BASE_URL: "https://integrate.api.nvidia.com/v1",
+        OPENAI_EMBEDDING_MODEL: "nvidia/nv-embedqa-e5-v5",
+        OPENAI_EMBEDDING_DIMENSIONS: "1024",
+        OPENAI_EMBEDDING_SEND_DIMENSIONS: "false",
+        OPENAI_EMBEDDING_SEND_INPUT_TYPE: "true",
+        DOKEZA_REALTIME_PERSISTENCE: "memory",
+      },
+      "knowledge",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.config?.providers.embeddings.openai).toMatchObject({
+      model: "nvidia/nv-embedqa-e5-v5",
+      dimensions: 1024,
+      sendDimensions: false,
+      sendInputType: true,
     });
   });
 
@@ -319,6 +347,8 @@ describe("parseConfig", () => {
         OPENAI_API_KEY: "sk-real-secret",
         OPENAI_EMBEDDING_TIMEOUT_MS: "0",
         OPENAI_EMBEDDING_DIMENSIONS: "1024",
+        DOKEZA_REALTIME_PERSISTENCE: "postgres",
+        DATABASE_URL: "postgres://dokeza:secret@db.example.com:5432/dokeza",
       },
       "knowledge",
     );
@@ -326,7 +356,7 @@ describe("parseConfig", () => {
     expect(result.ok).toBe(false);
     expect(result.errors).toContain("OPENAI_EMBEDDING_TIMEOUT_MS must be a positive integer.");
     expect(result.errors).toContain(
-      "OPENAI_EMBEDDING_DIMENSIONS must be 1536 for the current pgvector schema.",
+      "OPENAI_EMBEDDING_DIMENSIONS must be 1536 for the PostgreSQL pgvector schema.",
     );
     expect(result.errors.join(" ")).not.toContain("sk-real-secret");
   });

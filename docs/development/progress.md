@@ -328,7 +328,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## M3 — Knowledge Base and Source Grounding
 
-‡ Verified with deterministic local/test embeddings and in-memory/PostgreSQL repositories; not yet proven against real OpenAI embeddings and retrieval in a live session (see [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice)).
+‡ Real embeddings proven 2026-07-10 against a real OpenAI-compatible provider (NVIDIA `nv-embedqa-e5-v5`, 1024-dim) via the provider harness; still not proven inside a full real session (retrieval feeding a live suggestion) or against the Postgres pgvector path (fixed at 1536 dims) (see [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice)).
 
 - [x] Knowledge document upload/list/detail/search contracts + JSON Schema
 - [x] Text document upload through workspace-scoped API
@@ -399,7 +399,8 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ### Alpha.5a — Real-Provider Smoke Test (pulled forward, next slice)
 - [ ] Partial: automated provider-boundary harness (`services/realtime/scripts/alpha5a-provider-smoke.ts`) run 2026-07-10 (see `qa/2026-07-10-alpha5a-smoke.md`). Deepgram connect/auth/framing proven; live-suggestion path proven against NVIDIA (`openai_chat`) in a second run; OpenAI-provider suggestion/embeddings still blocked by an unfunded key (`insufficient_quota`); Auth0 sign-in and real-mic desktop capture still manual/open.
-- [x] Real suggestion latency vs the 3-second target: obtained 2026-07-10 via NVIDIA `openai_chat` (`meta/llama-3.1-8b-instruct`) — first token 860ms, complete 1292ms, within target. Real embeddings still pending a funded OpenAI key or a valid NVIDIA embed model.
+- [x] Real suggestion latency vs the 3-second target: obtained 2026-07-10 via NVIDIA `openai_chat` (`meta/llama-3.1-8b-instruct`) — first token 860ms, complete 1292ms, within target.
+- [x] Real embeddings proven 2026-07-10 via NVIDIA `nv-embedqa-e5-v5` (1024-dim, in-memory); all three provider boundaries (Deepgram, suggestion, embeddings) now pass against real services. Postgres pgvector path still requires a 1536-dim model.
 - [x] Content-free QA note recorded for both 2026-07-10 runs.
 - [x] Two provider-error-handling deviations surfaced and filed as follow-ups (opaque `response.failed` handling; silent embedding-failure degradation).
 

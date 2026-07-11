@@ -359,6 +359,38 @@ describe("knowledge service boundary", () => {
     });
   });
 
+  it("sends input_type and omits dimensions for OpenAI-compatible retrieval models", async () => {
+    const captured: { body?: Record<string, unknown> } = {};
+    const vector1024 = Array.from({ length: 1024 }, (_, index) => (index === 0 ? 1 : 0));
+    const provider = new OpenAiKnowledgeEmbeddingProvider({
+      apiKey: "sk-test-secret",
+      baseUrl: "https://integrate.api.nvidia.com/v1",
+      model: "nvidia/nv-embedqa-e5-v5",
+      timeoutMs: 1000,
+      dimensions: 1024,
+      sendDimensions: false,
+      sendInputType: true,
+      transport: async (_url, init) => {
+        captured.body = JSON.parse(init.body) as Record<string, unknown>;
+        return { ok: true, status: 200, json: async () => ({ data: [{ embedding: vector1024 }] }) };
+      },
+    });
+
+    await provider.embed({ workspaceId: "ws_1", route: "document_chunk", text: "doc text" });
+    expect(captured.body).toEqual({
+      model: "nvidia/nv-embedqa-e5-v5",
+      input: "doc text",
+      input_type: "passage",
+    });
+
+    await provider.embed({ workspaceId: "ws_1", route: "search_query", text: "query text" });
+    expect(captured.body).toEqual({
+      model: "nvidia/nv-embedqa-e5-v5",
+      input: "query text",
+      input_type: "query",
+    });
+  });
+
   it("sanitizes OpenAI embedding provider failures", async () => {
     const provider = new OpenAiKnowledgeEmbeddingProvider({
       apiKey: "sk-test-secret",
