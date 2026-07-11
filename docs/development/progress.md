@@ -304,7 +304,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## M2 — Live AI Suggestions
 
-‡ Verified with the deterministic provider and injectable transports; not yet proven against real OpenAI/Deepgram under a real session, including the 3s NFR-001 latency target (see [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice)).
+‡ Suggestion generation proven 2026-07-10 against a real OpenAI-compatible LLM (NVIDIA `openai_chat`) within the 3s NFR-001 target via the provider harness; still not proven inside a full real session (real transcript → suggestion) or against the OpenAI Responses path (see [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice)).
 
 - [x] Prompt registry with versioned live prompt pack
 - [x] OpenAI Responses streaming adapter boundary (injectable transport)
@@ -398,10 +398,10 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] Partial: debounce, rate-limit, and redaction tests exist; budget enforcement tests remain
 
 ### Alpha.5a — Real-Provider Smoke Test (pulled forward, next slice)
-- [ ] Partial: automated provider-boundary harness (`services/realtime/scripts/alpha5a-provider-smoke.ts`) run 2026-07-10 (see `qa/2026-07-10-alpha5a-smoke.md`). Deepgram connect/auth/framing proven; OpenAI suggestion + embeddings blocked by an unfunded key (`insufficient_quota`); Auth0 sign-in and real-mic desktop capture still manual/open.
-- [ ] Real suggestion latency vs the 3-second target: not yet obtained (OpenAI quota); re-run with a funded key.
-- [x] Content-free QA note recorded for the 2026-07-10 partial run.
-- [ ] Two provider-error-handling deviations surfaced and filed as follow-ups (opaque `response.failed` handling; silent embedding-failure degradation).
+- [ ] Partial: automated provider-boundary harness (`services/realtime/scripts/alpha5a-provider-smoke.ts`) run 2026-07-10 (see `qa/2026-07-10-alpha5a-smoke.md`). Deepgram connect/auth/framing proven; live-suggestion path proven against NVIDIA (`openai_chat`) in a second run; OpenAI-provider suggestion/embeddings still blocked by an unfunded key (`insufficient_quota`); Auth0 sign-in and real-mic desktop capture still manual/open.
+- [x] Real suggestion latency vs the 3-second target: obtained 2026-07-10 via NVIDIA `openai_chat` (`meta/llama-3.1-8b-instruct`) — first token 860ms, complete 1292ms, within target. Real embeddings still pending a funded OpenAI key or a valid NVIDIA embed model.
+- [x] Content-free QA note recorded for both 2026-07-10 runs.
+- [x] Two provider-error-handling deviations surfaced and filed as follow-ups (opaque `response.failed` handling; silent embedding-failure degradation).
 
 ### Alpha.5 — Production Alpha E2E Verification
 - [ ] Manual E2E checklist for Windows alpha

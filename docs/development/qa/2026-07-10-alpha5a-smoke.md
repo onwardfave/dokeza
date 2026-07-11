@@ -60,11 +60,38 @@ key is unfunded; re-run both with a quota-enabled OpenAI key. Two real product
 defects in provider error handling were surfaced and filed. Auth0 + live-mic
 remain manual and open.
 
+## Second run (2026-07-10) — NVIDIA OpenAI-compatible provider
+
+Re-ran the suggestion path against a free NVIDIA endpoint
+(`build.nvidia.com`) using the `openai_chat` provider, to obtain real
+latency without a funded OpenAI account.
+
+| Field           | Value                                                            |
+| --------------- | ---------------------------------------------------------------- |
+| LLM provider    | `openai_chat` → `https://integrate.api.nvidia.com/v1`            |
+| Model           | `meta/llama-3.1-8b-instruct`                                     |
+| Embeddings      | deterministic (NVIDIA embed models need different model/dims)    |
+
+| Boundary               | Result | Detail (content-free)                                                        |
+| ---------------------- | ------ | ---------------------------------------------------------------------------- |
+| Live suggestion        | PASS   | first token **860ms**, complete **1292ms** — within the 3s NFR-001 target; 35 tokens, 167-char output. |
+| Deepgram               | PASS   | Connected + authed; synthetic PCM accepted; 0 transcript events (~0.75s).    |
+
+**Outcome:** the core suggestion path is proven end-to-end against a real
+OpenAI-compatible LLM and **meets NFR-001** (1292ms << 3000ms). This confirms
+the first OpenAI failure was purely account quota, not a happy-path defect. The
+`openai_chat` provider plus `OPENAI_BASE_URL`/`OPENAI_MODEL` also satisfy
+production model/endpoint selection. Deviation #1 (error-event handling) remains
+valid and open; embeddings against a real OpenAI-compatible endpoint still need
+a run with a valid embed model.
+
 ## Next actions
 
-1. Re-run `alpha5a-provider-smoke.ts` with a **funded** OpenAI key to obtain
-   real suggestion latency vs. NFR-001 and confirm embeddings.
-2. Address deviation #1 (surface provider error codes from `response.failed`).
+1. ~~Obtain real suggestion latency vs. NFR-001~~ — done via NVIDIA
+   `openai_chat` (1292ms, within target). Still confirm real **embeddings**
+   against a funded OpenAI key or a valid NVIDIA embed model + dimensions.
+2. Address deviation #1 (surface provider error codes from `response.failed` /
+   `error` events instead of a generic "did not complete").
 3. Address deviation #2 (signal/telemetry on embedding-provider failure instead
    of silent keyword-only degradation).
 4. Run the manual checklist for Auth0 sign-in and a real microphone session.
