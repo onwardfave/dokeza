@@ -41,7 +41,7 @@ Deepgram key is funded and works.
 | # | Area      | Deviation (content-free)                                                                                                                                                                                                 | Follow-up |
 | - | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
 | 1 | llm       | `OpenAiResponsesLiveSuggestionProvider` ignores `error` and `response.failed` SSE events. A real provider failure (here `insufficient_quota`) surfaces only as the generic `ModelGatewayError: OpenAI response stream did not complete`, discarding the provider's actual code. | **fixed** — both suggestion providers now detect `error`/`response.failed` (Responses) and error frames (chat) and throw `ModelGatewayError` code `llm_provider_error` carrying `providerCode`; verified against the real API (surfaces `insufficient_quota`). |
-| 2 | retrieval | `createChunkEmbeddings` / `createSearchEmbedding` swallow embedding-provider errors (`catch → empty`) and silently degrade to keyword-only retrieval with no telemetry/signal. A workspace can believe it has semantic retrieval when it does not. | filed     |
+| 2 | retrieval | `createChunkEmbeddings` / `createSearchEmbedding` swallow embedding-provider errors (`catch → empty`) and silently degrade to keyword-only retrieval with no telemetry/signal. A workspace can believe it has semantic retrieval when it does not. | **fixed** — retrieval still degrades gracefully, but both paths now emit a metadata-only `knowledge.embedding_provider_failed` event (route, provider, model, errorCategory, `degradedTo: keyword_only`) through an injectable `KnowledgeTelemetrySink`; test asserts no content leaks. |
 | 3 | harness   | The original embeddings check ran through the repository and reported PASS via keyword fallback even though the real embedding call 429'd. Fixed in commit 6b69e40 to call `embed()` directly and assert a real vector. | fixed     |
 
 ## Defects found
@@ -92,6 +92,6 @@ a run with a valid embed model.
    against a funded OpenAI key or a valid NVIDIA embed model + dimensions.
 2. ~~Address deviation #1 (surface provider error codes)~~ — done; providers
    now emit `llm_provider_error` with the provider code.
-3. Address deviation #2 (signal/telemetry on embedding-provider failure instead
-   of silent keyword-only degradation).
+3. ~~Address deviation #2 (signal/telemetry on embedding-provider failure)~~ —
+   done; a metadata-only `knowledge.embedding_provider_failed` event now fires.
 4. Run the manual checklist for Auth0 sign-in and a real microphone session.

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { TelemetryEvent } from "@dokeza/telemetry";
 import {
   DeterministicKnowledgeEmbeddingProvider,
   InMemoryKnowledgeRepository,
@@ -249,6 +250,52 @@ describe("knowledge service boundary", () => {
         },
       ],
     });
+  });
+
+  it("emits a metadata-only telemetry signal when embedding generation fails", async () => {
+    const events: TelemetryEvent[] = [];
+    const repository = new InMemoryKnowledgeRepository({
+      embeddingProvider: new FailingEmbeddingProvider(),
+      telemetrySink: (event) => events.push(event),
+      now: () => new Date("2026-07-04T00:00:00.000Z"),
+      idGenerator: createSequenceIds("doc", "chunk"),
+    });
+
+    await repository.uploadDocument({
+      workspaceId: "ws_1",
+      actorUserId: "user_1",
+      title: "Pricing FAQ",
+      source: "manual_upload",
+      text: "Pricing terms renew quarterly.",
+    });
+    await repository.search({ workspaceId: "ws_1", query: "pricing" });
+
+    const uploadEvent = events.find(
+      (event) =>
+        event.name === "knowledge.embedding_provider_failed" &&
+        event.fields.route === "document_chunk",
+    );
+    const searchEvent = events.find(
+      (event) =>
+        event.name === "knowledge.embedding_provider_failed" &&
+        event.fields.route === "search_query",
+    );
+
+    expect(uploadEvent?.fields).toMatchObject({
+      workspaceId: "ws_1",
+      route: "document_chunk",
+      provider: "deterministic",
+      model: "failing-test",
+      errorCategory: "embedding_provider_unavailable",
+      degradedTo: "keyword_only",
+    });
+    expect(searchEvent?.fields.route).toBe("search_query");
+
+    // Content-free: no query/chunk/document text leaks into telemetry fields.
+    const leakedKeys = events
+      .flatMap((event) => Object.keys(event.fields))
+      .filter((key) => /text|query|content|prompt|title/i.test(key));
+    expect(leakedKeys).toEqual([]);
   });
 
   it("creates deterministic credential-free embeddings", async () => {

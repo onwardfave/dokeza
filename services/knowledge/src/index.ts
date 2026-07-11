@@ -19,7 +19,16 @@ import {
   type Database,
 } from "@dokeza/db";
 import type { DokezaConfig } from "@dokeza/config";
+import { createTelemetryEvent, type TelemetryEvent } from "@dokeza/telemetry";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+
+/**
+ * Sink for metadata-only knowledge telemetry. Injected so callers with a
+ * telemetry pipeline can observe events (for example embedding-provider
+ * failures) without the knowledge package taking a hard dependency on any
+ * exporter. Events are content-free by construction.
+ */
+export type KnowledgeTelemetrySink = (event: TelemetryEvent) => void;
 
 export type KnowledgeRetentionMode =
   | "live_only"
@@ -285,6 +294,7 @@ export interface InMemoryKnowledgeRepositoryOptions {
   seeds?: KnowledgeDocumentDetailResponse[];
   retentionMode?: KnowledgeRetentionMode;
   embeddingProvider?: KnowledgeEmbeddingProvider;
+  telemetrySink?: KnowledgeTelemetrySink;
   now?: () => Date;
   idGenerator?: () => string;
 }
@@ -299,12 +309,14 @@ export class InMemoryKnowledgeRepository implements KnowledgeRepository {
   private readonly documentsByKey = new Map<string, StoredKnowledgeDocument>();
   private readonly retentionMode: KnowledgeRetentionMode;
   private readonly embeddingProvider: KnowledgeEmbeddingProvider | undefined;
+  private readonly telemetrySink: KnowledgeTelemetrySink | undefined;
   private readonly now: () => Date;
   private readonly idGenerator: () => string;
 
   constructor(options: InMemoryKnowledgeRepositoryOptions = {}) {
     this.retentionMode = options.retentionMode ?? "30_days";
     this.embeddingProvider = options.embeddingProvider;
+    this.telemetrySink = options.telemetrySink;
     this.now = options.now ?? (() => new Date());
     this.idGenerator = options.idGenerator ?? (() => randomUUID());
 
@@ -361,6 +373,7 @@ export class InMemoryKnowledgeRepository implements KnowledgeRepository {
     }));
     const embeddingsByChunkId = await createChunkEmbeddings({
       embeddingProvider: this.embeddingProvider,
+      telemetrySink: this.telemetrySink,
       workspaceId: input.workspaceId,
       documentId,
       chunks: storedChunks.map((chunk) => ({ id: chunk.chunk_id, text: chunk.text })),
@@ -407,6 +420,7 @@ export class InMemoryKnowledgeRepository implements KnowledgeRepository {
 
     const queryVector = await createSearchEmbedding({
       embeddingProvider: this.embeddingProvider,
+      telemetrySink: this.telemetrySink,
       workspaceId: input.workspaceId,
       query: input.query,
     });
@@ -444,6 +458,7 @@ export interface PgKnowledgeRepositoryOptions {
   db: Database;
   defaultRetentionMode?: KnowledgeRetentionMode;
   embeddingProvider?: KnowledgeEmbeddingProvider;
+  telemetrySink?: KnowledgeTelemetrySink;
   now?: () => Date;
   idGenerator?: () => string;
 }
@@ -452,6 +467,7 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
   private readonly db: Database;
   private readonly defaultRetentionMode: KnowledgeRetentionMode;
   private readonly embeddingProvider: KnowledgeEmbeddingProvider | undefined;
+  private readonly telemetrySink: KnowledgeTelemetrySink | undefined;
   private readonly now: () => Date;
   private readonly idGenerator: () => string;
 
@@ -459,6 +475,7 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
     this.db = options.db;
     this.defaultRetentionMode = options.defaultRetentionMode ?? "30_days";
     this.embeddingProvider = options.embeddingProvider;
+    this.telemetrySink = options.telemetrySink;
     this.now = options.now ?? (() => new Date());
     this.idGenerator = options.idGenerator ?? (() => randomUUID());
   }
@@ -511,6 +528,7 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
       }));
       const embeddingsByChunkId = await createChunkEmbeddings({
         embeddingProvider: this.embeddingProvider,
+        telemetrySink: this.telemetrySink,
         workspaceId: input.workspaceId,
         documentId,
         chunks: chunkRows.map((chunk) => ({ id: chunk.id, text: chunk.text })),
@@ -608,6 +626,7 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
     return withWorkspaceTransaction(this.db, input.workspaceId, async (tx) => {
       const queryVector = await createSearchEmbedding({
         embeddingProvider: this.embeddingProvider,
+        telemetrySink: this.telemetrySink,
         workspaceId: input.workspaceId,
         query: input.query,
       });
@@ -743,12 +762,17 @@ export function createKnowledgeEmbeddingProviderFromConfig(
   });
 }
 
-export function createKnowledgePersistenceFromConfig(config: DokezaConfig): KnowledgePersistence {
+export function createKnowledgePersistenceFromConfig(
+  config: DokezaConfig,
+  options: { telemetrySink?: KnowledgeTelemetrySink } = {},
+): KnowledgePersistence {
   const embeddingProvider = createKnowledgeEmbeddingProviderFromConfig(config);
+  const telemetryOption =
+    options.telemetrySink === undefined ? {} : { telemetrySink: options.telemetrySink };
 
   if (config.database.realtimePersistence === "memory") {
     return {
-      repository: new InMemoryKnowledgeRepository({ embeddingProvider }),
+      repository: new InMemoryKnowledgeRepository({ embeddingProvider, ...telemetryOption }),
       close: async () => undefined,
     };
   }
@@ -765,6 +789,7 @@ export function createKnowledgePersistenceFromConfig(config: DokezaConfig): Know
       db,
       defaultRetentionMode: config.retentionDefaults.individual,
       embeddingProvider,
+      ...telemetryOption,
     }),
     close: async () => {
       await closePool(pool);
@@ -857,11 +882,13 @@ function normalizeVector(vector: number[]): number[] {
 
 async function createChunkEmbeddings(input: {
   embeddingProvider: KnowledgeEmbeddingProvider | undefined;
+  telemetrySink: KnowledgeTelemetrySink | undefined;
   workspaceId: string;
   documentId: string;
   chunks: readonly { id: string; text: string }[];
 }): Promise<Map<string, number[]>> {
-  if (input.embeddingProvider === undefined) {
+  const embeddingProvider = input.embeddingProvider;
+  if (embeddingProvider === undefined) {
     return new Map();
   }
 
@@ -869,7 +896,7 @@ async function createChunkEmbeddings(input: {
     const embeddings = await Promise.all(
       input.chunks.map(async (chunk) => ({
         chunkId: chunk.id,
-        result: await input.embeddingProvider?.embed({
+        result: await embeddingProvider.embed({
           workspaceId: input.workspaceId,
           documentId: input.documentId,
           chunkId: chunk.id,
@@ -878,34 +905,84 @@ async function createChunkEmbeddings(input: {
         }),
       })),
     );
-    return new Map(
-      embeddings.flatMap((embedding) =>
-        embedding.result === undefined ? [] : [[embedding.chunkId, embedding.result.vector]],
-      ),
-    );
-  } catch {
+    return new Map(embeddings.map((embedding) => [embedding.chunkId, embedding.result.vector]));
+  } catch (err) {
+    // Graceful degradation: chunks are stored without embeddings and retrieval
+    // falls back to keyword-only. Emit a metadata-only signal so the silent
+    // degradation is observable instead of invisible.
+    emitEmbeddingFailure(input.telemetrySink, {
+      workspaceId: input.workspaceId,
+      route: "document_chunk",
+      provider: embeddingProvider.provider,
+      model: embeddingProvider.model,
+      error: err,
+    });
     return new Map();
   }
 }
 
 async function createSearchEmbedding(input: {
   embeddingProvider: KnowledgeEmbeddingProvider | undefined;
+  telemetrySink: KnowledgeTelemetrySink | undefined;
   workspaceId: string;
   query: string;
 }): Promise<number[] | undefined> {
-  if (input.embeddingProvider === undefined) {
+  const embeddingProvider = input.embeddingProvider;
+  if (embeddingProvider === undefined) {
     return undefined;
   }
 
   try {
-    const result = await input.embeddingProvider.embed({
+    const result = await embeddingProvider.embed({
       workspaceId: input.workspaceId,
       route: "search_query",
       text: input.query,
     });
     return result.vector;
-  } catch {
+  } catch (err) {
+    // Graceful degradation to keyword-only search; surface a metadata-only
+    // signal so a query running without semantic retrieval is observable.
+    emitEmbeddingFailure(input.telemetrySink, {
+      workspaceId: input.workspaceId,
+      route: "search_query",
+      provider: embeddingProvider.provider,
+      model: embeddingProvider.model,
+      error: err,
+    });
     return undefined;
+  }
+}
+
+function emitEmbeddingFailure(
+  sink: KnowledgeTelemetrySink | undefined,
+  info: {
+    workspaceId: string;
+    route: KnowledgeEmbeddingRoute;
+    provider: string;
+    model: string;
+    error: unknown;
+  },
+): void {
+  if (sink === undefined) {
+    return;
+  }
+
+  const errorCategory =
+    info.error instanceof KnowledgeEmbeddingError ? info.error.code : "unknown_error";
+
+  try {
+    sink(
+      createTelemetryEvent("knowledge.embedding_provider_failed", {
+        workspaceId: info.workspaceId,
+        route: info.route,
+        provider: info.provider,
+        model: info.model,
+        errorCategory,
+        degradedTo: "keyword_only",
+      }),
+    );
+  } catch {
+    // Telemetry must never affect retrieval behavior.
   }
 }
 
