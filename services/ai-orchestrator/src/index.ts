@@ -129,7 +129,14 @@ export interface LiveSuggestionServiceOptions {
 export class ModelGatewayError extends Error {
   constructor(
     message: string,
-    readonly code: "llm_provider_timeout" | "invalid_model_response",
+    readonly code: "llm_provider_timeout" | "invalid_model_response" | "llm_provider_error",
+    /**
+     * The upstream provider's own error code when the failure was reported by
+     * the provider mid-stream (for example `insufficient_quota` or
+     * `rate_limit_exceeded`). Carried for telemetry and operator diagnostics;
+     * never contains customer content.
+     */
+    readonly providerCode?: string,
   ) {
     super(message);
     this.name = "ModelGatewayError";
@@ -375,6 +382,11 @@ export class OpenAiResponsesLiveSuggestionProvider implements LiveSuggestionProv
       userInput: createProviderUserInput(request),
       maxOutputChars: request.maxOutputChars,
     })) {
+      const failure = readResponsesFailure(event);
+      if (failure !== undefined) {
+        throw new ModelGatewayError(failure.message, "llm_provider_error", failure.providerCode);
+      }
+
       if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
         yield { type: "token", token: event.delta };
       }
@@ -492,11 +504,9 @@ export class OpenAiChatCompletionsLiveSuggestionProvider implements LiveSuggesti
       userInput: createProviderUserInput(request),
       maxOutputChars: request.maxOutputChars,
     })) {
-      if ("error" in event && event.error != null) {
-        throw new ModelGatewayError(
-          "OpenAI-compatible chat provider returned an error.",
-          "llm_provider_timeout",
-        );
+      const failure = readChatFailure(event);
+      if (failure !== undefined) {
+        throw new ModelGatewayError(failure.message, "llm_provider_error", failure.providerCode);
       }
 
       const choice = firstChatChoice(event);
@@ -596,6 +606,66 @@ function readChatDelta(choice: Record<string, unknown> | undefined): string {
   }
   const content = (delta as Record<string, unknown>).content;
   return typeof content === "string" ? content : "";
+}
+
+interface ProviderFailure {
+  message: string;
+  providerCode?: string;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Detect a failure event in the OpenAI Responses SSE stream. Two shapes are
+ * possible: a top-level `{ type: "error", code, message }` event, and a
+ * `{ type: "response.failed", response: { error: { code, message } } }` event.
+ * Returns the provider's error code (e.g. `insufficient_quota`) so it is not
+ * discarded. The thrown message stays content-free — the code, not the
+ * provider's prose, is what callers key on.
+ */
+function readResponsesFailure(event: Record<string, unknown>): ProviderFailure | undefined {
+  if (event.type === "error") {
+    // Responses `error` events nest the detail: { type:"error", error:{ code, type, message } }.
+    const nested = asRecord(event.error);
+    const providerCode = asString(nested?.code) ?? asString(nested?.type) ?? asString(event.code);
+    return withCode("OpenAI response stream reported an error", providerCode);
+  }
+  if (event.type === "response.failed") {
+    const error = asRecord(asRecord(event.response)?.error);
+    const providerCode = asString(error?.code) ?? asString(error?.type);
+    return withCode("OpenAI response failed", providerCode);
+  }
+  return undefined;
+}
+
+/**
+ * Detect an error frame in an OpenAI-compatible chat-completions stream, which
+ * carries `{ error: { message, type, code } }`. Returns the provider code so a
+ * mid-stream failure (e.g. quota or rate limit) is surfaced rather than
+ * collapsing into a generic "did not complete".
+ */
+function readChatFailure(event: Record<string, unknown>): ProviderFailure | undefined {
+  const error = asRecord(event.error);
+  if (error === undefined) {
+    return undefined;
+  }
+  const providerCode = asString(error.code) ?? asString(error.type);
+  return withCode("OpenAI-compatible chat provider reported an error", providerCode);
+}
+
+function withCode(message: string, providerCode: string | undefined): ProviderFailure {
+  return {
+    message: providerCode === undefined ? `${message}.` : `${message} (${providerCode}).`,
+    ...(providerCode === undefined ? {} : { providerCode }),
+  };
 }
 
 function createDeterministicSuggestion(request: LiveSuggestionProviderRequest): string {

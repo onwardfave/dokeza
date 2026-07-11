@@ -42,6 +42,27 @@ const transcriptSegments: TranscriptContextSegment[] = [
   },
 ];
 
+async function captureStreamError(provider: LiveSuggestionProvider): Promise<unknown> {
+  const request: LiveSuggestionProviderRequest = {
+    workspaceId: "ws_a",
+    sessionId: "sess_a",
+    requestId: "sreq_a",
+    kind: "answer_question",
+    prompt: new StaticPromptRegistry().getLiveSuggestionPrompt("answer_question"),
+    transcriptContext: "remote: question",
+    sourceContext: "",
+    maxOutputChars: 100,
+  };
+  try {
+    for await (const _event of provider.streamLiveSuggestion(request)) {
+      // consume the stream until it throws
+    }
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected the provider stream to throw");
+}
+
 describe("ai orchestrator boundary", () => {
   it("keeps deterministic local routing credential-free", () => {
     expect(
@@ -431,6 +452,77 @@ describe("ai orchestrator boundary", () => {
         // consume stream
       }
     }).rejects.toBeInstanceOf(ModelGatewayError);
+  });
+
+  it("surfaces the provider code from an OpenAI Responses error event", async () => {
+    const provider = new OpenAiResponsesLiveSuggestionProvider(
+      {
+        async *createStream() {
+          yield { type: "response.created" };
+          yield { type: "response.in_progress" };
+          // Real Responses `error` events nest the detail under `error`.
+          yield {
+            type: "error",
+            error: {
+              type: "insufficient_quota",
+              code: "insufficient_quota",
+              message: "You exceeded your current quota.",
+              param: null,
+            },
+            sequence_number: 2,
+          };
+          yield { type: "response.failed" };
+        },
+      },
+      "gpt-live-test",
+    );
+
+    const error = await captureStreamError(provider);
+    expect(error).toBeInstanceOf(ModelGatewayError);
+    expect((error as ModelGatewayError).code).toBe("llm_provider_error");
+    expect((error as ModelGatewayError).providerCode).toBe("insufficient_quota");
+  });
+
+  it("surfaces the provider code from an OpenAI Responses response.failed event", async () => {
+    const provider = new OpenAiResponsesLiveSuggestionProvider(
+      {
+        async *createStream() {
+          yield { type: "response.created" };
+          yield {
+            type: "response.failed",
+            response: {
+              status: "failed",
+              error: { code: "rate_limit_exceeded", message: "slow down" },
+            },
+          };
+        },
+      },
+      "gpt-live-test",
+    );
+
+    const error = await captureStreamError(provider);
+    expect(error).toBeInstanceOf(ModelGatewayError);
+    expect((error as ModelGatewayError).code).toBe("llm_provider_error");
+    expect((error as ModelGatewayError).providerCode).toBe("rate_limit_exceeded");
+  });
+
+  it("surfaces the provider code from an OpenAI-compatible chat error frame", async () => {
+    const provider = new OpenAiChatCompletionsLiveSuggestionProvider(
+      {
+        async *createStream() {
+          yield { choices: [{ delta: { content: "partial" }, finish_reason: null }] };
+          yield {
+            error: { code: "insufficient_quota", type: "insufficient_quota", message: "no quota" },
+          };
+        },
+      },
+      "nvidia/llama-live-test",
+    );
+
+    const error = await captureStreamError(provider);
+    expect(error).toBeInstanceOf(ModelGatewayError);
+    expect((error as ModelGatewayError).code).toBe("llm_provider_error");
+    expect((error as ModelGatewayError).providerCode).toBe("insufficient_quota");
   });
 
   it("posts chat-completions to the configured base URL without exposing credentials", async () => {
