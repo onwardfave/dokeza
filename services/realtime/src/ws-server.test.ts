@@ -157,8 +157,10 @@ describe("createRealtimeServer", () => {
       suggestionSink?: SuggestionSink;
       sessionStore?: SessionStore;
       tokenValidator?: TokenValidator;
+      workspacePolicyResolver?: RealtimeServerOptions["workspacePolicyResolver"];
       liveSuggestionService?: RealtimeServerOptions["liveSuggestionService"];
       liveSuggestionExternalCallEnabled?: boolean;
+      sttExternalCallEnabled?: boolean;
       liveSuggestionSourceRetriever?: RealtimeServerOptions["liveSuggestionSourceRetriever"];
       liveSuggestionGuardrails?: RealtimeServerOptions["liveSuggestionGuardrails"];
       now?: RealtimeServerOptions["now"];
@@ -182,11 +184,17 @@ describe("createRealtimeServer", () => {
     if (options.sessionStore !== undefined) {
       serverOptions.sessionStore = options.sessionStore;
     }
+    if (options.workspacePolicyResolver !== undefined) {
+      serverOptions.workspacePolicyResolver = options.workspacePolicyResolver;
+    }
     if (options.liveSuggestionService !== undefined) {
       serverOptions.liveSuggestionService = options.liveSuggestionService;
     }
     if (options.liveSuggestionExternalCallEnabled !== undefined) {
       serverOptions.liveSuggestionExternalCallEnabled = options.liveSuggestionExternalCallEnabled;
+    }
+    if (options.sttExternalCallEnabled !== undefined) {
+      serverOptions.sttExternalCallEnabled = options.sttExternalCallEnabled;
     }
     if (options.liveSuggestionSourceRetriever !== undefined) {
       serverOptions.liveSuggestionSourceRetriever = options.liveSuggestionSourceRetriever;
@@ -377,6 +385,125 @@ describe("createRealtimeServer", () => {
     expect((response.payload as { policy: { retention_mode: string } }).policy.retention_mode).toBe(
       "live_only",
     );
+  });
+
+  it("advertises the resolved workspace policy and uses it for no-storage persistence", async () => {
+    const transcriptSink = createRecordingTranscriptSink();
+    const { port } = await startServer({
+      transcriptTimelineSink: transcriptSink,
+      transcriptRetentionMode: "30_days",
+      workspacePolicyResolver: {
+        async resolve(workspaceId) {
+          expect(workspaceId).toBe("ws_test_1");
+          return {
+            screenContextAllowed: false,
+            cloudSttAllowed: false,
+            cloudLlmAllowed: false,
+            directProviderSttAllowed: false,
+            retentionMode: "live_only",
+            maxLocalAudioBufferMs: 60_000,
+          };
+        },
+      },
+    });
+    const ws = await connect(port);
+
+    const auth = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "auth.hello",
+      seq: 1,
+      sent_at: new Date().toISOString(),
+      payload: {
+        token: "valid_token",
+        client_version: "0.1.0",
+        platform: "windows",
+        device_id: "dev_test_1",
+      },
+    });
+
+    expect(auth.type).toBe("auth.accepted");
+    expect(auth.payload).toMatchObject({
+      policy: {
+        screen_context_allowed: false,
+        cloud_stt_allowed: false,
+        cloud_llm_allowed: false,
+        direct_provider_stt_allowed: false,
+        retention_mode: "live_only",
+        max_local_audio_buffer_ms: 60_000,
+      },
+    });
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "audio.gap",
+        seq: 2,
+        session_id: auth.session_id,
+        sent_at: new Date().toISOString(),
+        payload: {
+          stream: "microphone",
+          start_ms: 0,
+          end_ms: 100,
+          dropped_chunks: 1,
+          reason: "user_paused_capture",
+        },
+      }),
+    );
+    const response = await sendAndReceive(ws, {
+      protocol_version: REALTIME_PROTOCOL_VERSION,
+      type: "context.update",
+      seq: 3,
+      session_id: auth.session_id,
+      sent_at: new Date().toISOString(),
+      payload: {
+        source: "active_window",
+        title: "content must not be logged",
+        app: "Synthetic App",
+        text: "content must not be logged",
+        captured_at: new Date().toISOString(),
+      },
+    });
+
+    expect(response.type).toBe("error");
+    expect(response.payload).toMatchObject({ code: "feature_unavailable" });
+    expect(transcriptSink.gapWrites).toEqual([]);
+  });
+
+  it("fails closed when workspace policy cannot be resolved", async () => {
+    const { port } = await startServer({
+      workspacePolicyResolver: {
+        async resolve() {
+          throw new Error("database unavailable with sensitive policy content");
+        },
+      },
+    });
+    const ws = await connect(port);
+    const closePromise = waitForClose(ws);
+
+    const responsePromise = receiveJson(ws);
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "auth.hello",
+        seq: 1,
+        sent_at: new Date().toISOString(),
+        payload: {
+          token: "valid_token",
+          client_version: "0.1.0",
+          platform: "windows",
+          device_id: "dev_test_1",
+        },
+      }),
+    );
+
+    const response = await responsePromise;
+    expect(response.type).toBe("error");
+    expect(response.payload).toMatchObject({
+      code: "feature_unavailable",
+      recoverable: true,
+    });
+    expect(JSON.stringify(response)).not.toContain("sensitive policy content");
+    await expect(closePromise).resolves.toBe(1013);
   });
 
   it("rejects an invalid token and closes the connection", async () => {
@@ -951,6 +1078,7 @@ describe("createRealtimeServer", () => {
         actorUserId: "user_test_1",
         serverSeq: responses[2]?.seq,
         payload: responses[2]?.payload,
+        retentionMode: "7_days",
       },
     ]);
 
@@ -1514,15 +1642,15 @@ describe("createRealtimeServer", () => {
     let called = false;
     const { port } = await startServer({
       liveSuggestionExternalCallEnabled: true,
-      tokenValidator: {
-        async validate() {
+      workspacePolicyResolver: {
+        async resolve() {
           return {
-            actor: createTestActor({ workspaceId: "ws_test_1" }),
-            workspaceId: "ws_test_1",
-            deviceId: "dev_test_1",
-            policy: {
-              cloudLlmAllowed: false,
-            },
+            screenContextAllowed: false,
+            cloudSttAllowed: true,
+            cloudLlmAllowed: false,
+            directProviderSttAllowed: false,
+            retentionMode: "7_days",
+            maxLocalAudioBufferMs: 300_000,
           };
         },
       },
@@ -1567,6 +1695,63 @@ describe("createRealtimeServer", () => {
     });
     expect(called).toBe(false);
     expect(JSON.stringify(response)).not.toContain("content must not reach provider");
+  });
+
+  it("blocks cloud STT before opening or sending audio to the provider", async () => {
+    let called = false;
+    const sttAdapter: SttAdapter = {
+      async transcribeChunk() {
+        called = true;
+        return { events: [], telemetry: [] };
+      },
+    };
+    const { port } = await startServer({
+      sttAdapter,
+      sttExternalCallEnabled: true,
+      workspacePolicyResolver: {
+        async resolve() {
+          return {
+            screenContextAllowed: false,
+            cloudSttAllowed: false,
+            cloudLlmAllowed: true,
+            directProviderSttAllowed: false,
+            retentionMode: "7_days",
+            maxLocalAudioBufferMs: 300_000,
+          };
+        },
+      },
+    });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    ws.send(
+      JSON.stringify({
+        protocol_version: REALTIME_PROTOCOL_VERSION,
+        type: "audio.chunk_meta",
+        seq: 2,
+        session_id: sessionId,
+        sent_at: new Date().toISOString(),
+        payload: {
+          chunk_id: "aud_policy_blocked",
+          chunk_index: 0,
+          stream: "microphone",
+          format: "pcm_s16le",
+          sample_rate_hz: 16000,
+          channels: 1,
+          duration_ms: 100,
+          timestamp_ms: 0,
+          byte_length: 2,
+        },
+      }),
+    );
+    const response = await sendRawAndReceive(ws, Buffer.from([1, 2]), { binary: true });
+
+    expect(response.type).toBe("error");
+    expect(response.payload).toMatchObject({
+      code: "feature_unavailable",
+      recoverable: true,
+    });
+    expect(called).toBe(false);
   });
 
   it("returns an explicit error for unprocessed context updates", async () => {
@@ -2352,6 +2537,7 @@ describe("createRealtimeServer", () => {
         endMs: 1800,
         droppedChunks: 6,
         reason: "local_buffer_full",
+        retentionMode: "7_days",
       },
     ]);
   });

@@ -36,6 +36,11 @@ import {
 import { TranscriptProcessor } from "./transcript-processor.js";
 import type { SessionStore } from "./session-store.js";
 import type { SuggestionSink } from "./suggestion-sink.js";
+import {
+  createDefaultRealtimeWorkspacePolicy,
+  type RealtimeWorkspacePolicy,
+  type WorkspacePolicyResolver,
+} from "./workspace-policy-resolver.js";
 
 export interface TokenValidator {
   validate(token: string): Promise<RealtimeAuthContext | undefined>;
@@ -45,9 +50,6 @@ export interface RealtimeAuthContext {
   actor: Actor;
   workspaceId: string;
   deviceId?: string;
-  policy?: {
-    cloudLlmAllowed?: boolean;
-  };
 }
 
 export interface RealtimeServerOptions {
@@ -57,11 +59,13 @@ export interface RealtimeServerOptions {
   transcriptRetentionMode?: TranscriptRetentionMode;
   suggestionSink?: SuggestionSink;
   sessionStore?: SessionStore;
+  workspacePolicyResolver?: WorkspacePolicyResolver;
   liveSuggestionService?: {
     streamLiveSuggestion(input: LiveSuggestionInput): AsyncIterable<LiveSuggestionEvent>;
   };
   liveSuggestionSourceRetriever?: LiveSuggestionSourceRetriever;
   liveSuggestionExternalCallEnabled?: boolean;
+  sttExternalCallEnabled?: boolean;
   liveSuggestionGuardrails?: LiveSuggestionGuardrailOptions;
   now?: () => number;
 }
@@ -202,11 +206,14 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   const transcriptTimelineSink =
     options.transcriptTimelineSink ?? new InMemoryTranscriptTimelineSink();
   const transcriptRetentionMode = options.transcriptRetentionMode ?? "7_days";
+  const defaultWorkspacePolicy = createDefaultRealtimeWorkspacePolicy(transcriptRetentionMode);
+  const workspacePolicyResolver = options.workspacePolicyResolver;
   const suggestionSink = options.suggestionSink;
   const sessionStore = options.sessionStore;
   const liveSuggestionService = options.liveSuggestionService ?? new LiveSuggestionService();
   const liveSuggestionSourceRetriever = options.liveSuggestionSourceRetriever;
   const liveSuggestionExternalCallEnabled = options.liveSuggestionExternalCallEnabled ?? false;
+  const sttExternalCallEnabled = options.sttExternalCallEnabled ?? false;
   const liveSuggestionGuardrails = resolveLiveSuggestionGuardrails(
     options.liveSuggestionGuardrails,
   );
@@ -229,7 +236,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     let sttSession: SttSession | undefined;
     let authenticated = false;
     let sessionPersisted = false;
-    let cloudLlmAllowed = true;
+    let workspacePolicy: RealtimeWorkspacePolicy = defaultWorkspacePolicy;
 
     const sendJson = (message: Record<string, unknown>) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -416,7 +423,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       const persistenceDecision = evaluateTranscriptTimelinePersistence({
-        retentionMode: transcriptRetentionMode,
+        retentionMode: workspacePolicy.retentionMode,
         timelineRecordKind: "segment",
         workspaceId,
         sessionId,
@@ -430,6 +437,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           workspaceId,
           sessionId,
           event,
+          retentionMode: workspacePolicy.retentionMode,
         });
       } catch {
         sendTranscriptPersistenceError(sessionId);
@@ -449,6 +457,16 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         return;
       }
 
+      const persistenceDecision = evaluateTranscriptTimelinePersistence({
+        retentionMode: workspacePolicy.retentionMode,
+        timelineRecordKind: "suggestion",
+        workspaceId: session.workspaceId,
+        sessionId,
+      });
+      if (persistenceDecision.action === "skip") {
+        return;
+      }
+
       try {
         await suggestionSink.recordSuggestion({
           workspaceId: session.workspaceId,
@@ -456,6 +474,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           actorUserId: session.actor.userId,
           serverSeq: message.seq,
           payload: message.payload,
+          retentionMode: workspacePolicy.retentionMode,
         });
       } catch {
         sendSuggestionPersistenceError(sessionId);
@@ -552,6 +571,16 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
             return;
           }
 
+          if (sttExternalCallEnabled && !workspacePolicy.cloudSttAllowed) {
+            sendError(
+              "feature_unavailable",
+              "Cloud transcription is disabled by workspace policy.",
+              true,
+              session.sessionId,
+            );
+            return;
+          }
+
           try {
             const activeSttSession = await getSttSession(session.sessionId, session.workspaceId);
             const sttResult = await activeSttSession.transcribeChunk({
@@ -624,6 +653,17 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
           return;
         }
 
+        try {
+          workspacePolicy =
+            workspacePolicyResolver === undefined
+              ? defaultWorkspacePolicy
+              : await workspacePolicyResolver.resolve(authContext.workspaceId);
+        } catch {
+          sendError("feature_unavailable", "Workspace policy is temporarily unavailable.", true);
+          ws.close(1013, "policy_unavailable");
+          return;
+        }
+
         const authResult = sessionManager.authenticate(
           connectionId,
           authContext.actor,
@@ -637,7 +677,6 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         }
 
         authenticated = true;
-        cloudLlmAllowed = authContext.policy?.cloudLlmAllowed ?? true;
         transcriptProcessor = new TranscriptProcessor({
           sessionId: authResult.session.sessionId,
           workspaceId: authResult.session.workspaceId,
@@ -653,12 +692,12 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
             connection_id: connectionId,
             workspace_id: authContext.workspaceId,
             policy: {
-              screen_context_allowed: true,
-              cloud_stt_allowed: true,
-              cloud_llm_allowed: cloudLlmAllowed,
-              direct_provider_stt_allowed: false,
-              retention_mode: transcriptRetentionMode,
-              max_local_audio_buffer_ms: 300000,
+              screen_context_allowed: workspacePolicy.screenContextAllowed,
+              cloud_stt_allowed: workspacePolicy.cloudSttAllowed,
+              cloud_llm_allowed: workspacePolicy.cloudLlmAllowed,
+              direct_provider_stt_allowed: workspacePolicy.directProviderSttAllowed,
+              retention_mode: workspacePolicy.retentionMode,
+              max_local_audio_buffer_ms: workspacePolicy.maxLocalAudioBufferMs,
             },
           },
         });
@@ -775,7 +814,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
 
       if (frameResult.type === "audio.gap") {
         const persistenceDecision = evaluateTranscriptTimelinePersistence({
-          retentionMode: transcriptRetentionMode,
+          retentionMode: workspacePolicy.retentionMode,
           timelineRecordKind: "gap",
           workspaceId: session.workspaceId,
           sessionId: session.sessionId,
@@ -793,6 +832,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
             endMs: frameResult.gap.end_ms,
             droppedChunks: frameResult.gap.dropped_chunks,
             reason: frameResult.gap.reason,
+            retentionMode: workspacePolicy.retentionMode,
           });
         } catch {
           sendTranscriptPersistenceError(session.sessionId);
@@ -800,7 +840,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       if (frameResult.type === "json" && frameResult.message.type === "suggestion.request") {
-        if (liveSuggestionExternalCallEnabled && !cloudLlmAllowed) {
+        if (liveSuggestionExternalCallEnabled && !workspacePolicy.cloudLlmAllowed) {
           sendError(
             "feature_unavailable",
             "Cloud live suggestions are disabled by workspace policy.",
@@ -886,6 +926,15 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       }
 
       if (frameResult.type === "json" && frameResult.message.type === "context.update") {
+        if (!workspacePolicy.screenContextAllowed) {
+          sendError(
+            "feature_unavailable",
+            "Screen context is disabled by workspace policy.",
+            true,
+            session.sessionId,
+          );
+          return;
+        }
         sendError(
           "feature_unavailable",
           "Screen context updates are not processed in this milestone.",

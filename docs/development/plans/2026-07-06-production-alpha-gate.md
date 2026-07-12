@@ -123,7 +123,7 @@ Trust-boundary notes:
 
 ### Slice Order (revised 2026-07-08)
 
-The 2026-07-08 project audit re-sequenced the remaining slices by risk retired per unit of work. Alpha.1 is complete and Alpha.2 is partially complete; the remaining order is:
+The 2026-07-08 project audit re-sequenced the remaining slices by risk retired per unit of work. The 2026-07-12 audit subsequently reopened Alpha.1 as partial and inserted the stop-ship security/policy/CI remediation plan before the remaining slices.
 
 1. **Alpha.5a — Real-provider smoke test.** One real end-to-end session (real microphone, Deepgram, OpenAI, Auth0 tenant) before any further product surface. Everything green so far was verified with fakes and synthetic transports; this retires the largest unknown first.
 2. **Alpha.3 — Native microphone stream hardening.** The hardest remaining engineering item; everything else depends on capture being trustworthy for 30+ minute sessions.
@@ -152,7 +152,7 @@ Acceptance criteria:
 
 Goal: replace development-token UX with a production-capable hosted IdP and workspace-selection path.
 
-Status: implemented for the production-alpha gate. The API has a provider-neutral OIDC/JWKS verification boundary and `POST /v1/auth/provider/exchange` route that converts verified hosted provider tokens into short-lived Dokeza API tokens using Dokeza-owned workspace membership state. Local/test development auth remains available only when explicitly enabled. PostgreSQL provider identity mapping, first-workspace provisioning, metadata-only auth telemetry, desktop OS credential-store foundations, hosted PKCE sign-in, secure refresh/session renewal, and admin-managed membership routes exist. Auth0 is selected for production alpha, and the desktop strategy is the Auth0 Native Application Authorization Code with PKCE flow through the OS browser with an exact loopback callback on `127.0.0.1` for alpha. The live-session panel now defaults to hosted authenticated state while development-token controls are behind a developer disclosure.
+Status: partial. The API has a provider-neutral OIDC/JWKS verification boundary and `POST /v1/auth/provider/exchange` route that converts verified hosted provider tokens into short-lived Dokeza API tokens using Dokeza-owned workspace membership state. Local/test development auth remains available only when explicitly enabled. PostgreSQL provider identity mapping, first-workspace provisioning, metadata-only auth telemetry, desktop OS credential-store foundations, hosted PKCE logic, refresh/session renewal, and admin-managed membership routes exist. Auth0 is selected for production alpha. The installed desktop has not yet proven the claimed system-browser, CSP/hosted-endpoint, refresh, and full Auth0 flow, so Alpha.1 remains open until that manual gate passes.
 
 Tasks:
 

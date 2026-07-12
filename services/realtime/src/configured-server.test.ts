@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { parseConfig, type DokezaConfig } from "@dokeza/config";
-import { createConfiguredRealtimeServer } from "./configured-server.js";
+import {
+  createConfiguredRealtimeServer,
+  isExternalLiveSuggestionProvider,
+} from "./configured-server.js";
 
 function requireConfig(result: ReturnType<typeof parseConfig>): DokezaConfig {
   expect(result.ok).toBe(true);
@@ -18,6 +21,12 @@ async function listen(handle: ReturnType<typeof createConfiguredRealtimeServer>)
 }
 
 describe("createConfiguredRealtimeServer", () => {
+  it("treats every network LLM route as an external provider boundary", () => {
+    expect(isExternalLiveSuggestionProvider("deterministic")).toBe(false);
+    expect(isExternalLiveSuggestionProvider("openai")).toBe(true);
+    expect(isExternalLiveSuggestionProvider("openai_chat")).toBe(true);
+  });
+
   it("composes local realtime dependencies without provider credentials", async () => {
     const config = requireConfig(parseConfig({}, "realtime"));
 

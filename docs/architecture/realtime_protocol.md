@@ -203,6 +203,8 @@ The server maps these client reasons to `session.closed` reasons:
 
 ### 6.1 `auth.accepted`
 
+Before sending `auth.accepted`, the realtime service resolves the authenticated workspace's current policy through the workspace-policy repository. PostgreSQL-backed environments read `workspace_policies` inside a workspace-scoped transaction. A missing policy row uses the documented plan defaults; an unavailable, invalid, or ambiguous policy fails closed and the server does not accept the realtime session.
+
 ```json
 {
   "type": "auth.accepted",
@@ -335,6 +337,8 @@ Initial server error codes include:
 - `feature_unavailable`
 - `llm_provider_timeout`
 - `suggestion_rate_limited`
+
+Before opening an external STT stream or submitting an external live-suggestion request, the server checks the resolved `cloud_stt_allowed` or `cloud_llm_allowed` value respectively. These checks apply to every external provider route, including OpenAI-compatible endpoints. Disabled provider paths return recoverable `feature_unavailable` errors while keeping the authenticated session available for permitted capabilities.
 
 `suggestion_rate_limited` is recoverable. The server emits it for a `suggestion.request` that is either faster than the per-session debounce interval (with `retry_after_ms` indicating when the next request may be accepted) or beyond the per-session request cap (no `retry_after_ms`; further manual suggestions are unavailable for the rest of the session). The live session, capture, and transcript flow remain active; error messages exclude prompt content. Server defaults are a 2000 ms debounce and 30 accepted requests per session; invalid configuration falls back to these defaults rather than disabling limits. Accepted requests consume budget even if the provider call later fails, so retry storms cannot multiply provider spend.
 

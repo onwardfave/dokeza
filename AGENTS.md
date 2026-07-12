@@ -49,7 +49,7 @@ Use the project-local skills in `.codex/skills/` when relevant:
 
 - Near-term work follows `docs/development/plans/2026-07-06-production-alpha-gate.md`.
 - Full SRS/MVP and production-alpha completion status is tracked in `docs/development/progress.md`; update it in the same commit when a slice changes what is done, partial, alpha-deferred, or open.
-- Alpha.1 production auth is complete. The active bottleneck order (revised 2026-07-08) is: Alpha.5a real-provider smoke test, Alpha.3 native microphone stream hardening, Alpha.4 usage guardrails, Alpha.7 deployment and signed install, then full Alpha.5 E2E verification, Alpha.6 knowledge upload UI, and remaining Alpha.2 polish.
+- The 2026-07-12 production audit reopened Alpha.1 as partial until installed-build Auth0 QA passes and added the stop-ship remediation plan at `docs/development/plans/2026-07-12-production-readiness-remediation.md`. Complete security/policy/CI remediation before resuming Alpha.3 through Alpha.7 feature work.
 - Hosted identity is implemented through a provider-neutral OIDC/JWKS verification boundary at the API service; Dokeza-owned workspace membership remains authoritative.
 
 ## Hard Rules

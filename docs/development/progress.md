@@ -357,6 +357,8 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Roadmap references alpha gate as next hardening sequence
 
 ### Alpha.1 — Production Auth and Onboarding
+
+Status: **Partial.** Server-side hosted identity, membership, and secure-storage foundations exist, but installed-build Auth0/system-browser/CSP/hosted-endpoint QA remains open per the 2026-07-12 remediation plan.
 - [x] Provider-neutral OIDC/JWKS verification boundary
 - [x] `POST /v1/auth/provider/exchange` route
 - [x] Development-only issuer (fail-closed outside local/test)
@@ -396,6 +398,16 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] Provider timeout/rate-limit → safe degraded states
 - [ ] Metadata-only telemetry (latency, token counts, model, status)
 - [ ] Partial: debounce, rate-limit, and redaction tests exist; budget enforcement tests remain
+
+### Alpha.Security — Production Readiness Remediation (added 2026-07-12)
+
+- [x] Dependency audit remediated and PostgreSQL CI commands corrected locally; remote CI at the current head remains pending push/PR.
+- [x] Realtime resolves server-side workspace policy before `auth.accepted`.
+- [x] Cloud STT and all external LLM routes honor workspace policy before provider submission.
+- [x] Transcript, gap, and suggestion persistence honor the resolved connection retention policy.
+- [ ] Restricted PostgreSQL application role and adversarial RLS verification.
+- [ ] Membership/delete/document-permission mutation hardening and audit events.
+- [ ] Installed-build hosted-auth/CSP/hosted-endpoint verification.
 
 ### Alpha.5a — Real-Provider Smoke Test (pulled forward, next slice)
 - [ ] Partial: automated provider-boundary harness (`services/realtime/scripts/alpha5a-provider-smoke.ts`) run 2026-07-10 (see `qa/2026-07-10-alpha5a-smoke.md`). Deepgram connect/auth/framing proven; live-suggestion path proven against NVIDIA (`openai_chat`) in a second run; OpenAI-provider suggestion/embeddings still blocked by an unfunded key (`insufficient_quota`); Auth0 sign-in and real-mic desktop capture still manual/open.

@@ -4,7 +4,7 @@ import { createTelemetryEvent, type TelemetryEvent } from "@dokeza/telemetry";
 type AuthAcceptedMessage = Extract<RealtimeJsonMessage, { type: "auth.accepted" }>;
 
 export type TranscriptRetentionMode = AuthAcceptedMessage["payload"]["policy"]["retention_mode"];
-export type TranscriptTimelineRecordKind = "segment" | "gap";
+export type TranscriptTimelineRecordKind = "segment" | "gap" | "suggestion";
 export type TranscriptTimelinePersistenceAction = "persist" | "skip";
 export type TranscriptTimelinePersistenceReason =
   | "cloud_retention_allowed"

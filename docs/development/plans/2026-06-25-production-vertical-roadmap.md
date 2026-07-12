@@ -10,6 +10,8 @@ This roadmap is the implementation basis for future feature slices. Each slice m
 
 The next execution gate is the Production Alpha Gate in `docs/development/plans/2026-07-06-production-alpha-gate.md`.
 
+The 2026-07-12 audit added a stop-ship remediation gate in `docs/development/plans/2026-07-12-production-readiness-remediation.md`. Security/policy/CI remediation now precedes the remaining product slices. Alpha.1 is treated as partial until the installed hosted-auth workflow is manually proven.
+
 That gate narrows near-term work to a controlled Windows alpha workflow. Production auth (Alpha.1) is complete and desktop productization (Alpha.2) is partially complete; the remaining slice order was revised by the 2026-07-08 audit to retire risk first:
 
 - a one-time real-provider smoke test (real microphone, Deepgram, OpenAI, Auth0) before further product surface;

@@ -11,21 +11,30 @@ import {
   PgSuggestionSink,
   type SuggestionSink,
 } from "./suggestion-sink.js";
+import {
+  createDefaultPolicyFromConfig,
+  PgWorkspacePolicyResolver,
+  StaticWorkspacePolicyResolver,
+  type WorkspacePolicyResolver,
+} from "./workspace-policy-resolver.js";
 
 export interface RealtimePersistence {
   transcriptTimelineSink: TranscriptTimelineSink;
   suggestionSink: SuggestionSink;
+  workspacePolicyResolver: WorkspacePolicyResolver;
   sessionStore?: SessionStore;
   close(): Promise<void>;
 }
 
 export function createRealtimePersistenceFromConfig(config: DokezaConfig): RealtimePersistence {
   if (config.database.realtimePersistence === "memory") {
+    const defaultPolicy = createDefaultPolicyFromConfig(config);
     return {
       transcriptTimelineSink: new InMemoryTranscriptTimelineSink(),
       suggestionSink: new InMemorySuggestionSink({
         retentionMode: config.retentionDefaults.individual,
       }),
+      workspacePolicyResolver: new StaticWorkspacePolicyResolver(defaultPolicy),
       close: async () => undefined,
     };
   }
@@ -36,6 +45,7 @@ export function createRealtimePersistenceFromConfig(config: DokezaConfig): Realt
 
   const pool = createPool(config.database.url, { max: config.database.poolMax });
   const db = createDatabase(pool);
+  const defaultPolicy = createDefaultPolicyFromConfig(config);
 
   return {
     transcriptTimelineSink: new PgTranscriptTimelineSink({
@@ -46,6 +56,7 @@ export function createRealtimePersistenceFromConfig(config: DokezaConfig): Realt
       db,
       retentionMode: config.retentionDefaults.individual,
     }),
+    workspacePolicyResolver: new PgWorkspacePolicyResolver(db, defaultPolicy),
     sessionStore: new PgSessionStore(db),
     close: async () => {
       await closePool(pool);

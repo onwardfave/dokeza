@@ -6,11 +6,16 @@ import {
   transcriptGaps,
   transcriptSegments,
   withWorkspaceTransaction,
+  workspacePolicies,
 } from "@dokeza/db";
 import { eq } from "drizzle-orm";
 import { PgSessionStore } from "./session-store.js";
 import { PgTranscriptTimelineSink } from "./pg-transcript-timeline-sink.js";
 import type { SttTranscriptEvent } from "./stt-adapter.js";
+import {
+  createDefaultRealtimeWorkspacePolicy,
+  PgWorkspacePolicyResolver,
+} from "./workspace-policy-resolver.js";
 
 // Run with:
 // $env:DOKEZA_PG_INTEGRATION='1'; $env:DATABASE_URL='postgres://dokeza:dokeza_local@localhost:5432/dokeza'; pnpm --filter @dokeza/realtime test -- postgres-persistence.integration.test.ts
@@ -113,6 +118,32 @@ describePostgres("PostgreSQL realtime persistence integration", () => {
       select relrowsecurity from pg_class where relname = 'meeting_sessions'
     `;
     expect(rlsRows[0]?.relrowsecurity).toBe(true);
+  });
+
+  it("resolves workspace policy inside the owning workspace scope", async () => {
+    await withWorkspaceTransaction(db, workspaceA, async (tx) => {
+      await tx.insert(workspacePolicies).values({
+        workspaceId: workspaceA,
+        retentionMode: "live_only",
+        cloudSttAllowed: false,
+        cloudLlmAllowed: false,
+        screenContextAllowed: false,
+        directProviderSttAllowed: false,
+        createdBy: userA,
+      });
+    });
+    const defaultPolicy = createDefaultRealtimeWorkspacePolicy("7_days");
+    const resolver = new PgWorkspacePolicyResolver(db, defaultPolicy);
+
+    await expect(resolver.resolve(workspaceA)).resolves.toEqual({
+      screenContextAllowed: false,
+      cloudSttAllowed: false,
+      cloudLlmAllowed: false,
+      directProviderSttAllowed: false,
+      retentionMode: "live_only",
+      maxLocalAudioBufferMs: 300_000,
+    });
+    await expect(resolver.resolve(workspaceB)).resolves.toEqual(defaultPolicy);
   });
 
   it("persists transcript segments and gaps with idempotent writes", async () => {

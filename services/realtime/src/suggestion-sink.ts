@@ -17,6 +17,7 @@ export interface SuggestionWriteInput {
   actorUserId: string;
   serverSeq: number;
   payload: SuggestionCompletePayload;
+  retentionMode?: TranscriptRetentionMode;
 }
 
 export interface SuggestionRecord {
@@ -54,7 +55,7 @@ export class InMemorySuggestionSink implements SuggestionSink {
 
   async recordSuggestion(input: SuggestionWriteInput): Promise<SuggestionWriteResult> {
     const decision = evaluateSuggestionPersistence({
-      retentionMode: this.retentionMode,
+      retentionMode: input.retentionMode ?? this.retentionMode,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
     });
@@ -120,7 +121,7 @@ export class PgSuggestionSink implements SuggestionSink {
 
   async recordSuggestion(input: SuggestionWriteInput): Promise<SuggestionWriteResult> {
     const decision = evaluateSuggestionPersistence({
-      retentionMode: this.retentionMode,
+      retentionMode: input.retentionMode ?? this.retentionMode,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
     });

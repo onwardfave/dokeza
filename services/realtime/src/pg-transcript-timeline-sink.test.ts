@@ -258,6 +258,23 @@ describe("PgTranscriptTimelineSink", () => {
       expect(segmentStore.size).toBe(0);
     });
 
+    it("lets the resolved per-session policy override the configured default", async () => {
+      const sink = new PgTranscriptTimelineSink({
+        db: mockDb,
+        retentionMode: "30_days",
+      });
+
+      const result = await sink.recordTranscriptEvent({
+        workspaceId: "ws_1",
+        sessionId: "sess_1",
+        event: makeFinalEvent("seg_policy_override"),
+        retentionMode: "live_only",
+      });
+
+      expect(result.status).toBe("ignored");
+      expect(segmentStore.size).toBe(0);
+    });
+
     it("includes telemetry events", async () => {
       const sink = new PgTranscriptTimelineSink({
         db: mockDb,

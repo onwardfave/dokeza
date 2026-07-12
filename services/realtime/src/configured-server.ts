@@ -17,6 +17,12 @@ export interface ConfiguredRealtimeServerOptions extends LiveSuggestionServiceFa
   tokenValidator?: RealtimeServerOptions["tokenValidator"];
 }
 
+export function isExternalLiveSuggestionProvider(
+  provider: DokezaConfig["providers"]["llm"]["provider"],
+): boolean {
+  return provider !== "deterministic";
+}
+
 export function createConfiguredRealtimeServer(
   config: DokezaConfig,
   options: ConfiguredRealtimeServerOptions = {},
@@ -35,6 +41,7 @@ export function createConfiguredRealtimeServer(
     sttAdapter: createSttAdapterFromConfig(config),
     transcriptTimelineSink: persistence.transcriptTimelineSink,
     suggestionSink: persistence.suggestionSink,
+    workspacePolicyResolver: persistence.workspacePolicyResolver,
     ...(persistence.sessionStore === undefined ? {} : { sessionStore: persistence.sessionStore }),
     liveSuggestionService: createLiveSuggestionServiceFromConfig(config, {
       ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
@@ -57,7 +64,10 @@ export function createConfiguredRealtimeServer(
         };
       },
     },
-    liveSuggestionExternalCallEnabled: config.providers.llm.provider === "openai",
+    liveSuggestionExternalCallEnabled: isExternalLiveSuggestionProvider(
+      config.providers.llm.provider,
+    ),
+    sttExternalCallEnabled: true,
   });
 
   return {

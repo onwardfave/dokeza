@@ -89,6 +89,7 @@ Initial cloud STT implementation:
 - Raw audio is transient in process memory for provider submission and is not written to logs, telemetry, or durable storage by this adapter.
 - Adapter telemetry includes provider metadata, chunk timing, stream name, event counts, and failure categories only. It must not include transcript text, raw audio bytes, prompts, documents, suggestions, or API keys.
 - Automated tests use a fake provider transport and must not call the live Deepgram service.
+- Before an external STT session opens, realtime resolves the authoritative workspace policy and blocks provider submission when `cloud_stt_allowed` is false. Policy lookup failure blocks realtime authentication rather than defaulting to an external call.
 
 Initial hosted auth implementation:
 
@@ -110,9 +111,11 @@ Initial cloud LLM implementation:
 - An alternative server-side path targets any OpenAI-compatible chat-completions endpoint when `DOKEZA_LLM_PROVIDER=openai_chat`, using `OPENAI_BASE_URL` to select the provider (for example NVIDIA NIM at `https://integrate.api.nvidia.com/v1`, Groq, Together, OpenRouter, or a self-hosted vLLM/Ollama), `OPENAI_MODEL` to select the model, and `OPENAI_API_KEY` for the provider credential. The same bounded transcript, untrusted-source labeling, prompt-versioning, `cloud_llm_allowed` policy gate, and metadata-only telemetry rules apply; only the wire API (`/chat/completions`) and destination host differ. Sending transcript and prompt context to a third-party endpoint is subject to the same workspace policy and provider-DPA expectations as the OpenAI path.
 - LLM provider credentials (OpenAI or any OpenAI-compatible endpoint) are read from server-side configuration only and are never sent to desktop or browser clients.
 - Realtime advertises `cloud_llm_allowed` in `auth.accepted` and blocks external live suggestion calls when the authenticated workspace policy disables cloud LLM.
+- The external-call gate covers both OpenAI Responses and OpenAI-compatible chat endpoints; selecting an alternate base URL does not bypass workspace policy.
 - Local and CI tests use deterministic or fake provider transports and must not call the live OpenAI service.
 - Adapter telemetry includes provider metadata, route, model, prompt template version, latency, token counts, status, and failure category only. It must not include transcript text, prompt text, retrieved chunk text, generated suggestion content, raw audio bytes, document text, or API keys.
 - Completed suggestions from the M2 realtime path are stored as workspace-scoped `suggestions` records when retention policy permits cloud persistence. Persisted suggestions include generated content, prompt/model metadata, request ID, server sequence, and citation metadata for source chunks. `live_only` and `local_only` retention modes keep live suggestions transient and block cloud suggestion persistence.
+- Realtime transcript, gap, and suggestion persistence uses the policy resolved for the authenticated workspace connection rather than a process-wide individual retention default.
 
 Initial knowledge-base implementation:
 

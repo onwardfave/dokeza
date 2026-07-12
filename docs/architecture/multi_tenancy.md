@@ -107,6 +107,8 @@ Prompt assembly must enforce:
 
 The AI orchestrator must not accept arbitrary document chunks from the client. It should only accept source IDs or retrieval requests that are resolved server-side.
 
+Realtime provider and retention policy is resolved server-side after token validation and before `auth.accepted`. The realtime token does not carry mutable workspace policy as authority. PostgreSQL-backed resolution runs in a workspace-scoped transaction, rejects ambiguous or invalid policy state, and supplies the retention mode used for transcript, gap, and suggestion persistence for that connection.
+
 ## 9. Telemetry Isolation
 
 Telemetry should avoid raw customer content by default.

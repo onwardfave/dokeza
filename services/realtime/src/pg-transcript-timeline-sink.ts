@@ -66,7 +66,7 @@ export class PgTranscriptTimelineSink implements TranscriptTimelineSink {
 
     // Check retention policy before writing.
     const decision = evaluateTranscriptTimelinePersistence({
-      retentionMode: this.retentionMode,
+      retentionMode: input.retentionMode ?? this.retentionMode,
       timelineRecordKind: "segment",
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -176,7 +176,7 @@ export class PgTranscriptTimelineSink implements TranscriptTimelineSink {
   async recordGap(input: TranscriptGapRecordInput): Promise<TranscriptTimelineWriteResult> {
     // Check retention policy before writing.
     const decision = evaluateTranscriptTimelinePersistence({
-      retentionMode: this.retentionMode,
+      retentionMode: input.retentionMode ?? this.retentionMode,
       timelineRecordKind: "gap",
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,

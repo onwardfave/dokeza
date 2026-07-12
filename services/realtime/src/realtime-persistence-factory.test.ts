@@ -5,6 +5,10 @@ import { InMemoryTranscriptTimelineSink } from "./transcript-timeline.js";
 import { PgTranscriptTimelineSink } from "./pg-transcript-timeline-sink.js";
 import { PgSessionStore } from "./session-store.js";
 import { createRealtimePersistenceFromConfig } from "./realtime-persistence-factory.js";
+import {
+  PgWorkspacePolicyResolver,
+  StaticWorkspacePolicyResolver,
+} from "./workspace-policy-resolver.js";
 
 vi.mock("@dokeza/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@dokeza/db")>();
@@ -36,6 +40,7 @@ describe("createRealtimePersistenceFromConfig", () => {
     const persistence = createRealtimePersistenceFromConfig(config);
 
     expect(persistence.transcriptTimelineSink).toBeInstanceOf(InMemoryTranscriptTimelineSink);
+    expect(persistence.workspacePolicyResolver).toBeInstanceOf(StaticWorkspacePolicyResolver);
     expect(persistence.sessionStore).toBeUndefined();
     await persistence.close();
     expect(createPool).not.toHaveBeenCalled();
@@ -61,6 +66,7 @@ describe("createRealtimePersistenceFromConfig", () => {
     expect(createDatabase).toHaveBeenCalledWith({ pool: "postgres" });
     expect(persistence.transcriptTimelineSink).toBeInstanceOf(PgTranscriptTimelineSink);
     expect(persistence.sessionStore).toBeInstanceOf(PgSessionStore);
+    expect(persistence.workspacePolicyResolver).toBeInstanceOf(PgWorkspacePolicyResolver);
 
     await persistence.close();
     expect(closePool).toHaveBeenCalledWith({ pool: "postgres" });

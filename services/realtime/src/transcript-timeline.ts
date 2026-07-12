@@ -1,6 +1,7 @@
 import type { AudioGapMessage } from "@dokeza/contracts";
 import { createTelemetryEvent, type TelemetryEvent } from "@dokeza/telemetry";
 import type { SttTranscriptEvent } from "./stt-adapter.js";
+import type { TranscriptRetentionMode } from "./transcript-retention-policy.js";
 
 export type TranscriptTimelineWriteStatus = "recorded" | "updated" | "ignored";
 
@@ -24,6 +25,7 @@ export interface TranscriptGapRecordInput {
   endMs: number;
   droppedChunks: number;
   reason: AudioGapMessage["payload"]["reason"];
+  retentionMode?: TranscriptRetentionMode;
 }
 
 export type TranscriptGapRecord = TranscriptGapRecordInput;
@@ -32,6 +34,7 @@ export interface TranscriptWriteInput {
   workspaceId: string;
   sessionId: string;
   event: SttTranscriptEvent;
+  retentionMode?: TranscriptRetentionMode;
 }
 
 export interface TranscriptTimelineWriteResult {

@@ -104,6 +104,16 @@ export type {
   TranscriptTimelinePersistenceReason,
   TranscriptTimelineRecordKind,
 } from "./transcript-retention-policy.js";
+export {
+  createDefaultPolicyFromConfig,
+  createDefaultRealtimeWorkspacePolicy,
+  PgWorkspacePolicyResolver,
+  StaticWorkspacePolicyResolver,
+} from "./workspace-policy-resolver.js";
+export type {
+  RealtimeWorkspacePolicy,
+  WorkspacePolicyResolver,
+} from "./workspace-policy-resolver.js";
 
 export { PgSessionStore } from "./session-store.js";
 export type {
