@@ -70,7 +70,7 @@ Primary requirements:
 1. [Done 2026-07-12] Add restricted PostgreSQL application role support and force RLS for tenant tables.
 2. [Done 2026-07-12] Run adversarial unscoped and cross-workspace tests under the restricted role.
 3. [Done 2026-07-12] Add transactional last-owner and owner-role mutation invariants plus metadata-only audit records.
-4. Restrict meeting deletion to owner/admin or the meeting creator, subject to policy.
+4. [Done 2026-07-12] Restrict meeting deletion to a current owner/admin or the meeting creator and emit a transactional metadata-only audit.
 5. Add document permission evaluation before detail, search, retrieval, and citation.
 6. Add audit records for sensitive membership, meeting deletion, document, and policy actions.
 

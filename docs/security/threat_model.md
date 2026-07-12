@@ -28,6 +28,7 @@ Critical assets:
 | --- | --- | --- | --- | --- |
 | Cross-workspace data leak | Information disclosure | Missing workspace filter | Customer data exposure | Authz middleware, RLS, vector namespace isolation, tests |
 | Workspace ownership takeover or lockout | Elevation of privilege / denial of service | Admin promotes an owner, removes an owner, or concurrent mutations remove the final owners | Unauthorized control or permanently ownerless workspace | Owner-only owner-role mutations, transactional membership row locks, last-owner invariant, metadata-only audit records |
+| Unauthorized meeting deletion | Tampering / denial of service | Workspace member deletes another user's meeting using a known ID or stale role claim | Loss of meeting transcript and suggestions | Durable membership revalidation, creator-or-admin/owner rule, RLS transaction, atomic metadata-only audit |
 | Prompt injection through transcript | Tampering | Meeting participant speaks malicious instruction | Model ignores system rules or reveals data | Prompt hardening, input labeling, source-access checks, output validation |
 | Prompt injection through documents | Tampering | Malicious uploaded doc | Retrieval causes unsafe model behavior | Treat retrieved docs as untrusted, delimit sources, block tool instructions from docs |
 | Unauthorized document retrieval | Information disclosure | Permission bug | User sees restricted knowledge | Permission-aware retrieval and revalidation |

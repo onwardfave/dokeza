@@ -25,6 +25,7 @@ import {
 import { createHealthResponse } from "./index.js";
 import {
   createMeetingReviewPersistenceFromConfig,
+  MeetingDeleteForbiddenError,
   type MeetingExportFormat,
   type MeetingReviewPersistence,
   type MeetingReviewRepository,
@@ -1112,7 +1113,12 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
       if (req.method === "DELETE") {
         const meetingRepository = getMeetingRepository(runtime.config);
         void meetingRepository
-          .deleteMeeting(meetingRoute.workspaceId, meetingRoute.meetingId)
+          .deleteMeeting({
+            workspaceId: meetingRoute.workspaceId,
+            meetingId: meetingRoute.meetingId,
+            actorUserId: auth.actor.userId,
+            actorRole: authorization.role ?? "member",
+          })
           .then((body) => {
             if (body === undefined) {
               sendJson(res, 404, { error: "meeting_not_found" });
@@ -1121,7 +1127,13 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
 
             sendJson(res, 200, body);
           })
-          .catch(() => sendJson(res, 503, { error: "service_unavailable" }));
+          .catch((error: unknown) => {
+            if (error instanceof MeetingDeleteForbiddenError) {
+              sendJson(res, 403, { error: "meeting_delete_forbidden" });
+              return;
+            }
+            sendJson(res, 503, { error: "service_unavailable" });
+          });
         return;
       }
 

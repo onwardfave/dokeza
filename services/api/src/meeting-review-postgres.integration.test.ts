@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  auditLogs,
   closePool,
   createDatabase,
   createPool,
@@ -44,6 +45,7 @@ describePostgres("PostgreSQL meeting review repository integration", () => {
     await adminPool`
       insert into workspace_memberships (workspace_id, user_id, role)
       values (${workspaceA}, ${userA}, 'owner'),
+             (${workspaceA}, ${userB}, 'member'),
              (${workspaceB}, ${userB}, 'owner')
       on conflict (workspace_id, user_id) do nothing
     `;
@@ -58,6 +60,7 @@ describePostgres("PostgreSQL meeting review repository integration", () => {
       values
         (${`sess_${suffix}_old`}, ${workspaceA}, ${userA}, 'manual', 'ended', '2026-06-19T00:00:00.000Z', '2026-06-20T00:00:00.000Z'),
         (${`sess_${suffix}_recent`}, ${workspaceA}, ${userA}, 'manual', 'ended', '2026-07-02T00:00:00.000Z', '2026-07-02T00:10:00.000Z'),
+        (${`sess_${suffix}_member`}, ${workspaceA}, ${userB}, 'manual', 'ended', '2026-07-01T00:00:00.000Z', '2026-07-01T00:10:00.000Z'),
         (${`sess_${suffix}_other`}, ${workspaceB}, ${userB}, 'manual', 'ended', '2026-07-02T00:00:00.000Z', '2026-07-02T00:10:00.000Z')
     `;
     await adminPool`
@@ -155,7 +158,32 @@ describePostgres("PostgreSQL meeting review repository integration", () => {
     expect(exported?.content).toContain("recent deployment transcript");
     expect(exported?.content).toContain("Offer the deployment checklist.");
 
-    await expect(repository.deleteMeeting(workspaceA, `sess_${suffix}_recent`)).resolves.toEqual({
+    await expect(
+      repository.deleteMeeting({
+        workspaceId: workspaceA,
+        meetingId: `sess_${suffix}_old`,
+        actorUserId: userB,
+        actorRole: "member",
+      }),
+    ).rejects.toMatchObject({ message: "meeting_delete_forbidden" });
+
+    await expect(
+      repository.deleteMeeting({
+        workspaceId: workspaceA,
+        meetingId: `sess_${suffix}_member`,
+        actorUserId: userB,
+        actorRole: "member",
+      }),
+    ).resolves.toMatchObject({ deleted: true });
+
+    await expect(
+      repository.deleteMeeting({
+        workspaceId: workspaceA,
+        meetingId: `sess_${suffix}_recent`,
+        actorUserId: userA,
+        actorRole: "owner",
+      }),
+    ).resolves.toEqual({
       meeting_id: `sess_${suffix}_recent`,
       workspace_id: workspaceA,
       deleted: true,
@@ -171,6 +199,19 @@ describePostgres("PostgreSQL meeting review repository integration", () => {
         .where(eq(transcriptSegments.meetingSessionId, `sess_${suffix}_recent`)),
     );
     expect(remainingSegments).toHaveLength(0);
+
+    const deleteAudits = await withWorkspaceTransaction(db, workspaceA, (tx) =>
+      tx
+        .select({ actorUserId: auditLogs.actorUserId, targetId: auditLogs.targetId })
+        .from(auditLogs)
+        .where(eq(auditLogs.action, "meeting.deleted")),
+    );
+    expect(deleteAudits).toEqual(
+      expect.arrayContaining([
+        { actorUserId: userA, targetId: `sess_${suffix}_recent` },
+        { actorUserId: userB, targetId: `sess_${suffix}_member` },
+      ]),
+    );
   });
 
   it("cleans up expired meetings using workspace retention mode", async () => {

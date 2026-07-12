@@ -12,11 +12,13 @@ import {
   closePool,
   createDatabase,
   createPool,
+  auditLogs,
   meetingSessions,
   suggestions,
   transcriptGaps,
   transcriptSegments,
   withWorkspaceTransaction,
+  workspaceMemberships,
   workspacePolicies,
   type Database,
 } from "@dokeza/db";
@@ -47,6 +49,20 @@ export interface RetentionCleanupResult {
   deleted_count: number;
 }
 
+export interface MeetingDeleteInput {
+  workspaceId: string;
+  meetingId: string;
+  actorUserId: string;
+  actorRole: "owner" | "admin" | "member";
+}
+
+export class MeetingDeleteForbiddenError extends Error {
+  constructor() {
+    super("meeting_delete_forbidden");
+    this.name = "MeetingDeleteForbiddenError";
+  }
+}
+
 export interface MeetingReviewRepository {
   listMeetings(workspaceId: string, options?: ListMeetingsOptions): Promise<MeetingHistoryResponse>;
   getMeetingDetail(
@@ -58,7 +74,7 @@ export interface MeetingReviewRepository {
     meetingId: string,
     format: MeetingExportFormat,
   ): Promise<MeetingExportResponse | undefined>;
-  deleteMeeting(workspaceId: string, meetingId: string): Promise<MeetingDeleteResponse | undefined>;
+  deleteMeeting(input: MeetingDeleteInput): Promise<MeetingDeleteResponse | undefined>;
   cleanupExpiredMeetings(input: RetentionCleanupInput): Promise<RetentionCleanupResult>;
 }
 
@@ -173,18 +189,27 @@ export class InMemoryMeetingReviewRepository implements MeetingReviewRepository 
     };
   }
 
-  async deleteMeeting(
-    workspaceId: string,
-    meetingId: string,
-  ): Promise<MeetingDeleteResponse | undefined> {
-    const deleted = this.meetings.delete(key(workspaceId, meetingId));
+  async deleteMeeting(input: MeetingDeleteInput): Promise<MeetingDeleteResponse | undefined> {
+    const stored = this.meetings.get(key(input.workspaceId, input.meetingId));
+    if (stored === undefined) {
+      return undefined;
+    }
+    if (
+      input.actorRole !== "owner" &&
+      input.actorRole !== "admin" &&
+      stored.meeting.created_by !== input.actorUserId
+    ) {
+      throw new MeetingDeleteForbiddenError();
+    }
+
+    const deleted = this.meetings.delete(key(input.workspaceId, input.meetingId));
     if (!deleted) {
       return undefined;
     }
 
     return {
-      meeting_id: meetingId,
-      workspace_id: workspaceId,
+      meeting_id: input.meetingId,
+      workspace_id: input.workspaceId,
       deleted: true,
     };
   }
@@ -350,31 +375,60 @@ export class PgMeetingReviewRepository implements MeetingReviewRepository {
     return toExportResponse(workspaceId, meetingId, format, detail);
   }
 
-  async deleteMeeting(
-    workspaceId: string,
-    meetingId: string,
-  ): Promise<MeetingDeleteResponse | undefined> {
-    return withWorkspaceTransaction(this.db, workspaceId, async (tx) => {
-      const existing = await tx
-        .select({ id: meetingSessions.id })
-        .from(meetingSessions)
-        .where(
-          and(eq(meetingSessions.workspaceId, workspaceId), eq(meetingSessions.id, meetingId)),
-        );
+  async deleteMeeting(input: MeetingDeleteInput): Promise<MeetingDeleteResponse | undefined> {
+    return withWorkspaceTransaction(this.db, input.workspaceId, async (tx) => {
+      const [existing, actorMemberships] = await Promise.all([
+        tx
+          .select({ id: meetingSessions.id, createdBy: meetingSessions.createdBy })
+          .from(meetingSessions)
+          .where(
+            and(
+              eq(meetingSessions.workspaceId, input.workspaceId),
+              eq(meetingSessions.id, input.meetingId),
+            ),
+          ),
+        tx
+          .select({ role: workspaceMemberships.role })
+          .from(workspaceMemberships)
+          .where(
+            and(
+              eq(workspaceMemberships.workspaceId, input.workspaceId),
+              eq(workspaceMemberships.userId, input.actorUserId),
+            ),
+          ),
+      ]);
 
       if (existing.length === 0) {
         return undefined;
+      }
+      const actorRole = actorMemberships[0]?.role;
+      if (
+        actorRole !== "owner" &&
+        actorRole !== "admin" &&
+        existing[0]?.createdBy !== input.actorUserId
+      ) {
+        throw new MeetingDeleteForbiddenError();
       }
 
       await tx
         .delete(meetingSessions)
         .where(
-          and(eq(meetingSessions.workspaceId, workspaceId), eq(meetingSessions.id, meetingId)),
+          and(
+            eq(meetingSessions.workspaceId, input.workspaceId),
+            eq(meetingSessions.id, input.meetingId),
+          ),
         );
+      await tx.insert(auditLogs).values({
+        workspaceId: input.workspaceId,
+        actorUserId: input.actorUserId,
+        action: "meeting.deleted",
+        targetType: "meeting_session",
+        targetId: input.meetingId,
+      });
 
       return {
-        meeting_id: meetingId,
-        workspace_id: workspaceId,
+        meeting_id: input.meetingId,
+        workspace_id: input.workspaceId,
         deleted: true,
       };
     });

@@ -296,7 +296,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] Transcript search (API history query + desktop panel)
 - [x] Export to Markdown / JSON / clipboard
 - [x] Delete meeting flow with workspace authorization and repository delete
-- [ ] Add role/admin policy checks and audit to meeting delete
+- [x] Meeting delete revalidates durable role, allows creator or owner/admin only, cascades content, and emits a transactional metadata-only audit record.
 - [x] Retention cleanup repository primitive
 - [ ] Schedule retention cleanup and add audit trail
 
@@ -407,7 +407,8 @@ Status: **Partial.** Server-side hosted identity, membership, and secure-storage
 - [x] Transcript, gap, and suggestion persistence honor the resolved connection retention policy.
 - [x] Restricted `dokeza_app` PostgreSQL role, forced RLS, unique workspace-policy invariant, and adversarial unscoped/cross-workspace verification.
 - [x] Membership owner/last-owner mutation hardening and transactional audit events.
-- [ ] Meeting-delete/document-permission mutation hardening and their audit events.
+- [x] Meeting-delete authorization hardening and transactional audit events.
+- [ ] Document-permission mutation/read hardening and audit events.
 - [ ] Installed-build hosted-auth/CSP/hosted-endpoint verification.
 
 ### Alpha.5a — Real-Provider Smoke Test (pulled forward, next slice)

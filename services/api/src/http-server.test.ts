@@ -902,6 +902,59 @@ describe("API HTTP Server", () => {
     await expect(deleteRepository.getMeetingDetail("ws_1", "sess_delete")).resolves.toBeUndefined();
   });
 
+  it("allows members to delete only meetings they created", async () => {
+    const memberToken = issueApiToken({
+      userId: "user_member",
+      memberships: [{ userId: "user_member", workspaceId: "ws_1", role: "member" }],
+    });
+    const deleteRepository = new InMemoryMeetingReviewRepository([
+      {
+        meeting: {
+          meeting_id: "sess_own",
+          workspace_id: "ws_1",
+          created_by: "user_member",
+          meeting_source: "manual",
+          status: "ended",
+          segment_count: 0,
+          gap_count: 0,
+        },
+      },
+      {
+        meeting: {
+          meeting_id: "sess_other_creator",
+          workspace_id: "ws_1",
+          created_by: "user_other",
+          meeting_source: "manual",
+          status: "ended",
+          segment_count: 0,
+          gap_count: 0,
+        },
+      },
+    ]);
+    handle = createHttpServer({
+      env: defaultEnv,
+      now: () => fixedNow,
+      meetingRepository: deleteRepository,
+    });
+    await new Promise<void>((resolve) => {
+      handle!.server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const port = getPort(handle);
+
+    const forbidden = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings/sess_other_creator`,
+      { method: "DELETE", headers: { Authorization: `Bearer ${memberToken}` } },
+    );
+    expect(forbidden.status).toBe(403);
+    expect(await forbidden.json()).toEqual({ error: "meeting_delete_forbidden" });
+
+    const own = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/meetings/sess_own`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${memberToken}` },
+    });
+    expect(own.status).toBe(200);
+  });
+
   it("uploads, lists, details, and searches knowledge documents for authorized workspace members", async () => {
     const apiToken = issueApiToken({
       userId: "user_1",

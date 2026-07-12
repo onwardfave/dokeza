@@ -27,6 +27,8 @@ Hosted identity metadata is stored separately from customer-owned workspace reso
 
 Workspace admins and owners manage durable memberships through `/v1/workspaces/{workspace_id}/memberships`. These routes require an authenticated Dokeza API token and an `admin` or `owner` role in the target workspace before repository access. Upserts create or update Dokeza-owned user rows and membership rows; deletes remove only the workspace membership row. Provider claims do not bypass these role checks.
 
+Meeting deletion revalidates durable membership inside the workspace-scoped database transaction. Owners and admins may delete any workspace meeting; members may delete only a meeting whose `created_by` matches their Dokeza user ID. A successful manual deletion cascades dependent meeting content and writes a metadata-only audit record atomically.
+
 ## 4. Relational Data Isolation
 
 Baseline:
