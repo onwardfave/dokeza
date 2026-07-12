@@ -417,6 +417,7 @@ describe("parseConfig", () => {
         DOKEZA_REALTIME_PERSISTENCE: "postgres",
         DATABASE_URL: "postgres://dokeza:secret@localhost:5432/dokeza",
         DATABASE_POOL_MAX: "5",
+        DOKEZA_DATABASE_ROLE: "dokeza_app",
       },
       "realtime",
     );
@@ -426,7 +427,33 @@ describe("parseConfig", () => {
       realtimePersistence: "postgres",
       url: "postgres://dokeza:secret@localhost:5432/dokeza",
       poolMax: 5,
+      role: "dokeza_app",
     });
+  });
+
+  it("rejects unsafe PostgreSQL role names without echoing their values", () => {
+    const result = parseConfig({ DOKEZA_DATABASE_ROLE: 'admin"; select secret' }, "api");
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      "DOKEZA_DATABASE_ROLE must be a valid unquoted PostgreSQL role name.",
+    );
+    expect(result.errors.join(" ")).not.toContain("select secret");
+  });
+
+  it("defaults hosted runtime environments to the restricted PostgreSQL role", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_ENV: "preview",
+        DOKEZA_AUTH_SIGNING_SECRET: "configured_secret_with_at_least_32_chars",
+        DOKEZA_REALTIME_PERSISTENCE: "postgres",
+        DATABASE_URL: "postgres://runtime@example.com:5432/dokeza",
+      },
+      "api",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.config?.database.role).toBe("dokeza_app");
   });
 
   it("requires sanitized database configuration for PostgreSQL realtime persistence", () => {

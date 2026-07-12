@@ -405,7 +405,7 @@ Status: **Partial.** Server-side hosted identity, membership, and secure-storage
 - [x] Realtime resolves server-side workspace policy before `auth.accepted`.
 - [x] Cloud STT and all external LLM routes honor workspace policy before provider submission.
 - [x] Transcript, gap, and suggestion persistence honor the resolved connection retention policy.
-- [ ] Restricted PostgreSQL application role and adversarial RLS verification.
+- [x] Restricted `dokeza_app` PostgreSQL role, forced RLS, unique workspace-policy invariant, and adversarial unscoped/cross-workspace verification.
 - [ ] Membership/delete/document-permission mutation hardening and audit events.
 - [ ] Installed-build hosted-auth/CSP/hosted-endpoint verification.
 

@@ -95,6 +95,7 @@ export interface DokezaConfig {
     realtimePersistence: RealtimePersistenceMode;
     url?: string;
     poolMax: number;
+    role?: string;
   };
 }
 
@@ -309,6 +310,20 @@ function readPostgresUrl(value: string | undefined): string | undefined {
   }
 }
 
+function readDatabaseRole(
+  value: string | undefined,
+  environment: EnvironmentName | undefined,
+): string | undefined {
+  const candidate =
+    value?.trim() ||
+    (environment !== undefined && environment !== "local" && environment !== "test"
+      ? "dokeza_app"
+      : undefined);
+  return candidate === undefined || /^[a-z_][a-z0-9_]{0,62}$/.test(candidate)
+    ? candidate
+    : undefined;
+}
+
 function createDeepgramConfig(input: {
   apiKey: string | undefined;
   endpoint: string;
@@ -446,6 +461,7 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   );
   const databaseUrl = readPostgresUrl(env.DATABASE_URL);
   const databasePoolMax = readPositiveInteger(env.DATABASE_POOL_MAX, 10);
+  const databaseRole = readDatabaseRole(env.DOKEZA_DATABASE_ROLE, environment);
 
   if (environment === undefined) {
     errors.push("DOKEZA_ENV must be local, test, preview, staging, or production.");
@@ -626,6 +642,9 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   if (databasePoolMax === undefined) {
     errors.push("DATABASE_POOL_MAX must be a positive integer.");
   }
+  if (env.DOKEZA_DATABASE_ROLE !== undefined && databaseRole === undefined) {
+    errors.push("DOKEZA_DATABASE_ROLE must be a valid unquoted PostgreSQL role name.");
+  }
   if (serviceName.trim().length === 0) {
     errors.push("serviceName is required.");
   }
@@ -765,6 +784,7 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
         realtimePersistence,
         ...(databaseUrl === undefined ? {} : { url: databaseUrl }),
         poolMax: databasePoolMax,
+        ...(databaseRole === undefined ? {} : { role: databaseRole }),
       },
     },
     errors: [],

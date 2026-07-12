@@ -40,6 +40,13 @@ Production data must not be copied to lower environments without explicit approv
 | Observability | OpenTelemetry traces, metrics, logs, crash reports |
 | Billing | External billing provider |
 
+Database credentials are split by duty:
+
+- A deployment-only migration owner applies schema migrations and provisions/grants `dokeza_app`.
+- Runtime services use a login role that may `SET ROLE dokeza_app`, or a login whose privileges are equivalent and no broader.
+- Only a separately approved operations role may have `BYPASSRLS`; it is not available to application containers.
+- Deployment configuration sets `DOKEZA_DATABASE_ROLE=dokeza_app`, and readiness must fail if that role cannot be selected.
+
 ## 5. Deployment Topology
 
 ```mermaid

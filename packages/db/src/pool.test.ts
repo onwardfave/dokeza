@@ -1,5 +1,23 @@
-import { describe, expect, it } from "vitest";
-import { withWorkspaceTransaction, type Database } from "./pool.js";
+import { describe, expect, it, vi } from "vitest";
+import postgres from "postgres";
+import { createPool, withWorkspaceTransaction, type Database } from "./pool.js";
+
+vi.mock("postgres", () => ({
+  default: vi.fn(() => ({ end: vi.fn() })),
+}));
+
+describe("createPool", () => {
+  it("selects the restricted application role at connection startup", () => {
+    createPool("postgres://example.invalid/dokeza", { max: 4, role: "dokeza_app" });
+
+    expect(postgres).toHaveBeenCalledWith("postgres://example.invalid/dokeza", {
+      max: 4,
+      idle_timeout: 30,
+      connect_timeout: 10,
+      connection: { role: "dokeza_app" },
+    });
+  });
+});
 
 describe("withWorkspaceTransaction", () => {
   it("sets the workspace RLS setting before running user work", async () => {

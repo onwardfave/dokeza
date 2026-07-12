@@ -23,34 +23,35 @@ const userA = `user_${suffix}_a`;
 const userB = `user_${suffix}_b`;
 
 describePostgres("PostgreSQL meeting review repository integration", () => {
-  const pool = createPool(databaseUrl, { max: 2 });
-  const db = createDatabase(pool);
+  const adminPool = createPool(databaseUrl, { max: 2 });
+  const appPool = createPool(databaseUrl, { max: 2, role: "dokeza_app" });
+  const db = createDatabase(appPool);
   const repository = new PgMeetingReviewRepository({ db, defaultRetentionMode: "7_days" });
 
   beforeAll(async () => {
-    await pool`
+    await adminPool`
       insert into workspaces (id, name, plan)
       values (${workspaceA}, 'API Review Workspace A', 'individual'),
              (${workspaceB}, 'API Review Workspace B', 'individual')
       on conflict (id) do nothing
     `;
-    await pool`
+    await adminPool`
       insert into users (id, email, display_name)
       values (${userA}, ${`${userA}@example.com`}, 'API Review User A'),
              (${userB}, ${`${userB}@example.com`}, 'API Review User B')
       on conflict (id) do nothing
     `;
-    await pool`
+    await adminPool`
       insert into workspace_memberships (workspace_id, user_id, role)
       values (${workspaceA}, ${userA}, 'owner'),
              (${workspaceB}, ${userB}, 'owner')
       on conflict (workspace_id, user_id) do nothing
     `;
-    await pool`
+    await adminPool`
       insert into workspace_policies (workspace_id, retention_mode, created_by)
       values (${workspaceA}, '7_days', ${userA})
     `;
-    await pool`
+    await adminPool`
       insert into meeting_sessions (
         id, workspace_id, created_by, meeting_source, status, started_at, ended_at
       )
@@ -59,7 +60,7 @@ describePostgres("PostgreSQL meeting review repository integration", () => {
         (${`sess_${suffix}_recent`}, ${workspaceA}, ${userA}, 'manual', 'ended', '2026-07-02T00:00:00.000Z', '2026-07-02T00:10:00.000Z'),
         (${`sess_${suffix}_other`}, ${workspaceB}, ${userB}, 'manual', 'ended', '2026-07-02T00:00:00.000Z', '2026-07-02T00:10:00.000Z')
     `;
-    await pool`
+    await adminPool`
       insert into transcript_segments (
         id, workspace_id, meeting_session_id, speaker, text, start_ms, end_ms, confidence, created_by
       )
@@ -68,14 +69,14 @@ describePostgres("PostgreSQL meeting review repository integration", () => {
         (${`seg_${suffix}_recent`}, ${workspaceA}, ${`sess_${suffix}_recent`}, 'remote', 'recent deployment transcript', 0, 1200, 0.930, ${userA}),
         (${`seg_${suffix}_other`}, ${workspaceB}, ${`sess_${suffix}_other`}, 'remote', 'workspace b pricing transcript', 0, 1200, 0.930, ${userB})
     `;
-    await pool`
+    await adminPool`
       insert into transcript_gaps (
         id, workspace_id, meeting_session_id, stream, start_ms, end_ms, dropped_chunks, reason, created_by
       )
       values
         (${`gap_${suffix}_recent`}, ${workspaceA}, ${`sess_${suffix}_recent`}, 'microphone', 1300, 1500, 2, 'user_paused_capture', ${userA})
     `;
-    await pool`
+    await adminPool`
       insert into suggestions (
         id, workspace_id, meeting_session_id, request_id, kind, content, sources_json, confidence,
         prompt_version, model, server_seq, created_by
@@ -113,8 +114,9 @@ describePostgres("PostgreSQL meeting review repository integration", () => {
   });
 
   afterAll(async () => {
-    await pool`delete from workspaces where id in (${workspaceA}, ${workspaceB})`;
-    await closePool(pool);
+    await adminPool`delete from workspaces where id in (${workspaceA}, ${workspaceB})`;
+    await closePool(appPool);
+    await closePool(adminPool);
   });
 
   it("lists, searches, exports, and deletes workspace-scoped meetings", async () => {

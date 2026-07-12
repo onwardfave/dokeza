@@ -51,5 +51,5 @@ Realtime authentication through workspace-policy resolution, `auth.accepted`, ex
 ## Open Risks
 
 - Policy changes do not yet terminate or reconfigure an already accepted connection; resume resolves a fresh snapshot.
-- The schema still needs a unique workspace-policy invariant and restricted application-role RLS verification.
+- The workspace-policy uniqueness invariant and restricted application-role RLS verification are implemented in migration `0006`; CI must continue running the PostgreSQL suites from a fresh database.
 - A separate cloud-embedding permission should be considered instead of inferring it from retention/provider defaults.

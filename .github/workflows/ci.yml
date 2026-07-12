@@ -87,6 +87,7 @@ jobs:
 
     env:
       DATABASE_URL: postgres://dokeza:dokeza_local@127.0.0.1:5432/dokeza
+      DOKEZA_DATABASE_ROLE: dokeza_app
       DOKEZA_PG_INTEGRATION: "1"
 
     steps:
@@ -124,7 +125,7 @@ jobs:
         run: pnpm --filter @dokeza/realtime exec vitest run src/postgres-persistence.integration.test.ts
 
       - name: API meeting review PostgreSQL integration
-        run: pnpm --filter @dokeza/api exec vitest run src/meeting-review-postgres.integration.test.ts
+        run: pnpm --filter @dokeza/api exec vitest run src/meeting-review-postgres.integration.test.ts src/identity-repository.test.ts
 
       - name: Knowledge PostgreSQL integration
         run: pnpm --filter @dokeza/knowledge exec vitest run src/postgres.integration.test.ts

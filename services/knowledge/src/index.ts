@@ -799,7 +799,10 @@ export function createKnowledgePersistenceFromConfig(
     throw new Error("DATABASE_URL is required for PostgreSQL knowledge persistence.");
   }
 
-  const pool = createPool(config.database.url, { max: config.database.poolMax });
+  const pool = createPool(config.database.url, {
+    max: config.database.poolMax,
+    ...(config.database.role === undefined ? {} : { role: config.database.role }),
+  });
   const db = createDatabase(pool);
 
   return {

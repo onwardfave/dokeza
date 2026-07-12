@@ -53,6 +53,7 @@ describe("createRealtimePersistenceFromConfig", () => {
           DOKEZA_REALTIME_PERSISTENCE: "postgres",
           DATABASE_URL: "postgres://dokeza:secret@localhost:5432/dokeza",
           DATABASE_POOL_MAX: "4",
+          DOKEZA_DATABASE_ROLE: "dokeza_app",
         },
         "realtime",
       ),
@@ -62,6 +63,7 @@ describe("createRealtimePersistenceFromConfig", () => {
 
     expect(createPool).toHaveBeenCalledWith("postgres://dokeza:secret@localhost:5432/dokeza", {
       max: 4,
+      role: "dokeza_app",
     });
     expect(createDatabase).toHaveBeenCalledWith({ pool: "postgres" });
     expect(persistence.transcriptTimelineSink).toBeInstanceOf(PgTranscriptTimelineSink);

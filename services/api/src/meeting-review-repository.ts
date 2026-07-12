@@ -453,7 +453,10 @@ export function createMeetingReviewPersistenceFromConfig(
     throw new Error("DATABASE_URL is required for PostgreSQL meeting review persistence.");
   }
 
-  const pool = createPool(config.database.url, { max: config.database.poolMax });
+  const pool = createPool(config.database.url, {
+    max: config.database.poolMax,
+    ...(config.database.role === undefined ? {} : { role: config.database.role }),
+  });
   const db = createDatabase(pool);
 
   return {

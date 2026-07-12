@@ -46,27 +46,28 @@ const userId = `user_${suffix}`;
 const workspaceId = `ws_${suffix}`;
 
 describePostgres("PostgreSQL identity repository integration", () => {
-  const pool = createPool(databaseUrl, { max: 2 });
-  const db = createDatabase(pool);
+  const adminPool = createPool(databaseUrl, { max: 2 });
+  const appPool = createPool(databaseUrl, { max: 2, role: "dokeza_app" });
+  const db = createDatabase(appPool);
   const repository = new PgIdentityRepository({ db, providerIssuer });
 
   beforeAll(async () => {
-    await pool`
+    await adminPool`
       insert into users (id, email, display_name)
       values (${userId}, ${`${userId}@example.com`}, 'Existing Identity User')
       on conflict (id) do nothing
     `;
-    await pool`
+    await adminPool`
       insert into workspaces (id, name, plan)
       values (${workspaceId}, 'Existing Identity Workspace', 'individual')
       on conflict (id) do nothing
     `;
-    await pool`
+    await adminPool`
       insert into workspace_memberships (workspace_id, user_id, role)
       values (${workspaceId}, ${userId}, 'admin')
       on conflict (workspace_id, user_id) do nothing
     `;
-    await pool`
+    await adminPool`
       insert into user_provider_identities (
         provider_issuer, provider_subject, user_id, email, display_name
       )
@@ -76,10 +77,11 @@ describePostgres("PostgreSQL identity repository integration", () => {
   });
 
   afterAll(async () => {
-    await pool`delete from workspaces where id = ${workspaceId}`;
-    await pool`delete from users where id like ${`user_${suffix}%`} or id = ${userId}`;
-    await pool`delete from users where email like ${`%${suffix}%`}`;
-    await closePool(pool);
+    await adminPool`delete from workspaces where id = ${workspaceId}`;
+    await adminPool`delete from users where id like ${`user_${suffix}%`} or id = ${userId}`;
+    await adminPool`delete from users where email like ${`%${suffix}%`}`;
+    await closePool(appPool);
+    await closePool(adminPool);
   });
 
   it("loads Dokeza-owned memberships for an existing provider identity", async () => {

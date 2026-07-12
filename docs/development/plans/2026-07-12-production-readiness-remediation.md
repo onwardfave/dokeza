@@ -67,8 +67,8 @@ Primary requirements:
 
 ### Slice 2 - Tenant and Mutation Hardening
 
-1. Add restricted PostgreSQL application role support and force or otherwise prove RLS for tenant tables.
-2. Run adversarial cross-workspace tests under the restricted role.
+1. [Done 2026-07-12] Add restricted PostgreSQL application role support and force RLS for tenant tables.
+2. [Done 2026-07-12] Run adversarial unscoped and cross-workspace tests under the restricted role.
 3. Add last-owner and owner-role mutation invariants.
 4. Restrict meeting deletion to owner/admin or the meeting creator, subject to policy.
 5. Add document permission evaluation before detail, search, retrieval, and citation.

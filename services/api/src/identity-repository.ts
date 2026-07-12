@@ -386,7 +386,10 @@ export function createIdentityPersistenceFromConfig(config: DokezaConfig): Ident
     throw new Error("DOKEZA_HOSTED_AUTH_ISSUER is required for PostgreSQL identity persistence.");
   }
 
-  const pool = createPool(config.database.url, { max: config.database.poolMax });
+  const pool = createPool(config.database.url, {
+    max: config.database.poolMax,
+    ...(config.database.role === undefined ? {} : { role: config.database.role }),
+  });
   const db = createDatabase(pool);
 
   return {

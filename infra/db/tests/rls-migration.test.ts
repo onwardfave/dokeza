@@ -18,6 +18,10 @@ const userProviderIdentitiesMigration = readFileSync(
   resolve("migrations/0005_user_provider_identities.sql"),
   "utf8",
 ).toLowerCase();
+const applicationRoleMigration = readFileSync(
+  resolve("migrations/0006_application_role_rls_hardening.sql"),
+  "utf8",
+).toLowerCase();
 
 const highRiskTables = [
   "workspace_policies",
@@ -35,6 +39,24 @@ describe("workspace RLS migration baseline", () => {
   it.each(highRiskTables)("enables RLS for %s", (tableName) => {
     expect(migration).toContain(`alter table ${tableName} enable row level security`);
     expect(migration).toContain(`create policy ${tableName}_workspace_isolation`);
+  });
+
+  it.each(highRiskTables)("forces RLS for normal and owner connections on %s", (tableName) => {
+    expect(applicationRoleMigration).toContain(`alter table ${tableName} force row level security`);
+  });
+
+  it("defines a restricted application role and grants only data-plane privileges", () => {
+    expect(applicationRoleMigration).toContain("create role dokeza_app nologin nosuperuser");
+    expect(applicationRoleMigration).toContain("grant select, insert, update, delete on table");
+    expect(applicationRoleMigration).not.toContain("grant all");
+    expect(applicationRoleMigration).not.toContain("bypassrls");
+  });
+
+  it("allows at most one policy row per workspace", () => {
+    expect(applicationRoleMigration).toContain(
+      "create unique index workspace_policies_workspace_unique_idx",
+    );
+    expect(applicationRoleMigration).toContain("on workspace_policies (workspace_id)");
   });
 
   it.each(highRiskTables)("requires workspace_id on %s", (tableName) => {

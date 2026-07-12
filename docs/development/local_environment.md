@@ -53,7 +53,13 @@ pnpm --filter @dokeza/realtime test -- postgres-persistence.integration.test.ts
 pnpm --filter @dokeza/api test -- meeting-review-postgres.integration.test.ts
 ```
 
-CI runs the same integration suites against a fresh `pgvector/pgvector:pg17` service after applying `infra/db/migrations/*.sql`.
+The integration fixtures use `DATABASE_URL` only for migrations and synthetic setup, then instantiate the repositories as `dokeza_app`. For a locally running PostgreSQL-backed service also set:
+
+```powershell
+$env:DOKEZA_DATABASE_ROLE = "dokeza_app"
+```
+
+Preview, staging, and production default to `dokeza_app`; setting the variable explicitly is recommended in deployment manifests. Never give a running service the migration owner's unrestricted connection. CI runs the same restricted-role integration suites against a fresh `pgvector/pgvector:pg17` service after applying `infra/db/migrations/*.sql`.
 
 ## Local Development Auth
 

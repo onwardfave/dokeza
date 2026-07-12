@@ -23,11 +23,15 @@ export type Database = PostgresJsDatabase<typeof schema>;
  * @param connectionString - PostgreSQL connection string.
  * @param options - Optional pool configuration overrides.
  */
-export function createPool(connectionString: string, options?: { max?: number }): postgres.Sql {
+export function createPool(
+  connectionString: string,
+  options?: { max?: number; role?: string },
+): postgres.Sql {
   return postgres(connectionString, {
     max: options?.max ?? 10,
     idle_timeout: 30,
     connect_timeout: 10,
+    ...(options?.role === undefined ? {} : { connection: { role: options.role } }),
   });
 }
 

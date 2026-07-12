@@ -16,8 +16,9 @@ const userA = `user_${suffix}_a`;
 const userB = `user_${suffix}_b`;
 
 describePostgres("PostgreSQL knowledge repository integration", () => {
-  const pool = createPool(databaseUrl, { max: 2 });
-  const db = createDatabase(pool);
+  const adminPool = createPool(databaseUrl, { max: 2 });
+  const appPool = createPool(databaseUrl, { max: 2, role: "dokeza_app" });
+  const db = createDatabase(appPool);
   const repository = new PgKnowledgeRepository({
     db,
     defaultRetentionMode: "30_days",
@@ -26,19 +27,19 @@ describePostgres("PostgreSQL knowledge repository integration", () => {
   });
 
   beforeAll(async () => {
-    await pool`
+    await adminPool`
       insert into workspaces (id, name, plan)
       values (${workspaceA}, 'Knowledge Workspace A', 'individual'),
              (${workspaceB}, 'Knowledge Workspace B', 'individual')
       on conflict (id) do nothing
     `;
-    await pool`
+    await adminPool`
       insert into users (id, email, display_name)
       values (${userA}, ${`${userA}@example.com`}, 'Knowledge User A'),
              (${userB}, ${`${userB}@example.com`}, 'Knowledge User B')
       on conflict (id) do nothing
     `;
-    await pool`
+    await adminPool`
       insert into workspace_memberships (workspace_id, user_id, role)
       values (${workspaceA}, ${userA}, 'owner'),
              (${workspaceB}, ${userB}, 'owner')
@@ -47,8 +48,9 @@ describePostgres("PostgreSQL knowledge repository integration", () => {
   });
 
   afterAll(async () => {
-    await pool`delete from workspaces where id in (${workspaceA}, ${workspaceB})`;
-    await closePool(pool);
+    await adminPool`delete from workspaces where id in (${workspaceA}, ${workspaceB})`;
+    await closePool(appPool);
+    await closePool(adminPool);
   });
 
   it("uploads, lists, details, and searches documents within one workspace", async () => {
@@ -88,7 +90,7 @@ describePostgres("PostgreSQL knowledge repository integration", () => {
   });
 
   it("fails closed when workspace retention blocks cloud persistence", async () => {
-    await pool`
+    await adminPool`
       insert into workspace_policies (workspace_id, retention_mode, created_by)
       values (${workspaceB}, 'local_only', ${userB})
     `;

@@ -3,6 +3,7 @@ import {
   closePool,
   createDatabase,
   createPool,
+  meetingSessions,
   transcriptGaps,
   transcriptSegments,
   withWorkspaceTransaction,
@@ -45,24 +46,25 @@ function finalEvent(segmentId: string, text = "hello world"): SttTranscriptEvent
 }
 
 describePostgres("PostgreSQL realtime persistence integration", () => {
-  const pool = createPool(databaseUrl, { max: 2 });
-  const db = createDatabase(pool);
+  const adminPool = createPool(databaseUrl, { max: 2 });
+  const appPool = createPool(databaseUrl, { max: 2, role: "dokeza_app" });
+  const db = createDatabase(appPool);
   const sessionStore = new PgSessionStore(db);
 
   beforeAll(async () => {
-    await pool`
+    await adminPool`
       insert into workspaces (id, name, plan)
       values (${workspaceA}, 'Integration Workspace A', 'individual'),
              (${workspaceB}, 'Integration Workspace B', 'individual')
       on conflict (id) do nothing
     `;
-    await pool`
+    await adminPool`
       insert into users (id, email, display_name)
       values (${userA}, ${`${userA}@example.com`}, 'Integration User A'),
              (${userB}, ${`${userB}@example.com`}, 'Integration User B')
       on conflict (id) do nothing
     `;
-    await pool`
+    await adminPool`
       insert into workspace_memberships (workspace_id, user_id, role)
       values (${workspaceA}, ${userA}, 'owner'),
              (${workspaceB}, ${userB}, 'owner')
@@ -71,8 +73,9 @@ describePostgres("PostgreSQL realtime persistence integration", () => {
   });
 
   afterAll(async () => {
-    await pool`delete from workspaces where id in (${workspaceA}, ${workspaceB})`;
-    await closePool(pool);
+    await adminPool`delete from workspaces where id in (${workspaceA}, ${workspaceB})`;
+    await closePool(appPool);
+    await closePool(adminPool);
   });
 
   it("persists and scopes meeting session lifecycle state", async () => {
@@ -94,6 +97,25 @@ describePostgres("PostgreSQL realtime persistence integration", () => {
       connectionId: "conn_b",
     });
 
+    const unscopedRows = await appPool<{ id: string }[]>`
+      select id from meeting_sessions
+      where id in (${sessionA}, ${sessionB})
+    `;
+    expect(unscopedRows).toEqual([]);
+
+    const workspaceARows = await withWorkspaceTransaction(db, workspaceA, async (tx) =>
+      tx.select({ id: meetingSessions.id }).from(meetingSessions),
+    );
+    expect(workspaceARows.map(({ id }) => id)).toContain(sessionA);
+    expect(workspaceARows.map(({ id }) => id)).not.toContain(sessionB);
+
+    await expect(
+      appPool`
+        insert into meeting_sessions (id, workspace_id, created_by, meeting_source, status)
+        values (${`sess_${suffix}_unscoped`}, ${workspaceA}, ${userA}, 'manual', 'created')
+      `,
+    ).rejects.toThrow();
+
     await expect(sessionStore.getById(workspaceA, sessionB)).resolves.toBeUndefined();
 
     const updated = await sessionStore.updateSeqState({
@@ -114,7 +136,7 @@ describePostgres("PostgreSQL realtime persistence integration", () => {
     expect(workspaceASessions.map((session) => session.id)).toContain(sessionA);
     expect(workspaceASessions.map((session) => session.id)).not.toContain(sessionB);
 
-    const rlsRows = await pool<{ relrowsecurity: boolean }[]>`
+    const rlsRows = await adminPool<{ relrowsecurity: boolean }[]>`
       select relrowsecurity from pg_class where relname = 'meeting_sessions'
     `;
     expect(rlsRows[0]?.relrowsecurity).toBe(true);

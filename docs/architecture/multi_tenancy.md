@@ -33,9 +33,11 @@ Baseline:
 
 - PostgreSQL with `workspace_id` on every tenant-owned table.
 - Application authorization middleware required on every request.
-- PostgreSQL row-level security must be enabled for high-risk tenant tables before they contain non-synthetic customer data.
+- PostgreSQL row-level security is enabled and forced on high-risk tenant tables.
+- API, realtime, and knowledge services connect as the restricted `dokeza_app` role. The migration/owner connection string must not be used by a running service.
 - All queries must be scoped by workspace through repository-level APIs.
-- RLS policy bypass is allowed only for documented internal maintenance jobs that run under a dedicated service role and emit audit events where customer data may be affected.
+- Repository methods set `app.current_workspace_id` with `SET LOCAL` inside a transaction. An unscoped application-role query sees no tenant rows and cannot insert tenant rows.
+- RLS policy bypass is allowed only for documented internal maintenance jobs that run under a distinct `BYPASSRLS` operations role and emit audit events where customer data may be affected. `dokeza_app` must never receive `BYPASSRLS`, ownership, or superuser privileges.
 
 High-risk tables:
 
@@ -144,6 +146,8 @@ Internal staff access to customer data must be:
 
 Required tests:
 
+- An unscoped `dokeza_app` connection cannot read or insert tenant rows.
+- A deliberately workspace-unfiltered query inside a workspace-A transaction cannot see workspace-B rows.
 - User from workspace A cannot fetch workspace B meeting.
 - User from workspace A cannot retrieve workspace B document chunks.
 - User without document permission cannot retrieve restricted document chunks.
