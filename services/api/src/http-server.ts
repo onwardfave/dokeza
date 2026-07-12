@@ -1,4 +1,5 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { createHash } from "node:crypto";
 import {
   createDokezaAuthTokenService,
   OidcJwtProviderVerifier,
@@ -7,6 +8,7 @@ import {
 } from "@dokeza/auth";
 import { authorizeWorkspace, type Actor, type WorkspaceRole } from "@dokeza/authz";
 import { parseConfig, type DokezaConfig } from "@dokeza/config";
+import { closePool, createPool } from "@dokeza/db";
 import { createTelemetryEvent, type TelemetryEvent } from "@dokeza/telemetry";
 import {
   validateDevAuthTokenRequest,
@@ -49,6 +51,7 @@ export interface HttpServerOptions {
   identityRepository?: IdentityRepository;
   providerVerifier?: ProviderVerifier;
   telemetrySink?: TelemetrySink;
+  readinessCheck?: (config: DokezaConfig) => Promise<void>;
 }
 
 export interface HttpServerHandle {
@@ -74,6 +77,10 @@ function sendMembershipMutationError(
   error: unknown,
   fallbackStatus: number,
 ): void {
+  if (error instanceof RequestBodyTooLargeError) {
+    sendJson(res, 413, { error: "request_body_too_large" });
+    return;
+  }
   if (error instanceof MembershipMutationError) {
     const status = error.code === "last_workspace_owner" ? 409 : 403;
     sendJson(res, status, { error: error.code });
@@ -184,11 +191,35 @@ function authenticateApiRequest(
   };
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+class RequestBodyTooLargeError extends Error {
+  constructor() {
+    super("request_body_too_large");
+    this.name = "RequestBodyTooLargeError";
+  }
+}
+
+async function readJsonBody(req: IncomingMessage, maxBytes: number): Promise<unknown> {
+  const contentLength = req.headers["content-length"];
+  const declaredLength = Number.parseInt(
+    typeof contentLength === "string" ? contentLength : "",
+    10,
+  );
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    req.resume();
+    throw new RequestBodyTooLargeError();
+  }
+
   const chunks: Buffer[] = [];
+  let totalBytes = 0;
 
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.byteLength;
+    if (totalBytes > maxBytes) {
+      req.resume();
+      throw new RequestBodyTooLargeError();
+    }
+    chunks.push(buffer);
   }
 
   if (chunks.length === 0) {
@@ -201,6 +232,99 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   }
 
   return JSON.parse(text) as unknown;
+}
+
+function sendBodyErrorOrFallback(
+  res: ServerResponse,
+  error: unknown,
+  fallbackStatus: number,
+  fallbackError: string,
+): void {
+  if (error instanceof RequestBodyTooLargeError) {
+    sendJson(res, 413, { error: "request_body_too_large" });
+    return;
+  }
+  sendJson(res, fallbackStatus, { error: fallbackError });
+}
+
+interface RateLimitBucket {
+  windowStartedAtMs: number;
+  count: number;
+}
+
+function requestRateLimitKey(req: IncomingMessage): string {
+  const credential = req.headers.authorization;
+  const identity =
+    typeof credential === "string" && credential.length > 0
+      ? credential
+      : (req.socket.remoteAddress ?? "unknown");
+  return createHash("sha256").update(identity).digest("hex");
+}
+
+function consumeRateLimit(
+  buckets: Map<string, RateLimitBucket>,
+  req: IncomingMessage,
+  nowMs: number,
+  windowMs: number,
+  maxRequests: number,
+): number | undefined {
+  if (buckets.size > 10_000) {
+    for (const [bucketKey, bucket] of buckets) {
+      if (nowMs - bucket.windowStartedAtMs >= windowMs) {
+        buckets.delete(bucketKey);
+      }
+    }
+  }
+  const key = requestRateLimitKey(req);
+  const current = buckets.get(key);
+  if (current === undefined || nowMs - current.windowStartedAtMs >= windowMs) {
+    buckets.set(key, { windowStartedAtMs: nowMs, count: 1 });
+    return undefined;
+  }
+  current.count += 1;
+  if (current.count <= maxRequests) {
+    return undefined;
+  }
+  return Math.max(1, Math.ceil((windowMs - (nowMs - current.windowStartedAtMs)) / 1000));
+}
+
+function applyOriginPolicy(
+  req: IncomingMessage,
+  res: ServerResponse,
+  allowedOrigins: readonly string[],
+): boolean {
+  const origin = req.headers.origin;
+  if (origin === undefined) {
+    return true;
+  }
+  if (typeof origin !== "string" || !allowedOrigins.includes(origin)) {
+    sendJson(res, 403, { error: "origin_not_allowed" });
+    return false;
+  }
+
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Vary", "Origin");
+  return true;
+}
+
+async function defaultReadinessCheck(config: DokezaConfig): Promise<void> {
+  if (config.database.realtimePersistence === "memory") {
+    return;
+  }
+  if (config.database.url === undefined) {
+    throw new Error("database_unconfigured");
+  }
+
+  const pool = createPool(config.database.url, {
+    max: 1,
+    ...(config.database.role === undefined ? {} : { role: config.database.role }),
+  });
+  try {
+    await pool`select 1`;
+  } finally {
+    await closePool(pool);
+  }
 }
 
 function createDevelopmentActor(input: DevAuthTokenRequest): Actor {
@@ -347,6 +471,10 @@ function readMeetingSearchQuery(url: URL): string | undefined {
 }
 
 function sendKnowledgeError(res: ServerResponse, err: unknown): void {
+  if (err instanceof RequestBodyTooLargeError) {
+    sendJson(res, 413, { error: "request_body_too_large" });
+    return;
+  }
   if (err instanceof KnowledgeRepositoryError) {
     sendJson(res, err.code === "invalid_request" ? 400 : 403, { error: err.code });
     return;
@@ -392,6 +520,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
   let managedMeetingPersistence: MeetingReviewPersistence | undefined;
   let managedKnowledgePersistence: KnowledgePersistence | undefined;
   let managedIdentityPersistence: IdentityPersistence | undefined;
+  const rateLimitBuckets = new Map<string, RateLimitBucket>();
 
   function emitAuthTelemetry(
     runtime: { config: DokezaConfig },
@@ -457,6 +586,50 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
       return;
     }
 
+    if (url.pathname === "/ready" || url.pathname === "/ready/") {
+      if (req.method !== "GET") {
+        methodNotAllowed(res);
+        return;
+      }
+      void (options.readinessCheck ?? defaultReadinessCheck)(runtime.config)
+        .then(() =>
+          sendJson(res, 200, {
+            service: "api",
+            status: "ready",
+            environment: runtime.config.environment,
+          }),
+        )
+        .catch(() => sendJson(res, 503, { error: "service_unavailable" }));
+      return;
+    }
+
+    if (url.pathname.startsWith("/v1/")) {
+      if (!applyOriginPolicy(req, res, runtime.config.api.allowedOrigins)) {
+        return;
+      }
+      if (req.method === "OPTIONS") {
+        res.writeHead(204, {
+          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "Authorization, Content-Type",
+          "Access-Control-Max-Age": "600",
+        });
+        res.end();
+        return;
+      }
+      const retryAfterSeconds = consumeRateLimit(
+        rateLimitBuckets,
+        req,
+        now().getTime(),
+        runtime.config.api.rateLimitWindowMs,
+        runtime.config.api.rateLimitMaxRequests,
+      );
+      if (retryAfterSeconds !== undefined) {
+        res.setHeader("Retry-After", String(retryAfterSeconds));
+        sendJson(res, 429, { error: "rate_limited" });
+        return;
+      }
+    }
+
     if (url.pathname === "/v1/dev/auth/token") {
       const startedAtMs = now().getTime();
       if (req.method !== "POST") {
@@ -483,7 +656,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
         return;
       }
 
-      void readJsonBody(req)
+      void readJsonBody(req, runtime.config.api.maxJsonBodyBytes)
         .then((body) => {
           if (!validateDevAuthTokenRequest(body)) {
             emitAuthTelemetry(runtime, {
@@ -522,15 +695,19 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
             development_only: true,
           });
         })
-        .catch(() => {
+        .catch((error: unknown) => {
+          const status = error instanceof RequestBodyTooLargeError ? 413 : 400;
           emitAuthTelemetry(runtime, {
             route: "dev_auth_token",
             method: req.method,
-            status: 400,
+            status,
             startedAtMs,
-            failureCategory: "invalid_request",
+            failureCategory:
+              error instanceof RequestBodyTooLargeError
+                ? "request_body_too_large"
+                : "invalid_request",
           });
-          sendJson(res, 400, { error: "invalid_request" });
+          sendBodyErrorOrFallback(res, error, 400, "invalid_request");
         });
       return;
     }
@@ -562,7 +739,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
         return;
       }
 
-      void readJsonBody(req)
+      void readJsonBody(req, runtime.config.api.maxJsonBodyBytes)
         .then(async (body) => {
           if (!validateProviderAuthExchangeRequest(body)) {
             emitAuthTelemetry(runtime, {
@@ -628,15 +805,19 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
               })),
           });
         })
-        .catch(() => {
+        .catch((error: unknown) => {
+          const status = error instanceof RequestBodyTooLargeError ? 413 : 400;
           emitAuthTelemetry(runtime, {
             route: "provider_exchange",
             method: req.method,
-            status: 400,
+            status,
             startedAtMs,
-            failureCategory: "invalid_request",
+            failureCategory:
+              error instanceof RequestBodyTooLargeError
+                ? "request_body_too_large"
+                : "invalid_request",
           });
-          sendJson(res, 400, { error: "invalid_request" });
+          sendBodyErrorOrFallback(res, error, 400, "invalid_request");
         });
       return;
     }
@@ -762,7 +943,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
         return;
       }
 
-      void readJsonBody(req)
+      void readJsonBody(req, runtime.config.api.maxJsonBodyBytes)
         .then((body) => {
           if (!validateRealtimeTokenRequest(body)) {
             emitAuthTelemetry(runtime, {
@@ -821,17 +1002,21 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
             development_only: auth.developmentOnly,
           });
         })
-        .catch(() => {
+        .catch((error: unknown) => {
+          const status = error instanceof RequestBodyTooLargeError ? 413 : 400;
           emitAuthTelemetry(runtime, {
             route: "realtime_token",
             method: req.method,
-            status: 400,
+            status,
             startedAtMs,
             developmentOnly: auth.developmentOnly,
-            failureCategory: "invalid_request",
+            failureCategory:
+              error instanceof RequestBodyTooLargeError
+                ? "request_body_too_large"
+                : "invalid_request",
             userId: auth.actor.userId,
           });
-          sendJson(res, 400, { error: "invalid_request" });
+          sendBodyErrorOrFallback(res, error, 400, "invalid_request");
         });
       return;
     }
@@ -874,7 +1059,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
         }
 
         if (req.method === "PUT") {
-          void readJsonBody(req)
+          void readJsonBody(req, runtime.config.api.maxJsonBodyBytes)
             .then((body) => {
               if (!validateWorkspaceMembershipUpsertRequest(body)) {
                 sendJson(res, 400, { error: "invalid_request" });
@@ -1003,7 +1188,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
         }
 
         if (req.method === "POST") {
-          void readJsonBody(req)
+          void readJsonBody(req, runtime.config.api.maxJsonBodyBytes)
             .then((body) => {
               if (!validateKnowledgeDocumentUploadRequest(body)) {
                 sendJson(res, 400, { error: "invalid_request" });

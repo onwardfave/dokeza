@@ -61,6 +61,19 @@ $env:DOKEZA_DATABASE_ROLE = "dokeza_app"
 
 Preview, staging, and production default to `dokeza_app`; setting the variable explicitly is recommended in deployment manifests. Never give a running service the migration owner's unrestricted connection. CI runs the same restricted-role integration suites against a fresh `pgvector/pgvector:pg17` service after applying `infra/db/migrations/*.sql`.
 
+## API Perimeter
+
+Local/test API defaults allow the Vite/Tauri development origins and enforce a 1 MiB JSON body limit plus 120 requests per 60 seconds per hashed credential/IP key. Override for local testing with:
+
+```powershell
+$env:DOKEZA_API_ALLOWED_ORIGINS = "http://127.0.0.1:1420,http://tauri.localhost,tauri://localhost"
+$env:DOKEZA_API_MAX_JSON_BODY_BYTES = "1048576"
+$env:DOKEZA_API_RATE_LIMIT_WINDOW_MS = "60000"
+$env:DOKEZA_API_RATE_LIMIT_MAX_REQUESTS = "120"
+```
+
+Staging and production refuse to start without an explicit allowed-origin list. `/health` reports basic service/config health; `/ready` additionally probes the configured PostgreSQL connection under `DOKEZA_DATABASE_ROLE` when PostgreSQL persistence is active.
+
 ## Local Development Auth
 
 Local and test environments enable a development-only auth issuer so the API, realtime service, and desktop can exercise workspace-scoped tokens before a hosted identity provider is selected.

@@ -116,6 +116,10 @@ export const MeetingApiErrorResponseSchema = Type.Object({
     Type.Literal("method_not_allowed"),
     Type.Literal("invalid_request"),
     Type.Literal("service_unavailable"),
+    Type.Literal("meeting_delete_forbidden"),
+    Type.Literal("origin_not_allowed"),
+    Type.Literal("request_body_too_large"),
+    Type.Literal("rate_limited"),
   ]),
 });
 

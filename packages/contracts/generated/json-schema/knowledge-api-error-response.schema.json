@@ -37,6 +37,18 @@
         {
           "const": "service_unavailable",
           "type": "string"
+        },
+        {
+          "const": "origin_not_allowed",
+          "type": "string"
+        },
+        {
+          "const": "request_body_too_large",
+          "type": "string"
+        },
+        {
+          "const": "rate_limited",
+          "type": "string"
         }
       ]
     }

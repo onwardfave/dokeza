@@ -46,6 +46,8 @@ Database credentials are split by duty:
 - Runtime services use a login role that may `SET ROLE dokeza_app`, or a login whose privileges are equivalent and no broader.
 - Only a separately approved operations role may have `BYPASSRLS`; it is not available to application containers.
 - Deployment configuration sets `DOKEZA_DATABASE_ROLE=dokeza_app`, and readiness must fail if that role cannot be selected.
+- Ingress uses `/health` for basic health and `/ready` for traffic readiness. The readiness probe performs `SELECT 1` through the configured restricted runtime role.
+- Application CORS uses an exact `DOKEZA_API_ALLOWED_ORIGINS` allowlist. Edge rate limiting remains required in addition to the bounded in-process backstop.
 
 ## 5. Deployment Topology
 

@@ -147,6 +147,77 @@ describe("API HTTP Server", () => {
     });
   });
 
+  it("reports readiness separately and fails closed when a dependency check fails", async () => {
+    const port = await startServer();
+    const ready = await fetch(`http://127.0.0.1:${port}/ready`);
+    expect(ready.status).toBe(200);
+    expect(await ready.json()).toEqual({ service: "api", status: "ready", environment: "test" });
+
+    await handle?.close();
+    handle = createHttpServer({
+      env: defaultEnv,
+      readinessCheck: async () => {
+        throw new Error("dependency_unavailable");
+      },
+    });
+    await new Promise<void>((resolve) => {
+      handle!.server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const unavailable = await fetch(`http://127.0.0.1:${getPort(handle)}/ready`);
+    expect(unavailable.status).toBe(503);
+    expect(await unavailable.json()).toEqual({ error: "service_unavailable" });
+  });
+
+  it("rejects oversized JSON bodies before parsing or handler execution", async () => {
+    const port = await startServer({
+      ...defaultEnv,
+      DOKEZA_API_MAX_JSON_BODY_BYTES: "64",
+    });
+    const response = await fetch(`http://127.0.0.1:${port}/v1/dev/auth/token`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: "x".repeat(128) }),
+    });
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "request_body_too_large" });
+  });
+
+  it("enforces explicit origins and serves valid preflight requests", async () => {
+    const port = await startServer();
+    const allowed = await fetch(`http://127.0.0.1:${port}/v1/me`, {
+      headers: { Origin: "http://tauri.localhost" },
+    });
+    expect(allowed.status).toBe(401);
+    expect(allowed.headers.get("access-control-allow-origin")).toBe("http://tauri.localhost");
+
+    const blocked = await fetch(`http://127.0.0.1:${port}/v1/me`, {
+      headers: { Origin: "https://evil.example" },
+    });
+    expect(blocked.status).toBe(403);
+    expect(await blocked.json()).toEqual({ error: "origin_not_allowed" });
+
+    const preflight = await fetch(`http://127.0.0.1:${port}/v1/me`, {
+      method: "OPTIONS",
+      headers: { Origin: "tauri://localhost" },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-methods")).toContain("POST");
+  });
+
+  it("rate limits API credentials without retaining raw bearer tokens", async () => {
+    const port = await startServer({
+      ...defaultEnv,
+      DOKEZA_API_RATE_LIMIT_MAX_REQUESTS: "2",
+    });
+
+    expect((await fetch(`http://127.0.0.1:${port}/v1/me`)).status).toBe(401);
+    expect((await fetch(`http://127.0.0.1:${port}/v1/me`)).status).toBe(401);
+    const limited = await fetch(`http://127.0.0.1:${port}/v1/me`);
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    expect(await limited.json()).toEqual({ error: "rate_limited" });
+  });
+
   it("returns 404 for unknown paths", async () => {
     const port = await startServer();
     const response = await fetch(`http://127.0.0.1:${port}/unknown`);

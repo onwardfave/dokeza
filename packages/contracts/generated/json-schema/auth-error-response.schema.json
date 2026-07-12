@@ -33,6 +33,34 @@
         {
           "const": "auth_provider_unavailable",
           "type": "string"
+        },
+        {
+          "const": "membership_actor_not_authorized",
+          "type": "string"
+        },
+        {
+          "const": "membership_owner_required",
+          "type": "string"
+        },
+        {
+          "const": "last_workspace_owner",
+          "type": "string"
+        },
+        {
+          "const": "origin_not_allowed",
+          "type": "string"
+        },
+        {
+          "const": "request_body_too_large",
+          "type": "string"
+        },
+        {
+          "const": "rate_limited",
+          "type": "string"
+        },
+        {
+          "const": "service_unavailable",
+          "type": "string"
         }
       ]
     }

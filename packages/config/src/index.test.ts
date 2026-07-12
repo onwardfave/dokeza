@@ -24,6 +24,17 @@ describe("parseConfig", () => {
       tracesSampleRate: 1,
       contentLoggingAllowed: false,
     });
+    expect(result.config?.api).toEqual({
+      allowedOrigins: [
+        "http://127.0.0.1:1420",
+        "http://localhost:1420",
+        "http://tauri.localhost",
+        "tauri://localhost",
+      ],
+      maxJsonBodyBytes: 1_048_576,
+      rateLimitWindowMs: 60_000,
+      rateLimitMaxRequests: 120,
+    });
     expect(result.config?.providers).toEqual({
       stt: {
         provider: "deepgram",
@@ -439,6 +450,37 @@ describe("parseConfig", () => {
       "DOKEZA_DATABASE_ROLE must be a valid unquoted PostgreSQL role name.",
     );
     expect(result.errors.join(" ")).not.toContain("select secret");
+  });
+
+  it("validates explicit API perimeter configuration", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_API_ALLOWED_ORIGINS: "https://app.example.com,tauri://localhost",
+        DOKEZA_API_MAX_JSON_BODY_BYTES: "2048",
+        DOKEZA_API_RATE_LIMIT_WINDOW_MS: "1000",
+        DOKEZA_API_RATE_LIMIT_MAX_REQUESTS: "5",
+      },
+      "api",
+    );
+    expect(result.config?.api).toEqual({
+      allowedOrigins: ["https://app.example.com", "tauri://localhost"],
+      maxJsonBodyBytes: 2048,
+      rateLimitWindowMs: 1000,
+      rateLimitMaxRequests: 5,
+    });
+
+    const invalid = parseConfig(
+      {
+        DOKEZA_API_ALLOWED_ORIGINS: "https://app.example.com/path",
+        DOKEZA_API_MAX_JSON_BODY_BYTES: "0",
+      },
+      "api",
+    );
+    expect(invalid.ok).toBe(false);
+    expect(invalid.errors).toContain(
+      "DOKEZA_API_ALLOWED_ORIGINS must contain comma-separated http, https, or tauri origins.",
+    );
+    expect(invalid.errors).toContain("DOKEZA_API_MAX_JSON_BODY_BYTES must be a positive integer.");
   });
 
   it("defaults hosted runtime environments to the restricted PostgreSQL role", () => {

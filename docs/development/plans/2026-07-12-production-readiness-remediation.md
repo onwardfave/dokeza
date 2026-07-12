@@ -76,7 +76,7 @@ Primary requirements:
 
 ### Slice 3 - API and Hosted Desktop Boundary
 
-1. Add bounded JSON request bodies, explicit CORS/origin policy, API rate limits, and readiness checks.
+1. [Done 2026-07-12] Add bounded JSON request bodies, explicit origin policy, API rate limits, and restricted-role PostgreSQL readiness checks.
 2. Replace `window.open` hosted sign-in with a supported Tauri system-browser integration.
 3. Generate environment-specific CSP/connect policy for Auth0, HTTPS API, and WSS realtime endpoints.
 4. Add installed-build hosted-auth tests where automatable and preserve human QA steps in the manual TODO ledger.

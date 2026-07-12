@@ -15,6 +15,7 @@ This ledger contains work that cannot be completed safely through repository aut
 ## Hosting and Release
 
 - [ ] Select the initial cloud provider, production region, managed container runtime, and managed PostgreSQL offering.
+- [ ] Confirm the exact production/staging API origins for `DOKEZA_API_ALLOWED_ORIGINS` (installed Tauri origin plus any hosted web origin); wildcard origins are intentionally unsupported.
 - [ ] Provide access to the chosen cloud account and secret manager without placing credentials in the repository.
 - [ ] Provision a Windows code-signing certificate and protected CI access to its material.
 - [ ] Generate a Tauri updater signing key pair and store the private key/password in protected CI secrets.
@@ -23,6 +24,7 @@ This ledger contains work that cannot be completed safely through repository aut
 
 ## Commercial and Operations
 
+- [ ] Confirm API edge/application rate-limit thresholds and whether design partners require per-workspace quotas beyond the current per-credential/IP fixed-window guard.
 - [ ] Set the initial per-meeting provider-cost warning and hard-stop thresholds.
 - [ ] Confirm retention defaults and whether individual users may shorten or extend workspace policy.
 - [ ] Name incident-response, privacy, security-review, and customer-support owners.

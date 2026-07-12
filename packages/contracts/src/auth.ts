@@ -141,6 +141,13 @@ export const AuthErrorResponseSchema = Type.Object({
     Type.Literal("invalid_request"),
     Type.Literal("dev_auth_unavailable"),
     Type.Literal("auth_provider_unavailable"),
+    Type.Literal("membership_actor_not_authorized"),
+    Type.Literal("membership_owner_required"),
+    Type.Literal("last_workspace_owner"),
+    Type.Literal("origin_not_allowed"),
+    Type.Literal("request_body_too_large"),
+    Type.Literal("rate_limited"),
+    Type.Literal("service_unavailable"),
   ]),
 });
 

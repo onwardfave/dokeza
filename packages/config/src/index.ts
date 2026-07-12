@@ -72,6 +72,12 @@ export interface DokezaConfig {
     tracesSampleRate: number;
     contentLoggingAllowed: boolean;
   };
+  api: {
+    allowedOrigins: string[];
+    maxJsonBodyBytes: number;
+    rateLimitWindowMs: number;
+    rateLimitMaxRequests: number;
+  };
   providers: {
     stt: {
       provider: "deepgram";
@@ -324,6 +330,50 @@ function readDatabaseRole(
     : undefined;
 }
 
+function readAllowedOrigins(
+  value: string | undefined,
+  environment: EnvironmentName | undefined,
+): string[] | undefined {
+  if (value === undefined) {
+    if (environment === "local" || environment === "test") {
+      return [
+        "http://127.0.0.1:1420",
+        "http://localhost:1420",
+        "http://tauri.localhost",
+        "tauri://localhost",
+      ];
+    }
+    return environment === "preview" ? [] : undefined;
+  }
+
+  const origins = [
+    ...new Set(
+      value
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ),
+  ];
+  for (const origin of origins) {
+    try {
+      const parsed = new URL(origin);
+      if (
+        !["http:", "https:", "tauri:"].includes(parsed.protocol) ||
+        parsed.username.length > 0 ||
+        parsed.password.length > 0 ||
+        (parsed.pathname !== "/" && parsed.pathname !== "") ||
+        parsed.search.length > 0 ||
+        parsed.hash.length > 0
+      ) {
+        return undefined;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+  return origins;
+}
+
 function createDeepgramConfig(input: {
   apiKey: string | undefined;
   endpoint: string;
@@ -462,6 +512,15 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   const databaseUrl = readPostgresUrl(env.DATABASE_URL);
   const databasePoolMax = readPositiveInteger(env.DATABASE_POOL_MAX, 10);
   const databaseRole = readDatabaseRole(env.DOKEZA_DATABASE_ROLE, environment);
+  const apiAllowedOrigins = readAllowedOrigins(
+    env.DOKEZA_API_ALLOWED_ORIGINS,
+    environment === "local" || environment === "test" || serviceName === "api"
+      ? environment
+      : "preview",
+  );
+  const apiMaxJsonBodyBytes = readPositiveInteger(env.DOKEZA_API_MAX_JSON_BODY_BYTES, 1_048_576);
+  const apiRateLimitWindowMs = readPositiveInteger(env.DOKEZA_API_RATE_LIMIT_WINDOW_MS, 60_000);
+  const apiRateLimitMaxRequests = readPositiveInteger(env.DOKEZA_API_RATE_LIMIT_MAX_REQUESTS, 120);
 
   if (environment === undefined) {
     errors.push("DOKEZA_ENV must be local, test, preview, staging, or production.");
@@ -642,6 +701,22 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   if (databasePoolMax === undefined) {
     errors.push("DATABASE_POOL_MAX must be a positive integer.");
   }
+  if (apiAllowedOrigins === undefined) {
+    errors.push(
+      env.DOKEZA_API_ALLOWED_ORIGINS === undefined
+        ? "DOKEZA_API_ALLOWED_ORIGINS is required in staging and production."
+        : "DOKEZA_API_ALLOWED_ORIGINS must contain comma-separated http, https, or tauri origins.",
+    );
+  }
+  if (apiMaxJsonBodyBytes === undefined) {
+    errors.push("DOKEZA_API_MAX_JSON_BODY_BYTES must be a positive integer.");
+  }
+  if (apiRateLimitWindowMs === undefined) {
+    errors.push("DOKEZA_API_RATE_LIMIT_WINDOW_MS must be a positive integer.");
+  }
+  if (apiRateLimitMaxRequests === undefined) {
+    errors.push("DOKEZA_API_RATE_LIMIT_MAX_REQUESTS must be a positive integer.");
+  }
   if (env.DOKEZA_DATABASE_ROLE !== undefined && databaseRole === undefined) {
     errors.push("DOKEZA_DATABASE_ROLE must be a valid unquoted PostgreSQL role name.");
   }
@@ -692,6 +767,10 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     openAiEmbeddingSendInputType === undefined ||
     realtimePersistence === undefined ||
     databasePoolMax === undefined ||
+    apiAllowedOrigins === undefined ||
+    apiMaxJsonBodyBytes === undefined ||
+    apiRateLimitWindowMs === undefined ||
+    apiRateLimitMaxRequests === undefined ||
     ((llmProvider === "openai" || llmProvider === "openai_chat") &&
       (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
     (embeddingProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
@@ -730,6 +809,12 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
         otlpEndpoint,
         tracesSampleRate,
         contentLoggingAllowed,
+      },
+      api: {
+        allowedOrigins: apiAllowedOrigins,
+        maxJsonBodyBytes: apiMaxJsonBodyBytes,
+        rateLimitWindowMs: apiRateLimitWindowMs,
+        rateLimitMaxRequests: apiRateLimitMaxRequests,
       },
       providers: {
         stt: {

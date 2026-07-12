@@ -410,6 +410,7 @@ Status: **Partial.** Server-side hosted identity, membership, and secure-storage
 - [x] Meeting-delete authorization hardening and transactional audit events.
 - [x] Document permission read hardening across list/detail/keyword/vector retrieval and transactional upload audit events.
 - [ ] Document disable/delete/permission-update mutations, business-group directory, and their audit events.
+- [x] API perimeter: bounded JSON bodies, exact origin allowlist, hashed-key fixed-window throttling, and PostgreSQL-aware `/ready` probe.
 - [ ] Installed-build hosted-auth/CSP/hosted-endpoint verification.
 
 ### Alpha.5a — Real-Provider Smoke Test (pulled forward, next slice)

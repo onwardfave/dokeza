@@ -83,6 +83,8 @@ Loopback callbacks are acceptable for the controlled production alpha only with 
 - If a token expires during an active realtime connection, the session may continue until the server policy requires renewal; reconnect must obtain a fresh token before `resume.request`.
 - If desktop secure token storage is unavailable, desktop continues with in-memory auth for the current run, shows a sanitized storage-unavailable state, and does not write tokens to browser storage or diagnostics.
 - If workspace membership cannot be verified, access fails closed.
+- Browser/WebView requests to `/v1/*` require an exact configured origin. Wildcards are not accepted; non-browser clients without an `Origin` header still require bearer authentication.
+- API request throttling hashes bearer credentials before retaining a fixed-window key; raw bearer tokens are never stored in limiter state or telemetry.
 - If a development API token is presented outside local/test-enabled config, API access fails closed.
 
 Workspace membership administration is Dokeza-owned. Workspace admins and owners can list memberships and manage non-owner roles through workspace-scoped API routes under `/v1/workspaces/{workspace_id}/memberships`; ordinary members are denied before repository access. Only an owner may grant, demote, or remove an owner. The repository locks the workspace membership set and rejects any mutation that would leave zero owners. Successful PostgreSQL mutations emit metadata-only workspace audit records in the same transaction. Hosted IdP claims can identify a user, but they do not grant or mutate workspace membership directly.
