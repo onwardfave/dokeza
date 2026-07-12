@@ -965,8 +965,23 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
         const topK = readTopK(url);
         const searchInput =
           topK === undefined
-            ? { workspaceId: knowledgeRoute.workspaceId, query }
-            : { workspaceId: knowledgeRoute.workspaceId, query, topK };
+            ? {
+                workspaceId: knowledgeRoute.workspaceId,
+                query,
+                access: {
+                  actorUserId: auth.actor.userId,
+                  actorRole: authorization.role ?? "member",
+                },
+              }
+            : {
+                workspaceId: knowledgeRoute.workspaceId,
+                query,
+                topK,
+                access: {
+                  actorUserId: auth.actor.userId,
+                  actorRole: authorization.role ?? "member",
+                },
+              };
 
         void knowledgeRepository
           .search(searchInput)
@@ -978,7 +993,10 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
       if (knowledgeRoute.documentId === undefined) {
         if (req.method === "GET") {
           void knowledgeRepository
-            .listDocuments(knowledgeRoute.workspaceId)
+            .listDocuments(knowledgeRoute.workspaceId, {
+              actorUserId: auth.actor.userId,
+              actorRole: authorization.role ?? "member",
+            })
             .then((body) => sendJson(res, 200, body))
             .catch((err: unknown) => sendKnowledgeError(res, err));
           return;
@@ -1015,7 +1033,10 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
 
       if (req.method === "GET") {
         void knowledgeRepository
-          .getDocumentDetail(knowledgeRoute.workspaceId, knowledgeRoute.documentId)
+          .getDocumentDetail(knowledgeRoute.workspaceId, knowledgeRoute.documentId, {
+            actorUserId: auth.actor.userId,
+            actorRole: authorization.role ?? "member",
+          })
           .then((body) => {
             if (body === undefined) {
               sendJson(res, 404, { error: "document_not_found" });

@@ -1,5 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { closePool, createDatabase, createPool } from "@dokeza/db";
+import {
+  auditLogs,
+  closePool,
+  createDatabase,
+  createPool,
+  withWorkspaceTransaction,
+} from "@dokeza/db";
+import { and, eq } from "drizzle-orm";
 import { PgKnowledgeRepository } from "./index.js";
 
 // Run with:
@@ -42,9 +49,54 @@ describePostgres("PostgreSQL knowledge repository integration", () => {
     await adminPool`
       insert into workspace_memberships (workspace_id, user_id, role)
       values (${workspaceA}, ${userA}, 'owner'),
+             (${workspaceA}, ${userB}, 'member'),
              (${workspaceB}, ${userB}, 'owner')
       on conflict (workspace_id, user_id) do nothing
     `;
+  });
+
+  it("filters restricted document list, detail, and search results by actor access", async () => {
+    const uploaded = await repository.uploadDocument({
+      workspaceId: workspaceA,
+      actorUserId: userA,
+      title: "Restricted Forecast",
+      source: "manual_upload",
+      text: "Confidential pipeline forecast.",
+      permissionTags: ["sales"],
+    });
+    const memberAccess = { actorUserId: userB, actorRole: "member" as const };
+
+    await expect(repository.listDocuments(workspaceA, memberAccess)).resolves.not.toMatchObject({
+      documents: expect.arrayContaining([
+        expect.objectContaining({ document_id: uploaded.document.document_id }),
+      ]),
+    });
+    await expect(
+      repository.getDocumentDetail(workspaceA, uploaded.document.document_id, memberAccess),
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.search({ workspaceId: workspaceA, query: "forecast", access: memberAccess }),
+    ).resolves.toMatchObject({ results: [] });
+
+    await expect(
+      repository.getDocumentDetail(workspaceA, uploaded.document.document_id, {
+        actorUserId: userA,
+        actorRole: "owner",
+      }),
+    ).resolves.toBeDefined();
+
+    const auditRows = await withWorkspaceTransaction(db, workspaceA, (tx) =>
+      tx
+        .select({ actorUserId: auditLogs.actorUserId })
+        .from(auditLogs)
+        .where(
+          and(
+            eq(auditLogs.action, "document.uploaded"),
+            eq(auditLogs.targetId, uploaded.document.document_id),
+          ),
+        ),
+    );
+    expect(auditRows).toEqual([{ actorUserId: userA }]);
   });
 
   afterAll(async () => {
@@ -63,24 +115,27 @@ describePostgres("PostgreSQL knowledge repository integration", () => {
     });
 
     expect(uploaded.document).toMatchObject({
-      document_id: "doc_doc_a",
       workspace_id: workspaceA,
       chunk_count: 1,
     });
+    const documentId = uploaded.document.document_id;
+    const chunkId = uploaded.chunks[0]?.chunk_id;
 
     await expect(repository.listDocuments(workspaceA)).resolves.toMatchObject({
       workspace_id: workspaceA,
-      documents: [{ document_id: "doc_doc_a", title: "Security FAQ" }],
+      documents: expect.arrayContaining([
+        expect.objectContaining({ document_id: documentId, title: "Security FAQ" }),
+      ]),
     });
-    await expect(repository.getDocumentDetail(workspaceA, "doc_doc_a")).resolves.toMatchObject({
-      document: { document_id: "doc_doc_a" },
-      chunks: [{ chunk_id: "chunk_chunk_a", text: "Provider credentials stay server-side." }],
+    await expect(repository.getDocumentDetail(workspaceA, documentId)).resolves.toMatchObject({
+      document: { document_id: documentId },
+      chunks: [{ chunk_id: chunkId, text: "Provider credentials stay server-side." }],
     });
-    await expect(repository.getDocumentDetail(workspaceB, "doc_doc_a")).resolves.toBeUndefined();
+    await expect(repository.getDocumentDetail(workspaceB, documentId)).resolves.toBeUndefined();
     await expect(
       repository.search({ workspaceId: workspaceA, query: "credentials" }),
     ).resolves.toMatchObject({
-      results: [{ document_id: "doc_doc_a", chunk_id: "chunk_chunk_a" }],
+      results: [{ document_id: documentId, chunk_id: chunkId }],
     });
     await expect(
       repository.search({ workspaceId: workspaceB, query: "credentials" }),

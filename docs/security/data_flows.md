@@ -144,6 +144,7 @@ Initial knowledge-base implementation:
 | Realtime service to STT provider | Audio or audio stream | Voice, meeting content | TLS, provider DPA, Dokeza-managed provider credentials, retention settings | Local STT or provider disabled by policy |
 | STT provider to Dokeza | Transcript | Meeting content, PII | TLS, provider retention controls | Local STT |
 | Knowledge source to Dokeza | Documents and metadata | Company confidential data | OAuth scopes, TLS, encrypted storage | Connector disabled; document deletion |
+| API/AI retrieval from PostgreSQL | Query, actor/role context, document/chunk metadata and text | Company confidential data and query intent | Workspace transaction, forced RLS, creator/owner/admin or exact trusted permission-tag evaluation before list/detail/keyword/vector results | Remove/disable document; group-policy management when implemented |
 | Dokeza to embedding provider | Document chunks and search queries | Company confidential data, query intent | TLS, server-side credentials, provider retention controls, metadata-only telemetry, keyword fallback on failure | Local deterministic embeddings or provider disabled |
 | AI orchestrator to LLM provider | Prompt, transcript excerpts, retrieved chunks where available | Meeting content, customer data, company data | TLS, server-side credentials, context minimization, provider settings, metadata-only telemetry | Local LLM, provider disabled by policy, or deterministic local/test provider |
 | Realtime service to PostgreSQL suggestions | Completed suggestion content, source metadata, prompt/model metadata | Generated meeting assistance, customer context | Workspace-scoped rows, RLS, retention gate, deletion cascade with meeting session, metadata-only errors | Live-only or local-only retention keeps suggestions transient |
@@ -155,7 +156,7 @@ Initial knowledge-base implementation:
 - Send only transcript windows needed for the current task.
 - Summarize older meeting context before prompt assembly.
 - Retrieve only top relevant chunks.
-- Revalidate retrieved chunks against permissions.
+- Revalidate every listed, detailed, keyword, and vector-retrieved chunk against current document permissions. An allowed document ID is an additional restriction, never a permission grant.
 - Avoid sending raw screen images to cloud providers unless explicitly enabled.
 - Redact known secrets before cloud model calls where technically feasible.
 - Do not log prompts or transcripts by default.

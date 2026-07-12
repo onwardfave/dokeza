@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { authorizeWorkspace, type Actor } from "@dokeza/authz";
+import { authorizeWorkspace, type Actor, type WorkspaceRole } from "@dokeza/authz";
 import type {
   KnowledgeDocumentChunk,
   KnowledgeDocumentDetailResponse,
@@ -12,6 +12,7 @@ import {
   closePool,
   createDatabase,
   createPool,
+  auditLogs,
   documentChunks,
   documents,
   withWorkspaceTransaction,
@@ -20,7 +21,7 @@ import {
 } from "@dokeza/db";
 import type { DokezaConfig } from "@dokeza/config";
 import { createTelemetryEvent, type TelemetryEvent } from "@dokeza/telemetry";
-import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 
 /**
  * Sink for metadata-only knowledge telemetry. Injected so callers with a
@@ -41,6 +42,7 @@ export type KnowledgeRetentionMode =
 export interface RetrievalRequest {
   workspaceId: string;
   actorUserId: string;
+  actorRole: WorkspaceRole;
   query: string;
   topK: number;
   allowedDocumentIds?: readonly string[];
@@ -60,14 +62,25 @@ export interface SearchKnowledgeInput {
   query: string;
   topK?: number;
   allowedDocumentIds?: readonly string[];
+  access?: KnowledgeAccessContext;
+}
+
+export interface KnowledgeAccessContext {
+  actorUserId: string;
+  actorRole: WorkspaceRole;
+  permissionTags?: readonly string[];
 }
 
 export interface KnowledgeRepository {
   uploadDocument(input: UploadKnowledgeDocumentInput): Promise<KnowledgeDocumentUploadResponse>;
-  listDocuments(workspaceId: string): Promise<KnowledgeDocumentListResponse>;
+  listDocuments(
+    workspaceId: string,
+    access?: KnowledgeAccessContext,
+  ): Promise<KnowledgeDocumentListResponse>;
   getDocumentDetail(
     workspaceId: string,
     documentId: string,
+    access?: KnowledgeAccessContext,
   ): Promise<KnowledgeDocumentDetailResponse | undefined>;
   search(input: SearchKnowledgeInput): Promise<KnowledgeSearchResponse>;
 }
@@ -258,6 +271,7 @@ export function createRetrievalRequest(
   return {
     workspaceId,
     actorUserId: actor.userId,
+    actorRole: authorization.role ?? "member",
     query,
     topK,
     ...(allowedDocumentIds === undefined ? {} : { allowedDocumentIds }),
@@ -404,10 +418,26 @@ export class InMemoryKnowledgeRepository implements KnowledgeRepository {
     return detail;
   }
 
-  async listDocuments(workspaceId: string): Promise<KnowledgeDocumentListResponse> {
+  async listDocuments(
+    workspaceId: string,
+    access?: KnowledgeAccessContext,
+  ): Promise<KnowledgeDocumentListResponse> {
     const documentsForWorkspace = [...this.documentsByKey.values()]
-      .map((stored) => stored.document)
-      .filter((document) => document.workspace_id === workspaceId && document.status !== "deleted")
+      .filter(
+        (stored) =>
+          stored.document.workspace_id === workspaceId && stored.document.status !== "deleted",
+      )
+      .filter((stored) =>
+        stored.chunks.some((chunk) =>
+          canAccessKnowledgeChunk(stored.document.created_by, chunk.permission_tags, access),
+        ),
+      )
+      .map((stored) => ({
+        ...stored.document,
+        chunk_count: stored.chunks.filter((chunk) =>
+          canAccessKnowledgeChunk(stored.document.created_by, chunk.permission_tags, access),
+        ).length,
+      }))
       .sort(compareDocuments);
 
     return { workspace_id: workspaceId, documents: documentsForWorkspace };
@@ -416,16 +446,23 @@ export class InMemoryKnowledgeRepository implements KnowledgeRepository {
   async getDocumentDetail(
     workspaceId: string,
     documentId: string,
+    access?: KnowledgeAccessContext,
   ): Promise<KnowledgeDocumentDetailResponse | undefined> {
     const stored = this.documentsByKey.get(key(workspaceId, documentId));
     if (stored === undefined || stored.document.status === "deleted") {
       return undefined;
     }
 
-    return {
-      document: stored.document,
-      chunks: [...stored.chunks].sort(compareChunks),
-    };
+    const chunks = stored.chunks
+      .filter((chunk) =>
+        canAccessKnowledgeChunk(stored.document.created_by, chunk.permission_tags, access),
+      )
+      .sort(compareChunks);
+    if (chunks.length === 0) {
+      return undefined;
+    }
+
+    return { document: { ...stored.document, chunk_count: chunks.length }, chunks };
   }
 
   async search(input: SearchKnowledgeInput): Promise<KnowledgeSearchResponse> {
@@ -450,17 +487,25 @@ export class InMemoryKnowledgeRepository implements KnowledgeRepository {
           allowedDocumentIds === undefined || allowedDocumentIds.has(stored.document.document_id),
       )
       .flatMap((stored) =>
-        stored.chunks.map((chunk) => ({
-          document_id: stored.document.document_id,
-          title: stored.document.title,
-          source: stored.document.source,
-          chunk_id: chunk.chunk_id,
-          chunk_index: chunk.chunk_index,
-          text: chunk.text,
-          score:
-            scoreChunk(chunk.text, terms) +
-            scoreVector(stored.embeddingsByChunkId.get(chunk.chunk_id), queryVector),
-        })),
+        stored.chunks
+          .filter((chunk) =>
+            canAccessKnowledgeChunk(
+              stored.document.created_by,
+              chunk.permission_tags,
+              input.access,
+            ),
+          )
+          .map((chunk) => ({
+            document_id: stored.document.document_id,
+            title: stored.document.title,
+            source: stored.document.source,
+            chunk_id: chunk.chunk_id,
+            chunk_index: chunk.chunk_index,
+            text: chunk.text,
+            score:
+              scoreChunk(chunk.text, terms) +
+              scoreVector(stored.embeddingsByChunkId.get(chunk.chunk_id), queryVector),
+          })),
       )
       .filter((result) => result.score > 0)
       .sort(compareSearchResults)
@@ -555,6 +600,13 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
           embedding: embeddingsByChunkId.get(row.id) ?? null,
         })),
       );
+      await tx.insert(auditLogs).values({
+        workspaceId: input.workspaceId,
+        actorUserId: input.actorUserId,
+        action: "document.uploaded",
+        targetType: "document",
+        targetId: documentId,
+      });
 
       return {
         document: {
@@ -579,7 +631,10 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
     });
   }
 
-  async listDocuments(workspaceId: string): Promise<KnowledgeDocumentListResponse> {
+  async listDocuments(
+    workspaceId: string,
+    access?: KnowledgeAccessContext,
+  ): Promise<KnowledgeDocumentListResponse> {
     return withWorkspaceTransaction(this.db, workspaceId, async (tx) => {
       const rows = await tx
         .select()
@@ -587,9 +642,20 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
         .where(and(eq(documents.workspaceId, workspaceId), eq(documents.status, "active")))
         .orderBy(desc(documents.createdAt), desc(documents.id));
 
-      const summaries = await Promise.all(
-        rows.map(async (row) => toDocumentSummary(row, await countChunks(tx, workspaceId, row.id))),
-      );
+      const summaries = (
+        await Promise.all(
+          rows.map(async (row) => {
+            const accessibleCount = await countAccessibleChunks(
+              tx,
+              workspaceId,
+              row.id,
+              row.ownerUserId,
+              access,
+            );
+            return accessibleCount === 0 ? undefined : toDocumentSummary(row, accessibleCount);
+          }),
+        )
+      ).filter((summary) => summary !== undefined);
 
       return { workspace_id: workspaceId, documents: summaries };
     });
@@ -598,6 +664,7 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
   async getDocumentDetail(
     workspaceId: string,
     documentId: string,
+    access?: KnowledgeAccessContext,
   ): Promise<KnowledgeDocumentDetailResponse | undefined> {
     return withWorkspaceTransaction(this.db, workspaceId, async (tx) => {
       const rows = await tx
@@ -626,9 +693,16 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
         )
         .orderBy(documentChunks.chunkIndex);
 
+      const accessibleChunks = chunks.filter((chunk) =>
+        canAccessKnowledgeChunk(row.ownerUserId ?? undefined, chunk.permissionTags, access),
+      );
+      if (accessibleChunks.length === 0) {
+        return undefined;
+      }
+
       return {
-        document: toDocumentSummary(row, chunks.length),
-        chunks: chunks.map(toDocumentChunk),
+        document: toDocumentSummary(row, accessibleChunks.length),
+        chunks: accessibleChunks.map(toDocumentChunk),
       };
     });
   }
@@ -656,6 +730,8 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
           chunkId: documentChunks.id,
           chunkIndex: documentChunks.chunkIndex,
           text: documentChunks.text,
+          permissionTags: documentChunks.permissionTags,
+          ownerUserId: documents.ownerUserId,
         })
         .from(documentChunks)
         .innerJoin(
@@ -672,6 +748,7 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
             eq(documents.status, "active"),
             textPredicate,
             createAllowedDocumentPredicate(input.allowedDocumentIds),
+            createKnowledgeAccessPredicate(input.access),
           ),
         );
 
@@ -686,6 +763,8 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
                 chunkId: documentChunks.id,
                 chunkIndex: documentChunks.chunkIndex,
                 text: documentChunks.text,
+                permissionTags: documentChunks.permissionTags,
+                ownerUserId: documents.ownerUserId,
                 distance: sql<number>`${documentChunks.embedding} <=> ${toPgVectorLiteral(queryVector)}::vector`,
               })
               .from(documentChunks)
@@ -703,6 +782,7 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
                   eq(documents.status, "active"),
                   sql`${documentChunks.embedding} is not null`,
                   createAllowedDocumentPredicate(input.allowedDocumentIds),
+                  createKnowledgeAccessPredicate(input.access),
                 ),
               )
               .orderBy(
@@ -712,6 +792,11 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
 
       const mergedResults = new Map<string, KnowledgeSearchResponse["results"][number]>();
       for (const row of keywordRows) {
+        if (
+          !canAccessKnowledgeChunk(row.ownerUserId ?? undefined, row.permissionTags, input.access)
+        ) {
+          continue;
+        }
         mergedResults.set(row.chunkId, {
           document_id: row.documentId,
           title: row.title,
@@ -723,6 +808,11 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
         });
       }
       for (const row of vectorRows) {
+        if (
+          !canAccessKnowledgeChunk(row.ownerUserId ?? undefined, row.permissionTags, input.access)
+        ) {
+          continue;
+        }
         const current = mergedResults.get(row.chunkId);
         const vectorScore = scoreVectorDistance(row.distance);
         if (current === undefined) {
@@ -851,11 +941,40 @@ function normalizePermissionTags(tags: readonly string[] | undefined): string[] 
   return [
     ...new Set(
       (tags ?? [])
-        .map((tag) => tag.trim())
+        .map((tag) => tag.trim().toLowerCase())
         .filter((tag) => tag.length > 0)
         .sort(),
     ),
   ];
+}
+
+function canAccessKnowledgeChunk(
+  documentOwnerUserId: string | undefined,
+  permissionTags: readonly string[],
+  access: KnowledgeAccessContext | undefined,
+): boolean {
+  const normalizedTags = normalizePermissionTags(permissionTags);
+  if (normalizedTags.length === 0) {
+    return true;
+  }
+  if (access === undefined) {
+    return false;
+  }
+  if (access.actorRole === "owner" || access.actorRole === "admin") {
+    return true;
+  }
+  if (documentOwnerUserId === access.actorUserId) {
+    return true;
+  }
+
+  const effectiveTags = new Set(
+    normalizePermissionTags([
+      `user:${access.actorUserId}`,
+      `role:${access.actorRole}`,
+      ...(access.permissionTags ?? []),
+    ]),
+  );
+  return normalizedTags.some((tag) => effectiveTags.has(tag));
 }
 
 function tokenizeQuery(query: string): string[] {
@@ -1043,6 +1162,31 @@ function createAllowedDocumentPredicate(allowedDocumentIds: readonly string[] | 
   return inArray(documents.id, [...allowedDocumentIds]);
 }
 
+function createKnowledgeAccessPredicate(access: KnowledgeAccessContext | undefined) {
+  const untagged = sql`cardinality(${documentChunks.permissionTags}) = 0`;
+  if (access === undefined) {
+    return untagged;
+  }
+  if (access.actorRole === "owner" || access.actorRole === "admin") {
+    return undefined;
+  }
+
+  const effectiveTags = normalizePermissionTags([
+    `user:${access.actorUserId}`,
+    `role:${access.actorRole}`,
+    ...(access.permissionTags ?? []),
+  ]);
+  const effectiveTagArray = sql`array[${sql.join(
+    effectiveTags.map((tag) => sql`${tag}`),
+    sql`, `,
+  )}]::text[]`;
+  return or(
+    untagged,
+    eq(documents.ownerUserId, access.actorUserId),
+    sql`${documentChunks.permissionTags} && ${effectiveTagArray}`,
+  );
+}
+
 async function defaultOpenAiEmbeddingTransport(
   url: string,
   init: {
@@ -1161,14 +1305,22 @@ async function resolveWorkspaceRetentionMode(
   return readRetentionMode(rows[0]?.retentionMode) ?? defaultRetentionMode;
 }
 
-async function countChunks(tx: Database, workspaceId: string, documentId: string): Promise<number> {
+async function countAccessibleChunks(
+  tx: Database,
+  workspaceId: string,
+  documentId: string,
+  documentOwnerUserId: string | null,
+  access: KnowledgeAccessContext | undefined,
+): Promise<number> {
   const rows = await tx
-    .select({ value: count() })
+    .select({ permissionTags: documentChunks.permissionTags })
     .from(documentChunks)
     .where(
       and(eq(documentChunks.workspaceId, workspaceId), eq(documentChunks.documentId, documentId)),
     );
-  return rows[0]?.value ?? 0;
+  return rows.filter((row) =>
+    canAccessKnowledgeChunk(documentOwnerUserId ?? undefined, row.permissionTags, access),
+  ).length;
 }
 
 function toDocumentSummary(

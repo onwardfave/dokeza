@@ -23,6 +23,7 @@ describe("knowledge service boundary", () => {
     expect(createRetrievalRequest(actor, "ws_a", "pricing", 3, ["doc_1"])).toEqual({
       workspaceId: "ws_a",
       actorUserId: "user_1",
+      actorRole: "member",
       query: "pricing",
       topK: 3,
       allowedDocumentIds: ["doc_1"],
@@ -55,6 +56,7 @@ describe("knowledge service boundary", () => {
       text: "Provider credentials stay server-side.\n\nPricing is reviewed each quarter.",
       permissionTags: [" sales ", "sales", ""],
     });
+    const creatorAccess = { actorUserId: "user_1", actorRole: "member" as const };
 
     expect(uploaded.document).toMatchObject({
       document_id: "doc_a",
@@ -73,19 +75,26 @@ describe("knowledge service boundary", () => {
       },
     ]);
 
-    await expect(repository.listDocuments("ws_1")).resolves.toEqual({
+    await expect(repository.listDocuments("ws_1", creatorAccess)).resolves.toEqual({
       workspace_id: "ws_1",
       documents: [uploaded.document],
     });
-    expect(JSON.stringify(await repository.listDocuments("ws_1"))).not.toContain(
+    expect(JSON.stringify(await repository.listDocuments("ws_1", creatorAccess))).not.toContain(
       "Provider credentials",
     );
 
-    await expect(repository.getDocumentDetail("ws_1", "doc_a")).resolves.toEqual(uploaded);
+    await expect(repository.getDocumentDetail("ws_1", "doc_a", creatorAccess)).resolves.toEqual(
+      uploaded,
+    );
     await expect(repository.getDocumentDetail("ws_2", "doc_a")).resolves.toBeUndefined();
 
     await expect(
-      repository.search({ workspaceId: "ws_1", query: "credentials", topK: 3 }),
+      repository.search({
+        workspaceId: "ws_1",
+        query: "credentials",
+        topK: 3,
+        access: creatorAccess,
+      }),
     ).resolves.toMatchObject({
       workspace_id: "ws_1",
       query: "credentials",
@@ -107,6 +116,86 @@ describe("knowledge service boundary", () => {
         results: [],
       },
     );
+  });
+
+  it("fails closed for restricted chunks unless trusted actor tags, ownership, or role allow them", async () => {
+    const repository = new InMemoryKnowledgeRepository({
+      seeds: [
+        {
+          document: {
+            document_id: "doc_sales",
+            workspace_id: "ws_1",
+            title: "Sales Secret",
+            source: "manual_upload",
+            status: "active",
+            chunk_count: 1,
+            created_by: "user_creator",
+          },
+          chunks: [
+            {
+              chunk_id: "chunk_sales",
+              document_id: "doc_sales",
+              chunk_index: 0,
+              text: "Confidential pipeline forecast",
+              permission_tags: ["sales"],
+            },
+          ],
+        },
+        {
+          document: {
+            document_id: "doc_members",
+            workspace_id: "ws_1",
+            title: "Member Guide",
+            source: "manual_upload",
+            status: "active",
+            chunk_count: 1,
+            created_by: "user_creator",
+          },
+          chunks: [
+            {
+              chunk_id: "chunk_members",
+              document_id: "doc_members",
+              chunk_index: 0,
+              text: "Shared onboarding forecast",
+              permission_tags: ["role:member"],
+            },
+          ],
+        },
+      ],
+    });
+    const memberAccess = { actorUserId: "user_other", actorRole: "member" as const };
+
+    await expect(
+      repository.getDocumentDetail("ws_1", "doc_sales", memberAccess),
+    ).resolves.toBeUndefined();
+    await expect(repository.listDocuments("ws_1", memberAccess)).resolves.toMatchObject({
+      documents: [{ document_id: "doc_members" }],
+    });
+    await expect(
+      repository.search({ workspaceId: "ws_1", query: "forecast", access: memberAccess }),
+    ).resolves.toMatchObject({ results: [{ document_id: "doc_members" }] });
+    await expect(
+      repository.search({
+        workspaceId: "ws_1",
+        query: "forecast",
+        access: memberAccess,
+        allowedDocumentIds: ["doc_sales"],
+      }),
+    ).resolves.toMatchObject({ results: [] });
+
+    await expect(
+      repository.getDocumentDetail("ws_1", "doc_sales", {
+        actorUserId: "user_owner",
+        actorRole: "owner",
+      }),
+    ).resolves.toBeDefined();
+    await expect(
+      repository.getDocumentDetail("ws_1", "doc_sales", {
+        actorUserId: "user_sales",
+        actorRole: "member",
+        permissionTags: ["sales"],
+      }),
+    ).resolves.toBeDefined();
   });
 
   it("restricts search to allowed document IDs when provided", async () => {
@@ -198,6 +287,43 @@ describe("knowledge service boundary", () => {
           score: 1,
         },
       ],
+    });
+  });
+
+  it("filters vector-only matches through the same permission policy", async () => {
+    const embeddingProvider = new AxisEmbeddingProvider((input) =>
+      input.text.toLowerCase().includes("renewal") || input.text.toLowerCase().includes("expansion")
+        ? vectorOnAxis(0)
+        : vectorOnAxis(1),
+    );
+    const repository = new InMemoryKnowledgeRepository({
+      embeddingProvider,
+      idGenerator: createSequenceIds("restricted", "restricted_chunk"),
+    });
+    const uploaded = await repository.uploadDocument({
+      workspaceId: "ws_1",
+      actorUserId: "user_creator",
+      title: "Restricted Expansion",
+      source: "manual_upload",
+      text: "Expansion strategy",
+      permissionTags: ["sales"],
+    });
+
+    await expect(
+      repository.search({
+        workspaceId: "ws_1",
+        query: "renewal",
+        access: { actorUserId: "user_other", actorRole: "member" },
+      }),
+    ).resolves.toMatchObject({ results: [] });
+    await expect(
+      repository.search({
+        workspaceId: "ws_1",
+        query: "renewal",
+        access: { actorUserId: "user_creator", actorRole: "member" },
+      }),
+    ).resolves.toMatchObject({
+      results: [{ document_id: uploaded.document.document_id }],
     });
   });
 

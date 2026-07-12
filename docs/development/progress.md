@@ -129,7 +129,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] Desktop/web knowledge upload UI.
 - [ ] Common document parsing for PDF, DOCX, TXT, Markdown, and HTML.
 - [x] Text upload API, deterministic chunking, embeddings, pgvector storage, and hybrid retrieval foundation exist.
-- [ ] Document-level permissions and admin remove/disable controls.
+- [ ] Partial: document permission tags are enforced across list/detail/keyword/vector reads with fail-closed user/role semantics and upload audits; group directory plus admin remove/disable controls remain open.
 - [ ] Reranking and retrieval evaluation dataset.
 - [x] Source metadata and authorized-source filtering foundation exists for manual suggestions.
 - [ ] External knowledge sync from Notion, Google Drive, Confluence, or help centers.
@@ -341,7 +341,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [x] `live_only` / `local_only` block cloud document + embedding persistence
 - [x] Source metadata returned in manual live suggestions
 - [x] Permission-aware retrieval foundation: workspace isolation and explicit allowed-document filter
-- [ ] Document-level permission policy
+- [ ] Partial: repository permission policy is enforced; Dokeza-owned business-group directory and permission-management UI remain open.
 - [ ] Reranking
 - [ ] Desktop / web knowledge upload UI
 - [ ] Retrieval evaluation dataset
@@ -408,7 +408,8 @@ Status: **Partial.** Server-side hosted identity, membership, and secure-storage
 - [x] Restricted `dokeza_app` PostgreSQL role, forced RLS, unique workspace-policy invariant, and adversarial unscoped/cross-workspace verification.
 - [x] Membership owner/last-owner mutation hardening and transactional audit events.
 - [x] Meeting-delete authorization hardening and transactional audit events.
-- [ ] Document-permission mutation/read hardening and audit events.
+- [x] Document permission read hardening across list/detail/keyword/vector retrieval and transactional upload audit events.
+- [ ] Document disable/delete/permission-update mutations, business-group directory, and their audit events.
 - [ ] Installed-build hosted-auth/CSP/hosted-endpoint verification.
 
 ### Alpha.5a — Real-Provider Smoke Test (pulled forward, next slice)

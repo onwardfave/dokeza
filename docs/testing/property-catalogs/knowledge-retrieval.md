@@ -17,6 +17,9 @@ The M3 knowledge foundation spans API workspace authorization, `services/knowled
 - A user cannot list, inspect, or search documents for a workspace they are not authorized to access.
 - Repository search never returns chunks from a workspace other than the input workspace.
 - Search with `allowedDocumentIds` returns only those document IDs.
+- An allowed document ID never grants permission to a chunk the actor cannot otherwise access.
+- Untagged chunks are workspace-visible; restricted chunks require creator, owner/admin, or exact trusted effective-tag access.
+- Documents with zero accessible chunks are absent from list/detail/search and hidden chunks do not affect returned chunk counts.
 - List responses do not include raw document or chunk text.
 - Detail and search responses include content only through authorized workspace-scoped routes.
 - Live suggestions can only cite chunks returned by server-side retrieval for the authenticated session workspace.
@@ -42,6 +45,7 @@ The M3 knowledge foundation spans API workspace authorization, `services/knowled
 - Search matching chunks in one workspace while another workspace has matching content.
 - Search a vector-only match where keyword search misses.
 - Search with an explicit allowed-document filter.
+- Attempt list, detail, keyword search, and vector search as an unmatched member against a restricted document.
 - Request a live suggestion with `include_sources=true` and verify retrieved citations come from the authenticated workspace.
 - Request a live suggestion with retrieval failure and verify transcript-only fallback with no leaked source query or chunk text.
 - Attempt upload under no-storage retention.
@@ -63,6 +67,6 @@ Future production telemetry should include metadata-only counts and latency for 
 
 ## Open Risks
 
-- Document-level permissions are currently represented only by metadata and allowed-document filters; full permission evaluation is a later M3 slice.
+- Public API group/directory membership is not implemented. Business-group tags therefore fail closed; only Dokeza-owned user/role tags and server-supplied trusted tags are evaluable.
 - Search is now hybrid keyword plus embeddings; reranking remains a later slice.
 - Source-grounded live suggestions can use embedding-backed repository results, but reranking and eval-backed quality thresholds remain later slices.

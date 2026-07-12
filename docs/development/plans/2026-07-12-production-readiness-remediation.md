@@ -71,7 +71,7 @@ Primary requirements:
 2. [Done 2026-07-12] Run adversarial unscoped and cross-workspace tests under the restricted role.
 3. [Done 2026-07-12] Add transactional last-owner and owner-role mutation invariants plus metadata-only audit records.
 4. [Done 2026-07-12] Restrict meeting deletion to a current owner/admin or the meeting creator and emit a transactional metadata-only audit.
-5. Add document permission evaluation before detail, search, retrieval, and citation.
+5. [Partial 2026-07-12] Enforce fail-closed document permission tags across list, detail, keyword, and vector retrieval; business-group directory and permission mutations remain open.
 6. Add audit records for sensitive membership, meeting deletion, document, and policy actions.
 
 ### Slice 3 - API and Hosted Desktop Boundary

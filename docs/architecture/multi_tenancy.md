@@ -73,6 +73,14 @@ For early implementation, a shared vector index is acceptable only if:
 - Every result is revalidated against document permissions before prompt assembly.
 - Automated tests cover cross-workspace retrieval attempts.
 
+Production-alpha permission-tag semantics are fail closed:
+
+- Untagged chunks are visible to authorized workspace members.
+- Workspace owners/admins and the document creator may access restricted chunks.
+- Other callers require an exact trusted effective-tag match. The API derives `role:<role>` and `user:<dokeza_user_id>`; arbitrary provider claims are not trusted as document groups.
+- Documents with no accessible chunks are omitted from list responses, return not-found for detail, and contribute no keyword/vector search results. Accessible chunk counts never include hidden chunks.
+- Business-group tags such as `sales` remain inaccessible through the public API until a Dokeza-owned group/directory mapping is implemented; server-side callers may provide trusted evaluated tags.
+
 ## 6. Object Storage Isolation
 
 Object storage keys must include workspace namespace:

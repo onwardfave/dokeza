@@ -60,6 +60,7 @@ FULL
 | Embedding provider | Invalid embedding shape | Adapter response validation failure | Semantic retrieval disabled for affected request | Reject the provider response, skip embedding persistence for upload or fall back to keyword-only search | No source document loss; derived embedding missing until reindex |
 | Retrieval | Timeout | Service timeout | Generic answer or no grounded answer | Fall back to transcript-only; label as not source-grounded | No data loss |
 | Retrieval | Authz failure | Permission check failure | No source answer | Block retrieval; show safe error | No data loss |
+| Knowledge permission | Document has no chunks authorized for actor | Permission-tag evaluation after workspace auth | Restricted document appears absent | Omit from lists and search, return `document_not_found` for detail, and do not disclose title, chunk count, tags, or existence | No data loss |
 | Milestone-gated realtime feature | Feature unavailable | `feature_unavailable` realtime error | Context or suggestions unavailable | Keep session active; return explicit recoverable error without placeholder content | No data loss |
 | Screen capture | Permission revoked | OS permission event | No screen context | Continue without screen context; hide screen-dependent suggestions | Screen context unavailable |
 | Browser extension | Disconnected | Extension heartbeat missing | No structured browser context | Fall back to active window or OCR if allowed | Browser context unavailable |

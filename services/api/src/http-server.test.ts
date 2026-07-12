@@ -1033,6 +1033,64 @@ describe("API HTTP Server", () => {
     });
   });
 
+  it("does not expose restricted knowledge metadata or content to an unmatched member", async () => {
+    const restrictedRepository = new InMemoryKnowledgeRepository({
+      seeds: [
+        {
+          document: {
+            document_id: "doc_restricted_api",
+            workspace_id: "ws_1",
+            title: "Restricted Pipeline",
+            source: "manual_upload",
+            status: "active",
+            chunk_count: 1,
+            created_by: "user_creator",
+          },
+          chunks: [
+            {
+              chunk_id: "chunk_restricted_api",
+              document_id: "doc_restricted_api",
+              chunk_index: 0,
+              text: "Confidential pipeline forecast",
+              permission_tags: ["sales"],
+            },
+          ],
+        },
+      ],
+    });
+    handle = createHttpServer({
+      env: defaultEnv,
+      now: () => fixedNow,
+      meetingRepository,
+      knowledgeRepository: restrictedRepository,
+    });
+    await new Promise<void>((resolve) => {
+      handle!.server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const port = getPort(handle);
+    const memberToken = issueApiToken({
+      userId: "user_other",
+      memberships: [{ userId: "user_other", workspaceId: "ws_1", role: "member" }],
+    });
+
+    const list = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/documents`, {
+      headers: { Authorization: `Bearer ${memberToken}` },
+    });
+    expect(await list.json()).toEqual({ workspace_id: "ws_1", documents: [] });
+
+    const detail = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/documents/doc_restricted_api`,
+      { headers: { Authorization: `Bearer ${memberToken}` } },
+    );
+    expect(detail.status).toBe(404);
+
+    const search = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/knowledge/search?q=forecast`,
+      { headers: { Authorization: `Bearer ${memberToken}` } },
+    );
+    expect(await search.json()).toEqual({ workspace_id: "ws_1", query: "forecast", results: [] });
+  });
+
   it("denies cross-workspace knowledge access before repository reads", async () => {
     const apiToken = issueApiToken({
       userId: "user_1",
