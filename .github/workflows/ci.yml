@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build workspace packages
+        run: pnpm build
+
       - name: Verify generated schemas are current
         run: |
           pnpm generate:schemas
@@ -106,6 +109,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build workspace packages for integration imports
+        run: pnpm build
+
       - name: Apply database migrations
         env:
           PGPASSWORD: dokeza_local
@@ -115,10 +121,13 @@ jobs:
           done
 
       - name: Realtime PostgreSQL integration
-        run: pnpm --filter @dokeza/realtime test -- postgres-persistence.integration.test.ts
+        run: pnpm --filter @dokeza/realtime exec vitest run src/postgres-persistence.integration.test.ts
 
       - name: API meeting review PostgreSQL integration
-        run: pnpm --filter @dokeza/api test -- meeting-review-postgres.integration.test.ts
+        run: pnpm --filter @dokeza/api exec vitest run src/meeting-review-postgres.integration.test.ts
+
+      - name: Knowledge PostgreSQL integration
+        run: pnpm --filter @dokeza/knowledge exec vitest run src/postgres.integration.test.ts
 
   desktop-native:
     name: Desktop native smoke

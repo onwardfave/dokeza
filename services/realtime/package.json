@@ -13,15 +13,15 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@dokeza/ai-orchestrator": "workspace:*",
     "@dokeza/auth": "workspace:*",
     "@dokeza/authz": "workspace:*",
-    "@dokeza/ai-orchestrator": "workspace:*",
     "@dokeza/config": "workspace:*",
     "@dokeza/contracts": "workspace:*",
     "@dokeza/db": "workspace:*",
     "@dokeza/knowledge": "workspace:*",
     "@dokeza/telemetry": "workspace:*",
-    "drizzle-orm": "^0.44.0",
+    "drizzle-orm": "^0.45.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
