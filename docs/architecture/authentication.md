@@ -85,7 +85,7 @@ Loopback callbacks are acceptable for the controlled production alpha only with 
 - If workspace membership cannot be verified, access fails closed.
 - If a development API token is presented outside local/test-enabled config, API access fails closed.
 
-Workspace membership administration is Dokeza-owned. Workspace admins and owners can list, upsert, and remove memberships through workspace-scoped API routes under `/v1/workspaces/{workspace_id}/memberships`; ordinary members are denied before repository access. Hosted IdP claims can identify a user, but they do not grant or mutate workspace membership directly.
+Workspace membership administration is Dokeza-owned. Workspace admins and owners can list memberships and manage non-owner roles through workspace-scoped API routes under `/v1/workspaces/{workspace_id}/memberships`; ordinary members are denied before repository access. Only an owner may grant, demote, or remove an owner. The repository locks the workspace membership set and rejects any mutation that would leave zero owners. Successful PostgreSQL mutations emit metadata-only workspace audit records in the same transaction. Hosted IdP claims can identify a user, but they do not grant or mutate workspace membership directly.
 
 ## 8. Security and Privacy
 

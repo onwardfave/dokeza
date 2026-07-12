@@ -175,9 +175,9 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ### Administration, Billing, and Governance (FR-260 to FR-283, NFR-040 to NFR-065, NFR-110 to NFR-113)
 
-- [x] Durable workspace membership management with owner/admin/member roles.
+- [x] Durable workspace membership management with owner/admin/member roles, owner-only owner mutations, last-owner protection, and metadata-only mutation audit records.
 - [ ] Workspace-level capture and retention policies.
-- [ ] Admin audit logs.
+- [ ] Partial: membership mutation audit records are durable; admin audit query/export UI and remaining policy/delete/document actions are open.
 - [ ] Usage analytics without meeting content.
 - [ ] Free/paid plan model, usage limits, billing, and usage meters.
 - [ ] TLS/at-rest encryption/security review evidence for production environments.
@@ -406,7 +406,8 @@ Status: **Partial.** Server-side hosted identity, membership, and secure-storage
 - [x] Cloud STT and all external LLM routes honor workspace policy before provider submission.
 - [x] Transcript, gap, and suggestion persistence honor the resolved connection retention policy.
 - [x] Restricted `dokeza_app` PostgreSQL role, forced RLS, unique workspace-policy invariant, and adversarial unscoped/cross-workspace verification.
-- [ ] Membership/delete/document-permission mutation hardening and audit events.
+- [x] Membership owner/last-owner mutation hardening and transactional audit events.
+- [ ] Meeting-delete/document-permission mutation hardening and their audit events.
 - [ ] Installed-build hosted-auth/CSP/hosted-endpoint verification.
 
 ### Alpha.5a — Real-Provider Smoke Test (pulled forward, next slice)

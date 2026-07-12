@@ -31,6 +31,7 @@ import {
 } from "./meeting-review-repository.js";
 import {
   createIdentityPersistenceFromConfig,
+  MembershipMutationError,
   type IdentityPersistence,
   type IdentityRepository,
 } from "./identity-repository.js";
@@ -65,6 +66,21 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
     "Content-Length": Buffer.byteLength(json),
   });
   res.end(json);
+}
+
+function sendMembershipMutationError(
+  res: ServerResponse,
+  error: unknown,
+  fallbackStatus: number,
+): void {
+  if (error instanceof MembershipMutationError) {
+    const status = error.code === "last_workspace_owner" ? 409 : 403;
+    sendJson(res, status, { error: error.code });
+    return;
+  }
+  sendJson(res, fallbackStatus, {
+    error: fallbackStatus === 400 ? "invalid_request" : "service_unavailable",
+  });
 }
 
 function statusCategory(status: number): string {
@@ -867,6 +883,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
               return identityRepository
                 .upsertWorkspaceMembership({
                   workspaceId: membershipRoute.workspaceId,
+                  actorUserId: auth.actor.userId,
                   userId: body.user_id,
                   email: body.email,
                   role: body.role,
@@ -886,7 +903,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
                   }),
                 );
             })
-            .catch(() => sendJson(res, 400, { error: "invalid_request" }));
+            .catch((error: unknown) => sendMembershipMutationError(res, error, 400));
           return;
         }
 
@@ -896,7 +913,11 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
 
       if (req.method === "DELETE") {
         void identityRepository
-          .deleteWorkspaceMembership(membershipRoute.workspaceId, membershipRoute.userId)
+          .deleteWorkspaceMembership({
+            workspaceId: membershipRoute.workspaceId,
+            actorUserId: auth.actor.userId,
+            userId: membershipRoute.userId,
+          })
           .then((deleted) =>
             sendJson(res, 200, {
               workspace_id: membershipRoute.workspaceId,
@@ -904,7 +925,7 @@ export function createHttpServer(options: HttpServerOptions = {}): HttpServerHan
               deleted,
             }),
           )
-          .catch(() => sendJson(res, 503, { error: "service_unavailable" }));
+          .catch((error: unknown) => sendMembershipMutationError(res, error, 503));
         return;
       }
 

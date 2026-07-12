@@ -343,6 +343,66 @@ describe("API HTTP Server", () => {
     expect(await response.json()).toEqual({ error: "workspace_access_denied" });
   });
 
+  it("enforces owner-only and last-owner membership boundaries", async () => {
+    const identityRepository = new InMemoryIdentityRepository([
+      {
+        providerSubject: "provider_owner",
+        userId: "user_owner",
+        email: "owner@example.com",
+        displayName: "Owner",
+        memberships: [{ userId: "user_owner", workspaceId: "ws_1", role: "owner" }],
+      },
+      {
+        providerSubject: "provider_admin",
+        userId: "user_admin",
+        email: "admin@example.com",
+        displayName: "Admin",
+        memberships: [{ userId: "user_admin", workspaceId: "ws_1", role: "admin" }],
+      },
+    ]);
+    handle = createHttpServer({
+      env: defaultEnv,
+      now: () => fixedNow,
+      meetingRepository,
+      knowledgeRepository,
+      identityRepository,
+    });
+    await new Promise<void>((resolve) => {
+      handle!.server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const port = getPort(handle);
+    const adminToken = issueApiToken({
+      userId: "user_admin",
+      memberships: [{ userId: "user_admin", workspaceId: "ws_1", role: "admin" }],
+    });
+    const ownerToken = issueApiToken({
+      userId: "user_owner",
+      memberships: [{ userId: "user_owner", workspaceId: "ws_1", role: "owner" }],
+    });
+
+    const promote = await fetch(`http://127.0.0.1:${port}/v1/workspaces/ws_1/memberships`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        user_id: "user_admin",
+        email: "admin@example.com",
+        role: "owner",
+      }),
+    });
+    expect(promote.status).toBe(403);
+    expect(await promote.json()).toEqual({ error: "membership_owner_required" });
+
+    const removeLastOwner = await fetch(
+      `http://127.0.0.1:${port}/v1/workspaces/ws_1/memberships/user_owner`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${ownerToken}` },
+      },
+    );
+    expect(removeLastOwner.status).toBe(409);
+    expect(await removeLastOwner.json()).toEqual({ error: "last_workspace_owner" });
+  });
+
   it("exchanges a hosted provider token for a Dokeza API token and workspace list", async () => {
     const identityRepository = new InMemoryIdentityRepository([
       {

@@ -4,8 +4,10 @@ import {
   closePool,
   createDatabase,
   createPool,
+  auditLogs,
   userProviderIdentities,
   users,
+  withWorkspaceTransaction,
   workspaceMemberships,
   workspaces,
   type Database,
@@ -28,10 +30,32 @@ export interface WorkspaceMembershipRecord {
 
 export interface WorkspaceMembershipUpsert {
   workspaceId: string;
+  actorUserId: string;
   userId: string;
   email: string;
   role: WorkspaceRole;
   displayName?: string;
+}
+
+export interface WorkspaceMembershipDelete {
+  workspaceId: string;
+  actorUserId: string;
+  userId: string;
+}
+
+export type MembershipMutationErrorCode =
+  | "membership_actor_not_authorized"
+  | "membership_owner_required"
+  | "last_workspace_owner";
+
+export class MembershipMutationError extends Error {
+  readonly code: MembershipMutationErrorCode;
+
+  constructor(code: MembershipMutationErrorCode) {
+    super(code);
+    this.name = "MembershipMutationError";
+    this.code = code;
+  }
 }
 
 export interface IdentityRecord {
@@ -46,7 +70,7 @@ export interface IdentityRepository {
   resolveProviderIdentity(identity: ProviderIdentity): Promise<IdentityPrincipal>;
   listWorkspaceMemberships(workspaceId: string): Promise<WorkspaceMembershipRecord[]>;
   upsertWorkspaceMembership(input: WorkspaceMembershipUpsert): Promise<WorkspaceMembershipRecord>;
-  deleteWorkspaceMembership(workspaceId: string, userId: string): Promise<boolean>;
+  deleteWorkspaceMembership(input: WorkspaceMembershipDelete): Promise<boolean>;
 }
 
 export interface PgIdentityRepositoryOptions {
@@ -193,8 +217,20 @@ export class PgIdentityRepository implements IdentityRepository {
   async upsertWorkspaceMembership(
     input: WorkspaceMembershipUpsert,
   ): Promise<WorkspaceMembershipRecord> {
-    await this.db.transaction(async (tx) => {
-      const db = tx as unknown as Database;
+    await withWorkspaceTransaction(this.db, input.workspaceId, async (db) => {
+      const existingMemberships = await db
+        .select({ userId: workspaceMemberships.userId, role: workspaceMemberships.role })
+        .from(workspaceMemberships)
+        .where(eq(workspaceMemberships.workspaceId, input.workspaceId))
+        .orderBy(workspaceMemberships.userId)
+        .for("update");
+      assertMembershipMutationAllowed({
+        actorUserId: input.actorUserId,
+        targetUserId: input.userId,
+        targetRole: input.role,
+        existingMemberships,
+      });
+
       await db
         .insert(users)
         .values({
@@ -224,6 +260,13 @@ export class PgIdentityRepository implements IdentityRepository {
             updatedAt: new Date(),
           },
         });
+      await db.insert(auditLogs).values({
+        workspaceId: input.workspaceId,
+        actorUserId: input.actorUserId,
+        action: "workspace.membership.upserted",
+        targetType: "workspace_membership",
+        targetId: input.userId,
+      });
     });
 
     return {
@@ -234,18 +277,43 @@ export class PgIdentityRepository implements IdentityRepository {
     };
   }
 
-  async deleteWorkspaceMembership(workspaceId: string, userId: string): Promise<boolean> {
-    const deleted = await this.db
-      .delete(workspaceMemberships)
-      .where(
-        and(
-          eq(workspaceMemberships.workspaceId, workspaceId),
-          eq(workspaceMemberships.userId, userId),
-        ),
-      )
-      .returning({ userId: workspaceMemberships.userId });
+  async deleteWorkspaceMembership(input: WorkspaceMembershipDelete): Promise<boolean> {
+    return withWorkspaceTransaction(this.db, input.workspaceId, async (db) => {
+      const existingMemberships = await db
+        .select({ userId: workspaceMemberships.userId, role: workspaceMemberships.role })
+        .from(workspaceMemberships)
+        .where(eq(workspaceMemberships.workspaceId, input.workspaceId))
+        .orderBy(workspaceMemberships.userId)
+        .for("update");
+      assertMembershipMutationAllowed({
+        actorUserId: input.actorUserId,
+        targetUserId: input.userId,
+        targetRole: undefined,
+        existingMemberships,
+      });
 
-    return deleted.length > 0;
+      const deleted = await db
+        .delete(workspaceMemberships)
+        .where(
+          and(
+            eq(workspaceMemberships.workspaceId, input.workspaceId),
+            eq(workspaceMemberships.userId, input.userId),
+          ),
+        )
+        .returning({ userId: workspaceMemberships.userId });
+
+      if (deleted.length > 0) {
+        await db.insert(auditLogs).values({
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          action: "workspace.membership.deleted",
+          targetType: "workspace_membership",
+          targetId: input.userId,
+        });
+      }
+
+      return deleted.length > 0;
+    });
   }
 }
 
@@ -299,6 +367,14 @@ export class InMemoryIdentityRepository implements IdentityRepository {
   async upsertWorkspaceMembership(
     input: WorkspaceMembershipUpsert,
   ): Promise<WorkspaceMembershipRecord> {
+    const existingMemberships = await this.listWorkspaceMemberships(input.workspaceId);
+    assertMembershipMutationAllowed({
+      actorUserId: input.actorUserId,
+      targetUserId: input.userId,
+      targetRole: input.role,
+      existingMemberships,
+    });
+
     let record = [...this.recordsByProviderSubject.values()].find(
       (candidate) => candidate.userId === input.userId,
     );
@@ -332,17 +408,52 @@ export class InMemoryIdentityRepository implements IdentityRepository {
     };
   }
 
-  async deleteWorkspaceMembership(workspaceId: string, userId: string): Promise<boolean> {
+  async deleteWorkspaceMembership(input: WorkspaceMembershipDelete): Promise<boolean> {
+    const existingMemberships = await this.listWorkspaceMemberships(input.workspaceId);
+    assertMembershipMutationAllowed({
+      actorUserId: input.actorUserId,
+      targetUserId: input.userId,
+      targetRole: undefined,
+      existingMemberships,
+    });
+
     let deleted = false;
     for (const record of this.recordsByProviderSubject.values()) {
       const before = record.memberships.length;
       record.memberships = record.memberships.filter(
-        (membership) => membership.workspaceId !== workspaceId || membership.userId !== userId,
+        (membership) =>
+          membership.workspaceId !== input.workspaceId || membership.userId !== input.userId,
       );
       deleted ||= record.memberships.length !== before;
     }
 
     return deleted;
+  }
+}
+
+function assertMembershipMutationAllowed(input: {
+  actorUserId: string;
+  targetUserId: string;
+  targetRole: WorkspaceRole | undefined;
+  existingMemberships: readonly { userId: string; role: string }[];
+}): void {
+  const actor = input.existingMemberships.find(({ userId }) => userId === input.actorUserId);
+  if (actor === undefined || (actor.role !== "owner" && actor.role !== "admin")) {
+    throw new MembershipMutationError("membership_actor_not_authorized");
+  }
+
+  const target = input.existingMemberships.find(({ userId }) => userId === input.targetUserId);
+  const touchesOwner = target?.role === "owner" || input.targetRole === "owner";
+  if (touchesOwner && actor.role !== "owner") {
+    throw new MembershipMutationError("membership_owner_required");
+  }
+
+  const removesOwner = target?.role === "owner" && input.targetRole !== "owner";
+  if (
+    removesOwner &&
+    input.existingMemberships.filter(({ role }) => role === "owner").length <= 1
+  ) {
+    throw new MembershipMutationError("last_workspace_owner");
   }
 }
 
