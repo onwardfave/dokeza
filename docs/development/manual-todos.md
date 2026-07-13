@@ -5,6 +5,7 @@ This ledger contains work that cannot be completed safely through repository aut
 ## Production Alpha
 
 - [ ] Provide or confirm the Auth0 production-alpha tenant domain, Native Application client ID, API audience, and exact allowed loopback callback URI.
+- [ ] Confirm whether Auth0 will use a standard `*.auth0.com` tenant domain. If a vanity domain is required, review and add its exact HTTPS host to the Tauri opener capability before packaging.
 - [ ] Run installed-desktop Auth0 sign-in, restart restoration, refresh, sign-out, and revoked-session QA with a synthetic test account.
 - [ ] Provide a funded OpenAI key if the production route must be tested specifically against OpenAI Responses and 1536-dimensional `text-embedding-3-small`; NVIDIA remains usable for adapter-boundary testing only.
 - [ ] Run a 30-minute and then 60-minute Windows physical-microphone session after long-lived capture lands, including device unplug/replug and permission denial.

@@ -118,6 +118,14 @@ $env:VITE_DOKEZA_AUTH0_AUDIENCE = "dokeza-api"
 $env:VITE_DOKEZA_AUTH0_REDIRECT_URI = "http://127.0.0.1:57619/auth/callback"
 ```
 
+Start Tauri with an endpoint-derived local CSP:
+
+```powershell
+pnpm --filter @dokeza/desktop tauri:dev:configured
+```
+
+Production packaging must set all three endpoint variables above and use `pnpm --filter @dokeza/desktop tauri:build:configured`. The generator requires HTTPS for API/Auth0, WSS for realtime, and writes an ignored `src-tauri/tauri.security.generated.json`; it contains origins only, never credentials. The native opener capability currently covers Auth0 tenant domains (`https://*.auth0.com/*`). A vanity/custom Auth0 domain requires an explicit reviewed capability scope before packaging.
+
 Development-token controls remain available only inside the live-session panel's developer configuration disclosure for local/test fallback.
 
 When hosted auth is enabled, the API accepts provider tokens only at:

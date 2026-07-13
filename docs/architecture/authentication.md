@@ -52,7 +52,7 @@ Development tokens are signed with `DOKEZA_AUTH_SIGNING_SECRET`; local/test envi
 ## 5. Desktop Flow
 
 1. User starts sign-in from the desktop app.
-2. Desktop opens Auth0's Native Application authorization flow in the OS browser using Authorization Code with PKCE.
+2. An installed desktop opens Auth0's Native Application authorization flow through Tauri's supported system-opener plugin using Authorization Code with PKCE. The plugin is available only to the main window and is capability-scoped to HTTPS `*.auth0.com` URLs; browser preview uses the ordinary browser boundary for local QA only.
 3. Desktop receives the provider completion signal through an exact loopback callback on `127.0.0.1` for production alpha. The desktop validates high-entropy `state`, `nonce`, and PKCE verifier binding before accepting the authorization response.
 4. Desktop exchanges the authorization code with Auth0 without a client secret, then sends the resulting provider token to `POST /v1/auth/provider/exchange`.
 5. API verifies the provider token and returns a Dokeza API token plus authorized workspaces from Dokeza-owned membership state.
@@ -76,6 +76,7 @@ Loopback callbacks are acceptable for the controlled production alpha only with 
 ## 7. Failure and Degraded Behavior
 
 - If the hosted IdP is unreachable during sign-in, desktop shows sign-in unavailable and does not start a session.
+- If the system browser cannot be opened, desktop reports the content-free `hosted_auth_browser_open_failed` state and allows retry; it does not fall back to an embedded WebView.
 - If the Auth0 loopback callback times out, is canceled, or fails `state` / `nonce` validation, desktop discards the pending verifier and shows a sanitized sign-in failed state.
 - If the API cannot issue a realtime token, desktop keeps the user signed in but marks live sessions unavailable.
 - If provider-token exchange fails, desktop shows sign-in unavailable or retryable auth failure and does not fall back to development tokens.
@@ -84,6 +85,7 @@ Loopback callbacks are acceptable for the controlled production alpha only with 
 - If desktop secure token storage is unavailable, desktop continues with in-memory auth for the current run, shows a sanitized storage-unavailable state, and does not write tokens to browser storage or diagnostics.
 - If workspace membership cannot be verified, access fails closed.
 - Browser/WebView requests to `/v1/*` require an exact configured origin. Wildcards are not accepted; non-browser clients without an `Origin` header still require bearer authentication.
+- Installed desktop builds generate an exact `connect-src` CSP from the configured API, realtime, and Auth0 origins. Production generation requires HTTPS API/Auth0 and WSS realtime endpoints and fails when an endpoint is absent or cleartext.
 - API request throttling hashes bearer credentials before retaining a fixed-window key; raw bearer tokens are never stored in limiter state or telemetry.
 - If a development API token is presented outside local/test-enabled config, API access fails closed.
 

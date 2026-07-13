@@ -99,7 +99,7 @@ export async function beginAuth0DesktopSignIn(
 
 export async function openHostedAuthBrowser(
   pending: PendingHostedAuth,
-  open: HostedAuthBrowserOpen = defaultBrowserOpen,
+  open: HostedAuthBrowserOpen = openHostedAuthUrl,
 ): Promise<void> {
   await open(pending.authorizeUrl);
 }
@@ -211,6 +211,14 @@ function normalizeConfig(config: Auth0DesktopConfig): Auth0DesktopConfig {
     throw new Error("hosted_auth_invalid_config");
   }
 
+  try {
+    if (new URL(domain).protocol !== "https:") {
+      throw new Error("hosted_auth_invalid_config");
+    }
+  } catch {
+    throw new Error("hosted_auth_invalid_config");
+  }
+
   return {
     ...config,
     domain: domain.endsWith("/") ? domain : `${domain}/`,
@@ -240,13 +248,6 @@ function browserCrypto(): HostedAuthCrypto {
   };
 }
 
-function defaultBrowserOpen(authorizeUrl: string): void {
-  const opened = globalThis.open(authorizeUrl, "_blank", "noopener,noreferrer");
-  if (opened === null) {
-    throw new Error("hosted_auth_browser_open_failed");
-  }
-}
-
 function randomToken(random: HostedAuthRandom, length: number): string {
   return base64UrlEncode(random.bytes(length));
 }
@@ -267,3 +268,4 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function readToken(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
+import { openHostedAuthUrl } from "./hostedAuthBrowser.js";

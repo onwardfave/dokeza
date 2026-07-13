@@ -95,6 +95,8 @@ Initial hosted auth implementation:
 
 - The selected production-alpha hosted identity provider is Auth0.
 - The desktop starts an Auth0 Native Application Authorization Code with PKCE flow in the OS browser.
+- Installed builds use the supported Tauri opener plugin from the main window only. Its capability admits HTTPS Auth0 tenant URLs; arbitrary schemes and embedded WebView login are not allowed.
+- Build-time desktop security configuration admits only the exact API, realtime, and Auth0 origins. Production generation rejects cleartext or missing hosted endpoints.
 - The production-alpha callback is an exact loopback redirect on `127.0.0.1`; desktop accepts it only for a single pending sign-in transaction with validated `state`, `nonce`, PKCE verifier binding, and a short listener lifetime.
 - The API service accepts hosted identity provider tokens only at `POST /v1/auth/provider/exchange`.
 - The API verifies configured issuer, audience, expiration, RS256 signature, and JWKS key ID through a provider-neutral OIDC/JWKS verifier.

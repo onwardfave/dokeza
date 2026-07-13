@@ -38,6 +38,8 @@ Close the next code-owned production-alpha bottlenecks: use the supported Tauri 
 
 ### Checkpoint A - Hosted Browser and CSP
 
+Status: **Implemented; installed-build QA remains credential/release gated.**
+
 1. Add TDD coverage for native-vs-browser hosted-auth opening.
 2. Install and register the official Tauri opener plugin with a scoped main-window capability.
 3. Add a pure security-config generator with local defaults and production validation.

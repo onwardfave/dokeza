@@ -56,6 +56,16 @@ describe("hostedAuthFlow", () => {
     expect(pending.codeVerifier).not.toEqual(authorizeUrl.searchParams.get("code_challenge"));
   });
 
+  it("rejects a cleartext hosted identity domain", async () => {
+    await expect(
+      beginAuth0DesktopSignIn({
+        config: { ...config, domain: "http://auth.example.test" },
+        random: deterministicRandom,
+        crypto: deterministicCrypto,
+      }),
+    ).rejects.toThrow("hosted_auth_invalid_config");
+  });
+
   it("opens the hosted authorize URL through an injected browser boundary", async () => {
     const pending = await beginAuth0DesktopSignIn({
       config,

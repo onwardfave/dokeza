@@ -358,7 +358,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ### Alpha.1 — Production Auth and Onboarding
 
-Status: **Partial.** Server-side hosted identity, membership, and secure-storage foundations exist, but installed-build Auth0/system-browser/CSP/hosted-endpoint QA remains open per the 2026-07-12 remediation plan.
+Status: **Partial.** Server-side hosted identity, membership, secure storage, supported native system-browser opening, and generated exact-origin desktop CSP foundations exist; installed-build Auth0/hosted-endpoint QA remains open.
 - [x] Provider-neutral OIDC/JWKS verification boundary
 - [x] `POST /v1/auth/provider/exchange` route
 - [x] Development-only issuer (fail-closed outside local/test)
@@ -371,6 +371,8 @@ Status: **Partial.** Server-side hosted identity, membership, and secure-storage
 - [x] Full durable workspace provisioning and membership administration
 - [x] Hosted IdP refresh/session renewal in desktop secure storage
 - [x] Replace dev-token product flow
+- [x] Supported Tauri system-browser opener with a main-window HTTPS Auth0 capability and sanitized failure boundary
+- [x] Environment-derived exact-origin desktop CSP with production HTTPS/WSS validation
 
 ### Alpha.2 — Desktop Productization Pass
 - [x] Live-session-first application surface (replace diagnostics-first layout)
@@ -412,6 +414,8 @@ Status: **Partial.** Server-side hosted identity, membership, and secure-storage
 - [ ] Document disable/delete/permission-update mutations, business-group directory, and their audit events.
 - [x] API perimeter: bounded JSON bodies, exact origin allowlist, hashed-key fixed-window throttling, and PostgreSQL-aware `/ready` probe.
 - [ ] Installed-build hosted-auth/CSP/hosted-endpoint verification.
+  - [x] Automated native-vs-preview opener, URL rejection, generated CSP, and production endpoint-validation coverage.
+  - [ ] Installed signed-build Auth0 sign-in and hosted endpoint smoke evidence.
 
 ### Alpha.5a — Real-Provider Smoke Test (pulled forward, next slice)
 - [ ] Partial: automated provider-boundary harness (`services/realtime/scripts/alpha5a-provider-smoke.ts`) run 2026-07-10 (see `qa/2026-07-10-alpha5a-smoke.md`). Deepgram connect/auth/framing proven; live-suggestion path proven against NVIDIA (`openai_chat`) in a second run; OpenAI-provider suggestion/embeddings still blocked by an unfunded key (`insufficient_quota`); Auth0 sign-in and real-mic desktop capture still manual/open.
