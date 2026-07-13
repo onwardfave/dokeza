@@ -42,7 +42,10 @@ Start the local PostgreSQL/pgvector stack:
 
 ```powershell
 pnpm dev:infra
+pnpm db:migrate
 ```
+
+`pnpm db:migrate` applies the ordered SQL files under `infra/db/migrations`, records SHA-256 checksums in `dokeza_schema_migrations`, rejects edits to already-applied migrations, and is safe to run repeatedly. It can adopt the verified pre-ledger schema markers created by the former Drizzle-push workflow. It exits nonzero on migration failure.
 
 Run the opt-in PostgreSQL integration suites:
 
@@ -176,6 +179,28 @@ pnpm security:audit
 pnpm security:secrets
 pnpm security:vulns
 ```
+
+## Live-Suggestion Budgets and Cost Accounting
+
+Conservative live-suggestion token limits are active with defaults in every environment. Override them only after evaluating prompt quality:
+
+```powershell
+$env:DOKEZA_LIVE_SUGGESTION_MAX_INPUT_TOKENS = "8192"
+$env:DOKEZA_LIVE_SUGGESTION_MAX_TRANSCRIPT_TOKENS = "3000"
+$env:DOKEZA_LIVE_SUGGESTION_MAX_SOURCE_TOKENS = "3000"
+$env:DOKEZA_LIVE_SUGGESTION_MAX_USER_PROMPT_TOKENS = "512"
+$env:DOKEZA_LIVE_SUGGESTION_MAX_OUTPUT_TOKENS = "256"
+$env:DOKEZA_LIVE_SUGGESTION_SESSION_COST_LIMIT_MICROUSD = "150000"
+```
+
+Counts use UTF-8 bytes as a conservative token upper bound rather than provider-specific tokenizers. PostgreSQL realtime persistence writes metadata-only usage events. To enable pre-provider priced hard stops, configure both reviewed rates for the exact selected provider/model:
+
+```powershell
+$env:DOKEZA_LIVE_SUGGESTION_INPUT_MICROUSD_PER_MILLION_TOKENS = "<reviewed-rate>"
+$env:DOKEZA_LIVE_SUGGESTION_OUTPUT_MICROUSD_PER_MILLION_TOKENS = "<reviewed-rate>"
+```
+
+If either rate is absent, events are explicitly `unpriced` and cost-limit admission is inactive; token budgets, request debounce/cap, and single in-flight request enforcement remain active. Never guess production rates or copy illustrative prices from tests.
 
 ## Cloud AI Providers (optional, for real-provider testing)
 

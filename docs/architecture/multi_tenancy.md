@@ -121,6 +121,8 @@ The AI orchestrator must not accept arbitrary document chunks from the client. I
 
 Realtime provider and retention policy is resolved server-side after token validation and before `auth.accepted`. The realtime token does not carry mutable workspace policy as authority. PostgreSQL-backed resolution runs in a workspace-scoped transaction, rejects ambiguous or invalid policy state, and supplies the retention mode used for transcript, gap, and suggestion persistence for that connection.
 
+Live-suggestion usage is stored in `usage_events` with explicit workspace and meeting-session ownership. Reads and idempotent writes run through `withWorkspaceTransaction`; forced RLS applies to the restricted `dokeza_app` role, and an unscoped connection cannot read or insert rows. The unique workspace/session/request/feature key prevents retries from double-counting. Meeting or workspace deletion cascades to usage metadata.
+
 ## 9. Telemetry Isolation
 
 Telemetry should avoid raw customer content by default.
@@ -158,6 +160,7 @@ Required tests:
 
 - An unscoped `dokeza_app` connection cannot read or insert tenant rows.
 - A deliberately workspace-unfiltered query inside a workspace-A transaction cannot see workspace-B rows.
+- An unscoped restricted-role connection cannot read or insert usage events, and a workspace-A cost total cannot include workspace-B rows.
 - User from workspace A cannot fetch workspace B meeting.
 - User from workspace A cannot retrieve workspace B document chunks.
 - User without document permission cannot retrieve restricted document chunks.

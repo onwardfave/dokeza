@@ -22,6 +22,10 @@ const applicationRoleMigration = readFileSync(
   resolve("migrations/0006_application_role_rls_hardening.sql"),
   "utf8",
 ).toLowerCase();
+const usageLedgerMigration = readFileSync(
+  resolve("migrations/0007_usage_ledger.sql"),
+  "utf8",
+).toLowerCase();
 
 const highRiskTables = [
   "workspace_policies",
@@ -102,5 +106,22 @@ describe("workspace RLS migration baseline", () => {
     expect(userProviderIdentitiesMigration).not.toContain("token");
     expect(userProviderIdentitiesMigration).not.toContain("transcript");
     expect(userProviderIdentitiesMigration).not.toContain("document");
+  });
+
+  it("adds a metadata-only workspace-scoped usage ledger", () => {
+    expect(usageLedgerMigration).toContain("create table usage_events");
+    expect(usageLedgerMigration).toContain("workspace_id text not null");
+    expect(usageLedgerMigration).toContain("input_tokens integer not null");
+    expect(usageLedgerMigration).toContain("output_tokens integer not null");
+    expect(usageLedgerMigration).toContain("estimated_cost_microusd integer");
+    expect(usageLedgerMigration).toContain("alter table usage_events enable row level security");
+    expect(usageLedgerMigration).toContain("alter table usage_events force row level security");
+    expect(usageLedgerMigration).toContain("current_setting('app.current_workspace_id', true)");
+    expect(usageLedgerMigration).toContain(
+      "grant select, insert, update, delete on table usage_events",
+    );
+    expect(usageLedgerMigration).not.toContain("transcript_text");
+    expect(usageLedgerMigration).not.toContain("prompt_text");
+    expect(usageLedgerMigration).not.toContain("suggestion_content");
   });
 });

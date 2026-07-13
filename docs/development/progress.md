@@ -395,15 +395,17 @@ Status: **Partial.** Server-side hosted identity, membership, secure storage, su
 
 ### Alpha.4 — M2 Usage Guardrails
 - [x] Manual suggestion debounce + per-session request cap
-- [ ] Token/context budgets (transcript, sources, prompt, output)
-- [ ] Durable usage ledger
-- [ ] Provider timeout/rate-limit → safe degraded states
-- [ ] Metadata-only telemetry (latency, token counts, model, status)
-- [ ] Partial: debounce, rate-limit, and redaction tests exist; budget enforcement tests remain
+- [x] Token/context budgets (transcript, sources, prompt, total input, provider output)
+- [ ] Partial: durable, restricted-role live-suggestion usage ledger is implemented; STT, embedding, and retrieval attribution remain
+- [ ] Partial: provider timeout/rate-limit failures remain safely recoverable but provider-specific retry/quota classification remains open
+- [x] Live-suggestion metadata-only telemetry and ledger fields (token/component counts, provider/model/prompt version, status, optional estimated cost)
+- [x] Budget, hard-cost admission, accounting-outage, idempotency, RLS, and content-redaction tests
+- [ ] Reviewed provider/model input and output prices plus initial warning/hard-stop policy are still required before priced alpha enforcement is active
 
 ### Alpha.Security — Production Readiness Remediation (added 2026-07-12)
 
 - [x] Dependency audit remediated and PostgreSQL CI commands corrected locally; remote CI at the current head remains pending push/PR.
+- [x] Fresh-database migration runner applies checksummed SQL transactionally, rejects changed applied migrations, adopts verified legacy schema markers, and is exercised twice in PostgreSQL CI.
 - [x] Realtime resolves server-side workspace policy before `auth.accepted`.
 - [x] Cloud STT and all external LLM routes honor workspace policy before provider submission.
 - [x] Transcript, gap, and suggestion persistence honor the resolved connection retention policy.
@@ -466,7 +468,7 @@ Status: **Partial.** Server-side hosted identity, membership, secure storage, su
 - [x] Update `data_flows.md` with provider-token exchange boundary
 - [x] Update `data_flows.md` with selected IdP redirect/session flow
 - [x] Update `failure_modes.md` with hosted provider token exchange rejection
-- [ ] Partial: desktop capture failures documented; usage budget failure behavior remains for Alpha.4.
+- [x] Desktop capture and live-suggestion usage budget/accounting failures documented.
 - [x] Update `multi_tenancy.md` with durable provider identity mapping
 - [x] Update `multi_tenancy.md` with full membership administration
 - [x] Update `code_architecture.md` with `packages/db`, `packages/auth`

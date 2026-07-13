@@ -78,6 +78,18 @@ export interface DokezaConfig {
     rateLimitWindowMs: number;
     rateLimitMaxRequests: number;
   };
+  usage: {
+    liveSuggestion: {
+      maxInputTokens: number;
+      maxTranscriptTokens: number;
+      maxSourceTokens: number;
+      maxUserPromptTokens: number;
+      maxOutputTokens: number;
+      sessionCostLimitMicrousd: number;
+      inputMicrousdPerMillionTokens?: number;
+      outputMicrousdPerMillionTokens?: number;
+    };
+  };
   providers: {
     stt: {
       provider: "deepgram";
@@ -253,6 +265,14 @@ function readPositiveInteger(value: string | undefined, defaultValue: number): n
 
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function readOptionalNonNegativeInteger(value: string | undefined): number | undefined | null {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function readEmbeddingDimensions(value: string | undefined): number | undefined {
@@ -521,6 +541,39 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   const apiMaxJsonBodyBytes = readPositiveInteger(env.DOKEZA_API_MAX_JSON_BODY_BYTES, 1_048_576);
   const apiRateLimitWindowMs = readPositiveInteger(env.DOKEZA_API_RATE_LIMIT_WINDOW_MS, 60_000);
   const apiRateLimitMaxRequests = readPositiveInteger(env.DOKEZA_API_RATE_LIMIT_MAX_REQUESTS, 120);
+  const liveSuggestionMaxInputTokens = readPositiveInteger(
+    env.DOKEZA_LIVE_SUGGESTION_MAX_INPUT_TOKENS,
+    8192,
+  );
+  const liveSuggestionMaxTranscriptTokens = readPositiveInteger(
+    env.DOKEZA_LIVE_SUGGESTION_MAX_TRANSCRIPT_TOKENS,
+    3000,
+  );
+  const liveSuggestionMaxSourceTokens = readPositiveInteger(
+    env.DOKEZA_LIVE_SUGGESTION_MAX_SOURCE_TOKENS,
+    3000,
+  );
+  const liveSuggestionMaxUserPromptTokens = readPositiveInteger(
+    env.DOKEZA_LIVE_SUGGESTION_MAX_USER_PROMPT_TOKENS,
+    512,
+  );
+  const liveSuggestionMaxOutputTokens = readPositiveInteger(
+    env.DOKEZA_LIVE_SUGGESTION_MAX_OUTPUT_TOKENS,
+    256,
+  );
+  const liveSuggestionSessionCostLimitMicrousd = readPositiveInteger(
+    env.DOKEZA_LIVE_SUGGESTION_SESSION_COST_LIMIT_MICROUSD,
+    150_000,
+  );
+  const liveSuggestionInputMicrousdPerMillionTokens = readOptionalNonNegativeInteger(
+    env.DOKEZA_LIVE_SUGGESTION_INPUT_MICROUSD_PER_MILLION_TOKENS,
+  );
+  const liveSuggestionOutputMicrousdPerMillionTokens = readOptionalNonNegativeInteger(
+    env.DOKEZA_LIVE_SUGGESTION_OUTPUT_MICROUSD_PER_MILLION_TOKENS,
+  );
+  const liveSuggestionPricingPairIncomplete =
+    (liveSuggestionInputMicrousdPerMillionTokens === undefined) !==
+    (liveSuggestionOutputMicrousdPerMillionTokens === undefined);
 
   if (environment === undefined) {
     errors.push("DOKEZA_ENV must be local, test, preview, staging, or production.");
@@ -717,6 +770,25 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
   if (apiRateLimitMaxRequests === undefined) {
     errors.push("DOKEZA_API_RATE_LIMIT_MAX_REQUESTS must be a positive integer.");
   }
+  if (
+    liveSuggestionMaxInputTokens === undefined ||
+    liveSuggestionMaxTranscriptTokens === undefined ||
+    liveSuggestionMaxSourceTokens === undefined ||
+    liveSuggestionMaxUserPromptTokens === undefined ||
+    liveSuggestionMaxOutputTokens === undefined ||
+    liveSuggestionSessionCostLimitMicrousd === undefined
+  ) {
+    errors.push("Live suggestion token budgets and session cost limit must be positive integers.");
+  }
+  if (
+    liveSuggestionInputMicrousdPerMillionTokens === null ||
+    liveSuggestionOutputMicrousdPerMillionTokens === null
+  ) {
+    errors.push("Live suggestion token prices must be non-negative integers when configured.");
+  }
+  if (liveSuggestionPricingPairIncomplete) {
+    errors.push("Live suggestion input and output token prices must be configured together.");
+  }
   if (env.DOKEZA_DATABASE_ROLE !== undefined && databaseRole === undefined) {
     errors.push("DOKEZA_DATABASE_ROLE must be a valid unquoted PostgreSQL role name.");
   }
@@ -771,6 +843,15 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
     apiMaxJsonBodyBytes === undefined ||
     apiRateLimitWindowMs === undefined ||
     apiRateLimitMaxRequests === undefined ||
+    liveSuggestionMaxInputTokens === undefined ||
+    liveSuggestionMaxTranscriptTokens === undefined ||
+    liveSuggestionMaxSourceTokens === undefined ||
+    liveSuggestionMaxUserPromptTokens === undefined ||
+    liveSuggestionMaxOutputTokens === undefined ||
+    liveSuggestionSessionCostLimitMicrousd === undefined ||
+    liveSuggestionInputMicrousdPerMillionTokens === null ||
+    liveSuggestionOutputMicrousdPerMillionTokens === null ||
+    liveSuggestionPricingPairIncomplete ||
     ((llmProvider === "openai" || llmProvider === "openai_chat") &&
       (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
     (embeddingProvider === "openai" && (openAiApiKey === undefined || openAiApiKey.length === 0)) ||
@@ -815,6 +896,26 @@ export function parseConfig(env: NodeJS.ProcessEnv, serviceName: string): Config
         maxJsonBodyBytes: apiMaxJsonBodyBytes,
         rateLimitWindowMs: apiRateLimitWindowMs,
         rateLimitMaxRequests: apiRateLimitMaxRequests,
+      },
+      usage: {
+        liveSuggestion: {
+          maxInputTokens: liveSuggestionMaxInputTokens,
+          maxTranscriptTokens: liveSuggestionMaxTranscriptTokens,
+          maxSourceTokens: liveSuggestionMaxSourceTokens,
+          maxUserPromptTokens: liveSuggestionMaxUserPromptTokens,
+          maxOutputTokens: liveSuggestionMaxOutputTokens,
+          sessionCostLimitMicrousd: liveSuggestionSessionCostLimitMicrousd,
+          ...(liveSuggestionInputMicrousdPerMillionTokens === undefined
+            ? {}
+            : {
+                inputMicrousdPerMillionTokens: liveSuggestionInputMicrousdPerMillionTokens,
+              }),
+          ...(liveSuggestionOutputMicrousdPerMillionTokens === undefined
+            ? {}
+            : {
+                outputMicrousdPerMillionTokens: liveSuggestionOutputMicrousdPerMillionTokens,
+              }),
+        },
       },
       providers: {
         stt: {

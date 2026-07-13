@@ -2,6 +2,10 @@
 
 This ledger contains work that cannot be completed safely through repository automation alone. Code should use explicit placeholders or fail-closed configuration until the required input is supplied. Never commit credential values to this file.
 
+## Local Development
+
+- [ ] Reconcile the existing local Docker PostgreSQL volume before relying on `pnpm dev:infra`: it currently rejects the repository's documented default credential. Back up any needed local data, then either restore the volume's intended credential or recreate the development volume; automation intentionally did not rewrite it.
+
 ## Production Alpha
 
 - [ ] Provide or confirm the Auth0 production-alpha tenant domain, Native Application client ID, API audience, and exact allowed loopback callback URI.
@@ -26,7 +30,8 @@ This ledger contains work that cannot be completed safely through repository aut
 ## Commercial and Operations
 
 - [ ] Confirm API edge/application rate-limit thresholds and whether design partners require per-workspace quotas beyond the current per-credential/IP fixed-window guard.
-- [ ] Set the initial per-meeting provider-cost warning and hard-stop thresholds.
+- [ ] Review the production-alpha live-suggestion model's input/output prices and set `DOKEZA_LIVE_SUGGESTION_INPUT_MICROUSD_PER_MILLION_TOKENS` and `DOKEZA_LIVE_SUGGESTION_OUTPUT_MICROUSD_PER_MILLION_TOKENS`; priced hard-stop enforcement intentionally remains inactive until both values are present.
+- [ ] Confirm or replace the placeholder `DOKEZA_LIVE_SUGGESTION_SESSION_COST_LIMIT_MICROUSD=150000` (15 US cents) and decide whether a lower warning threshold needs a user/admin surface before alpha.
 - [ ] Confirm retention defaults and whether individual users may shorten or extend workspace policy.
 - [ ] Name incident-response, privacy, security-review, and customer-support owners.
 - [ ] Approve the initial subprocessor list and provider data-processing terms.

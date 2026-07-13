@@ -6,6 +6,7 @@ import {
   meetingSessions,
   transcriptGaps,
   transcriptSegments,
+  usageEvents,
   withWorkspaceTransaction,
   workspacePolicies,
 } from "@dokeza/db";
@@ -17,6 +18,7 @@ import {
   createDefaultRealtimeWorkspacePolicy,
   PgWorkspacePolicyResolver,
 } from "./workspace-policy-resolver.js";
+import { PgUsageLedger } from "./usage-ledger.js";
 
 // Run with:
 // $env:DOKEZA_PG_INTEGRATION='1'; $env:DATABASE_URL='postgres://dokeza:dokeza_local@localhost:5432/dokeza'; pnpm --filter @dokeza/realtime test -- postgres-persistence.integration.test.ts
@@ -309,5 +311,78 @@ describePostgres("PostgreSQL realtime persistence integration", () => {
         event: finalEvent(segmentId),
       }),
     ).rejects.toThrow("Transcript segment scope mismatch.");
+  });
+
+  it("records idempotent metadata-only usage under restricted-role tenant isolation", async () => {
+    const sessionId = `sess_${suffix}_usage`;
+    await sessionStore.create({
+      id: sessionId,
+      workspaceId: workspaceA,
+      createdBy: userA,
+      meetingSource: "manual",
+      connectionId: "conn_usage",
+    });
+    const ledger = new PgUsageLedger({
+      db,
+      pricing: {
+        inputMicrousdPerMillionTokens: 400_000,
+        outputMicrousdPerMillionTokens: 1_600_000,
+      },
+    });
+    const input = {
+      workspaceId: workspaceA,
+      sessionId,
+      requestId: `sreq_${suffix}_usage`,
+      actorUserId: userA,
+      usage: {
+        provider: "openai" as const,
+        model: "gpt-test",
+        promptVersion: "live.answer.v1",
+        status: "completed" as const,
+        tokenEstimationMethod: "utf8_bytes_upper_bound" as const,
+        inputTokens: 1_000,
+        outputTokens: 200,
+        transcriptTokens: 600,
+        sourceTokens: 200,
+        userPromptTokens: 50,
+        systemTokens: 100,
+        sourceCount: 1,
+      },
+    };
+
+    await ledger.recordLiveSuggestionUsage(input);
+    await ledger.recordLiveSuggestionUsage(input);
+
+    await expect(ledger.getSessionEstimatedCostMicrousd(workspaceA, sessionId)).resolves.toBe(720);
+    await expect(ledger.getSessionEstimatedCostMicrousd(workspaceB, sessionId)).resolves.toBe(0);
+    const unscopedRows = await appPool<{ request_id: string }[]>`
+      select request_id from usage_events where meeting_session_id = ${sessionId}
+    `;
+    expect(unscopedRows).toEqual([]);
+    const workspaceRows = await withWorkspaceTransaction(db, workspaceA, async (tx) =>
+      tx.select().from(usageEvents).where(eq(usageEvents.meetingSessionId, sessionId)),
+    );
+    expect(workspaceRows).toHaveLength(1);
+    expect(workspaceRows[0]).toMatchObject({
+      requestId: input.requestId,
+      estimatedCostMicrousd: 720,
+      costEstimateStatus: "priced",
+    });
+    expect(JSON.stringify(workspaceRows[0])).not.toContain("promptText");
+
+    await expect(
+      appPool`
+        insert into usage_events (
+          workspace_id, meeting_session_id, request_id, feature, provider, model,
+          prompt_version, status, token_estimation_method, input_tokens, output_tokens,
+          transcript_tokens, source_tokens, user_prompt_tokens, system_tokens, source_count,
+          cost_estimate_status
+        ) values (
+          ${workspaceA}, ${sessionId}, 'unscoped', 'live_suggestion', 'openai', 'gpt-test',
+          'live.answer.v1', 'completed', 'utf8_bytes_upper_bound', 1, 1, 0, 0, 0, 1, 0,
+          'unpriced'
+        )
+      `,
+    ).rejects.toThrow();
   });
 });

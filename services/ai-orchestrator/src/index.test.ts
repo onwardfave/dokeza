@@ -4,6 +4,7 @@ import {
   createOpenAiChatCompletionsFetchTransport,
   createOpenAiResponsesFetchTransport,
   DeterministicLiveSuggestionProvider,
+  estimateTokenCount,
   LiveSuggestionService,
   ModelGatewayError,
   OpenAiChatCompletionsLiveSuggestionProvider,
@@ -259,6 +260,122 @@ describe("ai orchestrator boundary", () => {
     expect(events.at(-1)).toMatchObject({ type: "complete", sources: [] });
   });
 
+  it("enforces component and output token budgets before provider submission", async () => {
+    const providerRequests: LiveSuggestionProviderRequest[] = [];
+    const provider: LiveSuggestionProvider = {
+      provider: "openai",
+      externalCallEnabled: true,
+      async *streamLiveSuggestion(request) {
+        providerRequests.push(request);
+        yield { type: "token", token: "x".repeat(200) };
+        yield { type: "complete", model: "gpt-budget-test", confidence: "medium" };
+      },
+    };
+    const service = new LiveSuggestionService({
+      provider,
+      budgets: {
+        maxInputTokens: 1_000,
+        maxTranscriptTokens: 50,
+        maxSourceTokens: 180,
+        maxUserPromptTokens: 20,
+        maxOutputTokens: 20,
+      },
+    });
+    const events = [];
+
+    for await (const event of service.streamLiveSuggestion({
+      workspaceId: "ws_a",
+      sessionId: "sess_a",
+      requestId: "sreq_budget",
+      kind: "answer_question",
+      includeSources: true,
+      transcriptSegments: [
+        {
+          ...transcriptSegments[0]!,
+          text: "t".repeat(500),
+        },
+      ],
+      userPrompt: "u".repeat(200),
+      sourceChunks: [
+        {
+          document_id: "doc_1",
+          title: "One",
+          chunk_id: "chunk_1",
+          text: "first source fact ".repeat(20),
+        },
+        {
+          document_id: "doc_2",
+          title: "Two",
+          chunk_id: "chunk_2",
+          text: "second source fact ".repeat(20),
+        },
+      ],
+    })) {
+      events.push(event);
+    }
+
+    const completion = events.at(-1);
+    expect(providerRequests[0]?.maxOutputTokens).toBe(20);
+    expect(estimateTokenCount(providerRequests[0]?.transcriptContext ?? "")).toBeLessThanOrEqual(
+      50,
+    );
+    expect(estimateTokenCount(providerRequests[0]?.sourceContext ?? "")).toBeLessThanOrEqual(180);
+    expect(estimateTokenCount(providerRequests[0]?.userPrompt ?? "")).toBeLessThanOrEqual(20);
+    expect(completion).toMatchObject({
+      type: "complete",
+      content: "x".repeat(20),
+      usage: {
+        status: "completed",
+        outputTokens: 20,
+        tokenEstimationMethod: "utf8_bytes_upper_bound",
+      },
+    });
+    if (completion?.type === "complete") {
+      expect(completion.sources).toHaveLength(1);
+      expect(completion.usage?.inputTokens).toBeLessThanOrEqual(1_000);
+    }
+  });
+
+  it("rejects an impossible total input budget before calling the provider", async () => {
+    let providerCalled = false;
+    const provider: LiveSuggestionProvider = {
+      provider: "openai",
+      externalCallEnabled: true,
+      async *streamLiveSuggestion() {
+        providerCalled = true;
+        yield { type: "complete", model: "must-not-run" };
+      },
+    };
+    const service = new LiveSuggestionService({
+      provider,
+      budgets: { maxInputTokens: 20 },
+    });
+
+    const error = await (async () => {
+      try {
+        for await (const _event of service.streamLiveSuggestion({
+          workspaceId: "ws_a",
+          sessionId: "sess_a",
+          requestId: "sreq_rejected",
+          kind: "answer_question",
+          includeSources: false,
+          transcriptSegments: [],
+        })) {
+          // consume
+        }
+      } catch (caught) {
+        return caught;
+      }
+      throw new Error("expected budget rejection");
+    })();
+
+    expect(error).toMatchObject({
+      code: "token_budget_exceeded",
+      usage: { status: "budget_rejected", outputTokens: 0 },
+    });
+    expect(providerCalled).toBe(false);
+  });
+
   it("maps provider failures to model gateway errors", async () => {
     const provider: LiveSuggestionProvider = {
       provider: "openai",
@@ -290,6 +407,38 @@ describe("ai orchestrator boundary", () => {
       }
     }).rejects.toMatchObject({
       code: "llm_provider_timeout",
+      usage: { status: "provider_error" },
+    });
+  });
+
+  it("attaches metadata-only usage when a provider stream ends without completion", async () => {
+    const service = new LiveSuggestionService({
+      provider: {
+        provider: "openai",
+        externalCallEnabled: true,
+        async *streamLiveSuggestion() {
+          yield { type: "token", token: "partial" };
+        },
+      },
+    });
+
+    await expect(
+      consumeAsyncIterable(
+        service.streamLiveSuggestion({
+          workspaceId: "ws_a",
+          sessionId: "sess_a",
+          requestId: "sreq_incomplete",
+          kind: "answer_question",
+          includeSources: false,
+          transcriptSegments,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_model_response",
+      usage: {
+        status: "provider_error",
+        outputTokens: 7,
+      },
     });
   });
 
@@ -367,6 +516,43 @@ describe("ai orchestrator boundary", () => {
     });
     expect(String(requests[0]?.body)).toContain('"stream":true');
     expect(String(requests[0]?.body)).toContain('"store":false');
+  });
+
+  it("keeps the OpenAI Responses timeout active while the SSE body is streaming", async () => {
+    const transport = createOpenAiResponsesFetchTransport({
+      apiKey: "sk-test-secret",
+      timeoutMs: 10,
+      fetchFn: async (_url, init) => {
+        const signal = init?.signal;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                'data: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+              ),
+            );
+            signal?.addEventListener("abort", () => {
+              controller.error(new Error("synthetic stalled response stream aborted"));
+            });
+          },
+        });
+        return new Response(body, { status: 200 });
+      },
+    });
+
+    await expect(
+      Promise.race([
+        consumeAsyncIterable(
+          transport.createStream({
+            model: "gpt-live-test",
+            developerInstruction: "Say one short thing.",
+            userInput: "Recent transcript",
+            maxOutputChars: 80,
+          }),
+        ),
+        rejectAfter(100, "Responses transport did not enforce its streaming timeout."),
+      ]),
+    ).rejects.toMatchObject({ code: "llm_provider_timeout" });
   });
 
   it("fails closed when an OpenAI stream does not complete", async () => {
@@ -569,4 +755,53 @@ describe("ai orchestrator boundary", () => {
     expect(String(requests[0]?.body)).toContain('"messages"');
     expect(events.length).toBeGreaterThan(0);
   });
+
+  it("keeps the chat-completions timeout active while the SSE body is streaming", async () => {
+    const transport = createOpenAiChatCompletionsFetchTransport({
+      apiKey: "nvapi-test-secret",
+      timeoutMs: 10,
+      fetchFn: async (_url, init) => {
+        const signal = init?.signal;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":null}]}\n\n',
+              ),
+            );
+            signal?.addEventListener("abort", () => {
+              controller.error(new Error("synthetic stalled chat stream aborted"));
+            });
+          },
+        });
+        return new Response(body, { status: 200 });
+      },
+    });
+
+    await expect(
+      Promise.race([
+        consumeAsyncIterable(
+          transport.createStream({
+            model: "nvidia/llama-live-test",
+            systemInstruction: "Say one short thing.",
+            userInput: "Recent transcript",
+            maxOutputChars: 80,
+          }),
+        ),
+        rejectAfter(100, "Chat transport did not enforce its streaming timeout."),
+      ]),
+    ).rejects.toMatchObject({ code: "llm_provider_timeout" });
+  });
 });
+
+async function consumeAsyncIterable<T>(iterable: AsyncIterable<T>): Promise<void> {
+  for await (const _value of iterable) {
+    // consume stream
+  }
+}
+
+function rejectAfter(delayMs: number, message: string): Promise<never> {
+  return new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(message)), delayMs);
+  });
+}

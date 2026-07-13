@@ -98,6 +98,10 @@ The main desktop window starts one long-lived CPAL input stream through Tauri co
 
 The TypeScript controller owns realtime chunk indexes and timeline timestamps. It advances the timeline for measured user pauses, native queue overflow, and device failures before sending the existing `audio.gap` protocol message. Native errors are reduced to stable codes, and neither raw PCM nor backend/device error strings enter diagnostics. The manager stops its stream on explicit stop and process teardown. Portable CPAL device selection uses a deterministic normalized-name fingerprint plus duplicate ordinal; this is stable across ordinary enumeration changes but is not claimed as an OS hardware identifier.
 
+### Live Suggestion Budget and Usage Boundary
+
+The AI orchestrator owns conservative context/output bounding and returns metadata-only usage on completion or typed provider/budget failure. Realtime owns session serialization, request/cost admission, and the `UsageLedger` boundary. The PostgreSQL implementation writes `usage_events` only inside workspace-scoped transactions; the in-memory implementation supports deterministic local tests. Provider pricing is configuration, never embedded in adapters, because it must be reviewed whenever the selected provider/model changes.
+
 ## 6. Contracts
 
 Contracts are product infrastructure and must be versioned.

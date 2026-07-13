@@ -35,6 +35,16 @@ describe("parseConfig", () => {
       rateLimitWindowMs: 60_000,
       rateLimitMaxRequests: 120,
     });
+    expect(result.config?.usage).toEqual({
+      liveSuggestion: {
+        maxInputTokens: 8192,
+        maxTranscriptTokens: 3000,
+        maxSourceTokens: 3000,
+        maxUserPromptTokens: 512,
+        maxOutputTokens: 256,
+        sessionCostLimitMicrousd: 150_000,
+      },
+    });
     expect(result.config?.providers).toEqual({
       stt: {
         provider: "deepgram",
@@ -106,6 +116,62 @@ describe("parseConfig", () => {
       tracesSampleRate: 0.25,
       contentLoggingAllowed: false,
     });
+  });
+
+  it("parses live-suggestion budgets and optional metadata-only pricing", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_LIVE_SUGGESTION_MAX_INPUT_TOKENS: "4096",
+        DOKEZA_LIVE_SUGGESTION_MAX_TRANSCRIPT_TOKENS: "1400",
+        DOKEZA_LIVE_SUGGESTION_MAX_SOURCE_TOKENS: "1200",
+        DOKEZA_LIVE_SUGGESTION_MAX_USER_PROMPT_TOKENS: "300",
+        DOKEZA_LIVE_SUGGESTION_MAX_OUTPUT_TOKENS: "180",
+        DOKEZA_LIVE_SUGGESTION_SESSION_COST_LIMIT_MICROUSD: "120000",
+        DOKEZA_LIVE_SUGGESTION_INPUT_MICROUSD_PER_MILLION_TOKENS: "400000",
+        DOKEZA_LIVE_SUGGESTION_OUTPUT_MICROUSD_PER_MILLION_TOKENS: "1600000",
+      },
+      "realtime",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.config?.usage.liveSuggestion).toEqual({
+      maxInputTokens: 4096,
+      maxTranscriptTokens: 1400,
+      maxSourceTokens: 1200,
+      maxUserPromptTokens: 300,
+      maxOutputTokens: 180,
+      sessionCostLimitMicrousd: 120000,
+      inputMicrousdPerMillionTokens: 400000,
+      outputMicrousdPerMillionTokens: 1600000,
+    });
+  });
+
+  it("rejects invalid live-suggestion budgets without echoing values", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_LIVE_SUGGESTION_MAX_INPUT_TOKENS: "not-a-budget",
+        DOKEZA_LIVE_SUGGESTION_INPUT_MICROUSD_PER_MILLION_TOKENS: "-3",
+      },
+      "realtime",
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(" ")).not.toContain("not-a-budget");
+    expect(result.errors.join(" ")).not.toContain("-3");
+  });
+
+  it("rejects a partial live-suggestion pricing pair", () => {
+    const result = parseConfig(
+      {
+        DOKEZA_LIVE_SUGGESTION_INPUT_MICROUSD_PER_MILLION_TOKENS: "400000",
+      },
+      "realtime",
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      "Live suggestion input and output token prices must be configured together.",
+    );
   });
 
   it("accepts explicit auth settings without echoing the signing secret", () => {

@@ -116,6 +116,9 @@ Initial cloud LLM implementation:
 - The external-call gate covers both OpenAI Responses and OpenAI-compatible chat endpoints; selecting an alternate base URL does not bypass workspace policy.
 - Local and CI tests use deterministic or fake provider transports and must not call the live OpenAI service.
 - Adapter telemetry includes provider metadata, route, model, prompt template version, latency, token counts, status, and failure category only. It must not include transcript text, prompt text, retrieved chunk text, generated suggestion content, raw audio bytes, document text, or API keys.
+- Before provider submission, transcript, source, user-instruction, total-input, and output budgets are enforced with conservative UTF-8-byte upper-bound counts. Configured provider output-token parameters receive the same output ceiling.
+- Realtime records one idempotent, workspace/session/request-scoped `usage_events` row for completed, provider-error, and budget-rejected live-suggestion attempts. The row contains provider/model/prompt version, component counts, status, actor, and optional estimated micro-USD cost only; it has no customer-content columns.
+- Priced session enforcement is active only when reviewed input and output rates are configured. Usage-store failure blocks later suggestion provider calls for that session while capture and transcript delivery continue.
 - Completed suggestions from the M2 realtime path are stored as workspace-scoped `suggestions` records when retention policy permits cloud persistence. Persisted suggestions include generated content, prompt/model metadata, request ID, server sequence, and citation metadata for source chunks. `live_only` and `local_only` retention modes keep live suggestions transient and block cloud suggestion persistence.
 - Realtime transcript, gap, and suggestion persistence uses the policy resolved for the authenticated workspace connection rather than a process-wide individual retention default.
 
@@ -150,6 +153,7 @@ Initial knowledge-base implementation:
 | Dokeza to embedding provider | Document chunks and search queries | Company confidential data, query intent | TLS, server-side credentials, provider retention controls, metadata-only telemetry, keyword fallback on failure | Local deterministic embeddings or provider disabled |
 | AI orchestrator to LLM provider | Prompt, transcript excerpts, retrieved chunks where available | Meeting content, customer data, company data | TLS, server-side credentials, context minimization, provider settings, metadata-only telemetry | Local LLM, provider disabled by policy, or deterministic local/test provider |
 | Realtime service to PostgreSQL suggestions | Completed suggestion content, source metadata, prompt/model metadata | Generated meeting assistance, customer context | Workspace-scoped rows, RLS, retention gate, deletion cascade with meeting session, metadata-only errors | Live-only or local-only retention keeps suggestions transient |
+| Realtime service to PostgreSQL usage ledger | Workspace/session/request IDs, actor ID, provider/model/prompt version, token-count estimates, source count, status, optional estimated cost | Behavioral and billing metadata; no meeting content | Restricted service role, forced RLS, idempotent workspace-scoped write, meeting/workspace deletion cascade, metadata-only telemetry | Required for cloud-provider spend control even in no-content-storage modes; deleting the meeting/workspace removes the rows |
 | Workflow service to CRM/email | Summaries, drafts, structured updates | Meeting outcomes, customer data | OAuth, TLS, approval workflow | Integration disabled |
 | Backend to telemetry | Metrics and errors | Usually non-content | Content redaction, access controls | Debug telemetry disabled by default |
 
@@ -180,6 +184,7 @@ Initial launch defaults:
 - Live-only and local-only policies block cloud transcript timeline persistence, including transcript segments and audio gap markers, while allowing live in-session transcript delivery.
 - Desktop microphone PCM is transient in CPAL callback buffers, a fixed 32-entry native sample queue, the worker-owned Rubato resampler, and the existing bounded reconnect buffer. It is not written to disk, logs, diagnostics, or telemetry. Overflow drops are represented by metadata-only `audio.gap` messages.
 - Individual workspaces default to 7-day cloud retention for transcripts, suggestions, and post-call artifacts.
+- Content-free `usage_events` remain attached to their meeting session for spend attribution even under `live_only` or `local_only`; meeting or workspace deletion cascades to them. A separate long-term billing-retention policy and customer-facing usage export are not yet implemented.
 - Team and business workspaces default to 30-day cloud retention.
 - Enterprise workspaces default to 30-day cloud retention until a contract or admin policy sets a stricter or longer period.
 - Indefinite retention is never the default; it requires explicit workspace admin configuration.

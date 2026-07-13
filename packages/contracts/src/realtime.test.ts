@@ -142,6 +142,23 @@ describe("realtime contracts", () => {
     ).toBe(true);
   });
 
+  it.each(["suggestion_budget_exceeded", "usage_persistence_failed"])(
+    "accepts recoverable %s errors",
+    (code) => {
+      expect(
+        validateRealtimeJsonMessage({
+          ...base,
+          type: "error",
+          payload: {
+            code,
+            message: "Live suggestions are unavailable.",
+            recoverable: true,
+          },
+        }),
+      ).toBe(true);
+    },
+  );
+
   it("reports schema errors without exposing message payload content", () => {
     const errors = realtimeJsonMessageErrors({
       ...base,

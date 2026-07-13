@@ -22,6 +22,7 @@ export function createLiveSuggestionServiceFromConfig(
   if (llmConfig.provider === "deterministic") {
     return new LiveSuggestionService({
       provider: new DeterministicLiveSuggestionProvider(),
+      budgets: config.usage.liveSuggestion,
     });
   }
 
@@ -55,5 +56,8 @@ export function createLiveSuggestionServiceFromConfig(
     );
   }
 
-  return new LiveSuggestionService({ provider });
+  return new LiveSuggestionService({
+    provider,
+    budgets: config.usage.liveSuggestion,
+  });
 }

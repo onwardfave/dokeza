@@ -60,6 +60,8 @@ Status: **Implemented in code; physical Windows soak and permission QA remain ma
 
 ### Checkpoint C - Usage Guardrails
 
+Status: **Implemented for live suggestions; cross-feature metering and reviewed production prices remain open.**
+
 1. Define configurable transcript, source, instruction, output, per-session request, and provider-time budgets.
 2. Reject or truncate before provider submission with stable metadata-only degraded states.
 3. Record workspace/session/provider/feature usage and limit outcomes without customer content.

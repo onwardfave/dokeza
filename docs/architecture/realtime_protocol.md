@@ -165,6 +165,8 @@ Context updates are accepted by the protocol for forward compatibility. Until sc
 
 Suggestion requests are implemented for manual Milestone 2 live assistance. The server uses the authenticated session workspace, recent final transcript context, workspace cloud LLM policy, and AI orchestrator prompt routing; the client cannot provide a workspace override. If configured live suggestions require an external model provider and `cloud_llm_allowed` is false, the server returns a recoverable `feature_unavailable` error before provider submission. When `include_sources` is true, the server may retrieve authorized source chunks through the knowledge service, pass them to the AI orchestrator as delimited untrusted source material, and return citation metadata in `suggestion.complete.payload.sources`. If retrieval is unavailable or no authorized chunks match, the server falls back to transcript-only suggestion behavior with an empty `sources` array.
 
+Before provider submission, the AI orchestrator bounds transcript, retrieved source, user instruction, total input, and output independently. Counts use UTF-8 bytes as a conservative token upper bound, so the limits may truncate earlier than a provider tokenizer would. Only source chunks admitted to the bounded source context may appear in completion citations. Realtime also serializes live-suggestion requests per session and, when reviewed input and output prices are configured, reserves the worst-case request cost against the session hard limit before provider work.
+
 ```json
 {
   "type": "suggestion.request",
@@ -339,10 +341,16 @@ Initial server error codes include:
 - `feature_unavailable`
 - `llm_provider_timeout`
 - `suggestion_rate_limited`
+- `suggestion_budget_exceeded`
+- `usage_persistence_failed`
 
 Before opening an external STT stream or submitting an external live-suggestion request, the server checks the resolved `cloud_stt_allowed` or `cloud_llm_allowed` value respectively. These checks apply to every external provider route, including OpenAI-compatible endpoints. Disabled provider paths return recoverable `feature_unavailable` errors while keeping the authenticated session available for permitted capabilities.
 
 `suggestion_rate_limited` is recoverable. The server emits it for a `suggestion.request` that is either faster than the per-session debounce interval (with `retry_after_ms` indicating when the next request may be accepted) or beyond the per-session request cap (no `retry_after_ms`; further manual suggestions are unavailable for the rest of the session). The live session, capture, and transcript flow remain active; error messages exclude prompt content. Server defaults are a 2000 ms debounce and 30 accepted requests per session; invalid configuration falls back to these defaults rather than disabling limits. Accepted requests consume budget even if the provider call later fails, so retry storms cannot multiply provider spend.
+
+`suggestion_budget_exceeded` is recoverable and affects suggestions only. It indicates that the bounded input exceeded its configured token ceiling or that admitting the worst-case request would cross the priced session hard limit. The provider is not called. Cost-limit enforcement is deliberately inactive when either reviewed input or output price is absent; token ceilings, debounce, serialization, and request caps remain active.
+
+`usage_persistence_failed` is recoverable for the meeting but fail-closed for additional suggestions in that session. It means the server could not read or write the authoritative metadata-only usage ledger. Capture and transcript delivery continue; the server submits no later live-suggestion provider requests for that session because it cannot prove the spend state.
 
 `suggestion_persistence_failed` is recoverable. The server may emit it after a `suggestion.complete` has already been delivered when durable meeting-review storage fails; clients should keep the live suggestion visible and allow normal session continuation.
 

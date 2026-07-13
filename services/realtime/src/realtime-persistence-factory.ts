@@ -17,11 +17,13 @@ import {
   StaticWorkspacePolicyResolver,
   type WorkspacePolicyResolver,
 } from "./workspace-policy-resolver.js";
+import { InMemoryUsageLedger, PgUsageLedger, type UsageLedger } from "./usage-ledger.js";
 
 export interface RealtimePersistence {
   transcriptTimelineSink: TranscriptTimelineSink;
   suggestionSink: SuggestionSink;
   workspacePolicyResolver: WorkspacePolicyResolver;
+  usageLedger: UsageLedger;
   sessionStore?: SessionStore;
   close(): Promise<void>;
 }
@@ -35,6 +37,7 @@ export function createRealtimePersistenceFromConfig(config: DokezaConfig): Realt
         retentionMode: config.retentionDefaults.individual,
       }),
       workspacePolicyResolver: new StaticWorkspacePolicyResolver(defaultPolicy),
+      usageLedger: new InMemoryUsageLedger(config.usage.liveSuggestion),
       close: async () => undefined,
     };
   }
@@ -60,6 +63,10 @@ export function createRealtimePersistenceFromConfig(config: DokezaConfig): Realt
       retentionMode: config.retentionDefaults.individual,
     }),
     workspacePolicyResolver: new PgWorkspacePolicyResolver(db, defaultPolicy),
+    usageLedger: new PgUsageLedger({
+      db,
+      pricing: config.usage.liveSuggestion,
+    }),
     sessionStore: new PgSessionStore(db),
     close: async () => {
       await closePool(pool);

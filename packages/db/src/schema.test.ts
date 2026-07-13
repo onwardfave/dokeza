@@ -4,6 +4,7 @@ import {
   integrationConnections,
   meetingSessions,
   suggestions,
+  usageEvents,
   userProviderIdentities,
   workspacePolicies,
 } from "./schema.js";
@@ -63,6 +64,14 @@ describe("database schema", () => {
     expect(column(userProviderIdentities.providerSubject).notNull).toBe(true);
     expect(column(userProviderIdentities.userId).columnType).toBe("PgText");
     expect(column(userProviderIdentities.userId).notNull).toBe(true);
+  });
+
+  it("includes metadata-only usage attribution columns", () => {
+    expect(column(usageEvents.inputTokens).columnType).toBe("PgInteger");
+    expect(column(usageEvents.outputTokens).columnType).toBe("PgInteger");
+    expect(column(usageEvents.estimatedCostMicrousd).columnType).toBe("PgInteger");
+    expect(column(usageEvents.estimatedCostMicrousd).notNull).toBe(false);
+    expect(column(usageEvents.id).hasDefault).toBe(true);
   });
 
   it("keeps generated-id defaults where the SQL migration defines them", () => {

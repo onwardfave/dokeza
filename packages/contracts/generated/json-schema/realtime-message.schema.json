@@ -1274,6 +1274,14 @@
                 {
                   "const": "suggestion_rate_limited",
                   "type": "string"
+                },
+                {
+                  "const": "suggestion_budget_exceeded",
+                  "type": "string"
+                },
+                {
+                  "const": "usage_persistence_failed",
+                  "type": "string"
                 }
               ]
             },

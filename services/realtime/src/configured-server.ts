@@ -12,6 +12,7 @@ import {
   createLiveSuggestionServiceFromConfig,
   type LiveSuggestionServiceFactoryOptions,
 } from "./live-suggestion-service-factory.js";
+import { estimateUsageCostMicrousd } from "./usage-ledger.js";
 
 export interface ConfiguredRealtimeServerOptions extends LiveSuggestionServiceFactoryOptions {
   tokenValidator?: RealtimeServerOptions["tokenValidator"];
@@ -36,11 +37,19 @@ export function createConfiguredRealtimeServer(
       audience: config.auth.audience,
       signingSecret: config.auth.signingSecret,
     });
+  const liveSuggestionMaxRequestCostMicrousd = estimateUsageCostMicrousd(
+    {
+      inputTokens: config.usage.liveSuggestion.maxInputTokens,
+      outputTokens: config.usage.liveSuggestion.maxOutputTokens,
+    },
+    config.usage.liveSuggestion,
+  );
   const handle = createRealtimeServer({
     tokenValidator,
     sttAdapter: createSttAdapterFromConfig(config),
     transcriptTimelineSink: persistence.transcriptTimelineSink,
     suggestionSink: persistence.suggestionSink,
+    usageLedger: persistence.usageLedger,
     workspacePolicyResolver: persistence.workspacePolicyResolver,
     ...(persistence.sessionStore === undefined ? {} : { sessionStore: persistence.sessionStore }),
     liveSuggestionService: createLiveSuggestionServiceFromConfig(config, {
@@ -68,6 +77,10 @@ export function createConfiguredRealtimeServer(
       config.providers.llm.provider,
     ),
     sttExternalCallEnabled: true,
+    liveSuggestionSessionCostLimitMicrousd: config.usage.liveSuggestion.sessionCostLimitMicrousd,
+    ...(liveSuggestionMaxRequestCostMicrousd === undefined
+      ? {}
+      : { liveSuggestionMaxRequestCostMicrousd }),
   });
 
   return {

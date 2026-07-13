@@ -12,6 +12,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   customType,
+  index,
   integer,
   numeric,
   pgTable,
@@ -199,6 +200,57 @@ export const suggestions = pgTable("suggestions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Metadata-only provider usage ledger
+// ---------------------------------------------------------------------------
+
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: text("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()::text`),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    meetingSessionId: text("meeting_session_id")
+      .notNull()
+      .references(() => meetingSessions.id, { onDelete: "cascade" }),
+    requestId: text("request_id").notNull(),
+    feature: text("feature").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    status: text("status").notNull(),
+    tokenEstimationMethod: text("token_estimation_method").notNull(),
+    inputTokens: integer("input_tokens").notNull(),
+    outputTokens: integer("output_tokens").notNull(),
+    transcriptTokens: integer("transcript_tokens").notNull(),
+    sourceTokens: integer("source_tokens").notNull(),
+    userPromptTokens: integer("user_prompt_tokens").notNull(),
+    systemTokens: integer("system_tokens").notNull(),
+    sourceCount: integer("source_count").notNull(),
+    estimatedCostMicrousd: integer("estimated_cost_microusd"),
+    costEstimateStatus: text("cost_estimate_status").notNull(),
+    createdBy: text("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("usage_events_scope_unique").on(
+      table.workspaceId,
+      table.meetingSessionId,
+      table.requestId,
+      table.feature,
+    ),
+    index("usage_events_workspace_session_created_idx").on(
+      table.workspaceId,
+      table.meetingSessionId,
+      table.createdAt.desc(),
+    ),
+  ],
+);
 
 // ---------------------------------------------------------------------------
 // Knowledge

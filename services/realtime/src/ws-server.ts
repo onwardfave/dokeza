@@ -11,6 +11,7 @@ import {
   type LiveSuggestionEvent,
   type LiveSuggestionInput,
   type LiveSuggestionSourceChunk,
+  type LiveSuggestionUsage,
   type TranscriptContextSegment,
 } from "@dokeza/ai-orchestrator";
 import type { Actor } from "@dokeza/authz";
@@ -41,6 +42,7 @@ import {
   type RealtimeWorkspacePolicy,
   type WorkspacePolicyResolver,
 } from "./workspace-policy-resolver.js";
+import { InMemoryUsageLedger, type UsageLedger } from "./usage-ledger.js";
 
 export interface TokenValidator {
   validate(token: string): Promise<RealtimeAuthContext | undefined>;
@@ -67,6 +69,9 @@ export interface RealtimeServerOptions {
   liveSuggestionExternalCallEnabled?: boolean;
   sttExternalCallEnabled?: boolean;
   liveSuggestionGuardrails?: LiveSuggestionGuardrailOptions;
+  usageLedger?: UsageLedger;
+  liveSuggestionSessionCostLimitMicrousd?: number;
+  liveSuggestionMaxRequestCostMicrousd?: number;
   now?: () => number;
 }
 
@@ -117,6 +122,7 @@ interface LiveSuggestionGuardrails {
 interface LiveSuggestionGuardrailState {
   lastAcceptedAtMs: number | undefined;
   acceptedCount: number;
+  inFlight: boolean;
 }
 
 // Invalid values fall back to the stricter defaults rather than disabling limits.
@@ -217,10 +223,15 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   const liveSuggestionGuardrails = resolveLiveSuggestionGuardrails(
     options.liveSuggestionGuardrails,
   );
+  const usageLedger = options.usageLedger ?? new InMemoryUsageLedger();
+  const liveSuggestionSessionCostLimitMicrousd =
+    options.liveSuggestionSessionCostLimitMicrousd ?? 150_000;
+  const liveSuggestionMaxRequestCostMicrousd = options.liveSuggestionMaxRequestCostMicrousd;
   const now = options.now ?? Date.now;
   const replayableTranscriptsBySession = new Map<string, ReplayableTranscriptMessage[]>();
   const transcriptContextBySession = new Map<string, TranscriptContextSegment[]>();
   const suggestionGuardrailStateBySession = new Map<string, LiveSuggestionGuardrailState>();
+  const usageAccountingBlockedSessions = new Set<string>();
   const httpServer = createServer((_req, res) => {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not_found" }));
@@ -478,6 +489,39 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         });
       } catch {
         sendSuggestionPersistenceError(sessionId);
+      }
+    };
+
+    const recordSuggestionUsage = async (
+      sessionId: string,
+      requestId: string,
+      usage: LiveSuggestionUsage,
+    ): Promise<boolean> => {
+      const session = sessionManager.getSession(sessionId);
+      if (session === undefined) {
+        return false;
+      }
+
+      try {
+        await usageLedger.recordLiveSuggestionUsage({
+          workspaceId: session.workspaceId,
+          sessionId,
+          requestId,
+          actorUserId: session.actor.userId,
+          usage,
+        });
+        return true;
+      } catch {
+        usageAccountingBlockedSessions.add(sessionId);
+        if (session.state === "active") {
+          sendError(
+            "usage_persistence_failed",
+            "Live suggestion usage accounting is temporarily unavailable.",
+            true,
+            sessionId,
+          );
+        }
+        return false;
       }
     };
 
@@ -853,7 +897,26 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         const guardrailState = suggestionGuardrailStateBySession.get(session.sessionId) ?? {
           lastAcceptedAtMs: undefined,
           acceptedCount: 0,
+          inFlight: false,
         };
+        if (usageAccountingBlockedSessions.has(session.sessionId)) {
+          sendError(
+            "usage_persistence_failed",
+            "Live suggestion usage accounting is temporarily unavailable.",
+            true,
+            session.sessionId,
+          );
+          return;
+        }
+        if (guardrailState.inFlight) {
+          sendError(
+            "suggestion_rate_limited",
+            "A live suggestion request is already in progress.",
+            true,
+            session.sessionId,
+          );
+          return;
+        }
         if (guardrailState.acceptedCount >= liveSuggestionGuardrails.maxRequestsPerSession) {
           sendError(
             "suggestion_rate_limited",
@@ -877,13 +940,52 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
             return;
           }
         }
-        // Count the attempt before streaming so provider failures still consume budget.
+        // Reserve the session before the asynchronous cost lookup so concurrent
+        // requests cannot both pass the same cost check.
         suggestionGuardrailStateBySession.set(session.sessionId, {
-          lastAcceptedAtMs: nowMs,
-          acceptedCount: guardrailState.acceptedCount + 1,
+          ...guardrailState,
+          inFlight: true,
         });
 
         try {
+          let sessionEstimatedCostMicrousd: number | undefined;
+          try {
+            sessionEstimatedCostMicrousd = await usageLedger.getSessionEstimatedCostMicrousd(
+              session.workspaceId,
+              session.sessionId,
+            );
+          } catch {
+            usageAccountingBlockedSessions.add(session.sessionId);
+            sendError(
+              "usage_persistence_failed",
+              "Live suggestion usage accounting is temporarily unavailable.",
+              true,
+              session.sessionId,
+            );
+            return;
+          }
+          if (
+            sessionEstimatedCostMicrousd !== undefined &&
+            liveSuggestionMaxRequestCostMicrousd !== undefined &&
+            sessionEstimatedCostMicrousd + liveSuggestionMaxRequestCostMicrousd >
+              liveSuggestionSessionCostLimitMicrousd
+          ) {
+            sendError(
+              "suggestion_budget_exceeded",
+              "The live suggestion cost limit has been reached for this session.",
+              true,
+              session.sessionId,
+            );
+            return;
+          }
+
+          // Count the attempt before provider work so failures still consume the
+          // request budget and cannot create an unbounded retry loop.
+          suggestionGuardrailStateBySession.set(session.sessionId, {
+            lastAcceptedAtMs: nowMs,
+            acceptedCount: guardrailState.acceptedCount + 1,
+            inFlight: true,
+          });
           const transcriptSegments = transcriptContextBySession.get(session.sessionId) ?? [];
           const sourceChunks = await retrieveLiveSuggestionSources({
             retriever: liveSuggestionSourceRetriever,
@@ -904,23 +1006,53 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
             transcriptSegments,
             sourceChunks,
           })) {
+            if (
+              event.type === "complete" &&
+              event.usage !== undefined &&
+              !(await recordSuggestionUsage(session.sessionId, event.requestId, event.usage))
+            ) {
+              return;
+            }
             const sentMessage = sendSuggestionEvent(session.sessionId, event);
             if (sentMessage.type === "suggestion.complete") {
               await persistSuggestionMessage(session.sessionId, sentMessage);
             }
           }
         } catch (err) {
+          if (
+            err instanceof ModelGatewayError &&
+            err.usage !== undefined &&
+            !(await recordSuggestionUsage(
+              session.sessionId,
+              frameResult.message.payload.request_id,
+              err.usage,
+            ))
+          ) {
+            return;
+          }
           const code =
-            err instanceof ModelGatewayError && err.code === "invalid_model_response"
-              ? "feature_unavailable"
-              : "llm_provider_timeout";
+            err instanceof ModelGatewayError && err.code === "token_budget_exceeded"
+              ? "suggestion_budget_exceeded"
+              : err instanceof ModelGatewayError && err.code === "invalid_model_response"
+                ? "feature_unavailable"
+                : "llm_provider_timeout";
           sendError(
             code,
-            "Live suggestions are temporarily unavailable.",
+            code === "suggestion_budget_exceeded"
+              ? "The live suggestion token budget was exceeded."
+              : "Live suggestions are temporarily unavailable.",
             true,
             session.sessionId,
-            2000,
+            code === "suggestion_budget_exceeded" ? undefined : 2000,
           );
+        } finally {
+          const latestGuardrailState = suggestionGuardrailStateBySession.get(session.sessionId);
+          if (latestGuardrailState !== undefined) {
+            suggestionGuardrailStateBySession.set(session.sessionId, {
+              ...latestGuardrailState,
+              inFlight: false,
+            });
+          }
         }
         return;
       }
@@ -992,6 +1124,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         if (session !== undefined && session.state === "ended") {
           transcriptContextBySession.delete(session.sessionId);
           suggestionGuardrailStateBySession.delete(session.sessionId);
+          usageAccountingBlockedSessions.delete(session.sessionId);
         }
         sessionManager.removeConnection(connectionId);
       });
@@ -1003,6 +1136,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
         if (session !== undefined && session.state === "ended") {
           transcriptContextBySession.delete(session.sessionId);
           suggestionGuardrailStateBySession.delete(session.sessionId);
+          usageAccountingBlockedSessions.delete(session.sessionId);
         }
         sessionManager.removeConnection(connectionId);
       });

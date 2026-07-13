@@ -79,6 +79,8 @@ The property-testing and workload-testing approach is inspired by Antithesis' pu
 - Unsupported-answer uncertainty behavior.
 - Token budget enforcement.
 - Cost telemetry.
+- Conservative transcript/source/instruction/output truncation and total-input rejection before provider submission.
+- Idempotent usage attribution and priced session hard-stop behavior without content persistence.
 
 ### 4.5 Security
 
@@ -114,6 +116,8 @@ Property tests should focus on invariants:
 - Retention deletes all derived meeting artifacts.
 - Backpressure cannot crash the desktop client.
 - Prompt injection from transcript or documents cannot override system policy.
+- Concurrent live-suggestion requests cannot bypass session request or priced-cost admission.
+- An unavailable usage ledger cannot permit an unaccounted provider request.
 
 Reliability workloads should exercise:
 
@@ -122,6 +126,7 @@ Reliability workloads should exercise:
 - LLM timeout.
 - Provider rate limits.
 - Database restart.
+- Usage-ledger read/write failure during live suggestions.
 - Queue delay.
 - OAuth expiration.
 - Audio device changes.

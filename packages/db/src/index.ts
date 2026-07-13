@@ -41,6 +41,7 @@ export {
   transcriptSegments,
   transcriptGaps,
   suggestions,
+  usageEvents,
   documents,
   documentChunks,
   integrationConnections,

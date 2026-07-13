@@ -1,6 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
 import { WebSocket, type RawData } from "ws";
 import { REALTIME_PROTOCOL_VERSION } from "@dokeza/contracts";
+import { ModelGatewayError, type LiveSuggestionUsage } from "@dokeza/ai-orchestrator";
 import { createTestActor } from "@dokeza/test-fixtures";
 import {
   createRealtimeServer,
@@ -29,6 +30,7 @@ import type {
 } from "./session-store.js";
 import { InMemorySuggestionSink } from "./suggestion-sink.js";
 import type { SuggestionSink, SuggestionWriteInput } from "./suggestion-sink.js";
+import { InMemoryUsageLedger, type UsageLedger } from "./usage-ledger.js";
 
 function createTestTokenValidator(): TokenValidator {
   return {
@@ -163,6 +165,9 @@ describe("createRealtimeServer", () => {
       sttExternalCallEnabled?: boolean;
       liveSuggestionSourceRetriever?: RealtimeServerOptions["liveSuggestionSourceRetriever"];
       liveSuggestionGuardrails?: RealtimeServerOptions["liveSuggestionGuardrails"];
+      usageLedger?: RealtimeServerOptions["usageLedger"];
+      liveSuggestionSessionCostLimitMicrousd?: number;
+      liveSuggestionMaxRequestCostMicrousd?: number;
       now?: RealtimeServerOptions["now"];
     } = {},
   ): Promise<{ port: number }> {
@@ -201,6 +206,17 @@ describe("createRealtimeServer", () => {
     }
     if (options.liveSuggestionGuardrails !== undefined) {
       serverOptions.liveSuggestionGuardrails = options.liveSuggestionGuardrails;
+    }
+    if (options.usageLedger !== undefined) {
+      serverOptions.usageLedger = options.usageLedger;
+    }
+    if (options.liveSuggestionSessionCostLimitMicrousd !== undefined) {
+      serverOptions.liveSuggestionSessionCostLimitMicrousd =
+        options.liveSuggestionSessionCostLimitMicrousd;
+    }
+    if (options.liveSuggestionMaxRequestCostMicrousd !== undefined) {
+      serverOptions.liveSuggestionMaxRequestCostMicrousd =
+        options.liveSuggestionMaxRequestCostMicrousd;
     }
     if (options.now !== undefined) {
       serverOptions.now = options.now;
@@ -1216,6 +1232,169 @@ describe("createRealtimeServer", () => {
     const debounced = await sendAndReceive(ws, buildSuggestionRequest(sessionId, 3, "sreq_two"));
     expect(debounced.type).toBe("error");
     expect(debounced.payload).toMatchObject({ code: "suggestion_rate_limited" });
+  });
+
+  it("allows only one in-flight live suggestion per session", async () => {
+    let releaseProvider!: () => void;
+    let markProviderStarted!: () => void;
+    const providerStarted = new Promise<void>((resolve) => {
+      markProviderStarted = resolve;
+    });
+    const providerReleased = new Promise<void>((resolve) => {
+      releaseProvider = resolve;
+    });
+    const { port } = await startServer({
+      liveSuggestionGuardrails: { minIntervalMs: 0, maxRequestsPerSession: 30 },
+      liveSuggestionService: {
+        async *streamLiveSuggestion(input) {
+          markProviderStarted();
+          await providerReleased;
+          yield {
+            type: "complete",
+            requestId: input.requestId,
+            suggestionId: `sug_${input.requestId}`,
+            kind: input.kind,
+            content: "Stub answer",
+            sources: [],
+            confidence: "medium",
+            promptVersion: "live.answer.v1",
+            model: "deterministic-live-v1",
+            telemetry: [],
+          };
+        },
+      },
+    });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+    ws.send(JSON.stringify(buildSuggestionRequest(sessionId, 2, "sreq_in_flight")));
+    await providerStarted;
+
+    const concurrent = await sendAndReceive(
+      ws,
+      buildSuggestionRequest(sessionId, 3, "sreq_concurrent"),
+    );
+    expect(concurrent.payload).toMatchObject({ code: "suggestion_rate_limited" });
+
+    const completion = receiveJson(ws);
+    releaseProvider();
+    expect((await completion).payload).toMatchObject({ request_id: "sreq_in_flight" });
+  });
+
+  it("rejects a request before provider work when its worst-case cost exceeds the session limit", async () => {
+    const liveSuggestionService = createStubLiveSuggestionService();
+    const usageLedger: UsageLedger = {
+      async recordLiveSuggestionUsage() {
+        throw new Error("should not record rejected preflight");
+      },
+      async getSessionEstimatedCostMicrousd() {
+        return 149_000;
+      },
+    };
+    const { port } = await startServer({
+      liveSuggestionService,
+      usageLedger,
+      liveSuggestionSessionCostLimitMicrousd: 150_000,
+      liveSuggestionMaxRequestCostMicrousd: 2_000,
+    });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const response = await sendAndReceive(
+      ws,
+      buildSuggestionRequest(sessionId, 2, "sreq_over_cost"),
+    );
+
+    expect(response.type).toBe("error");
+    expect(response.payload).toMatchObject({
+      code: "suggestion_budget_exceeded",
+      recoverable: true,
+    });
+    expect(liveSuggestionService.requestIds).toEqual([]);
+    expect(JSON.stringify(response)).not.toContain("sensitive prompt content");
+  });
+
+  it("records metadata for token-budget rejection without submitting provider work", async () => {
+    const usageLedger = new InMemoryUsageLedger();
+    const usage: LiveSuggestionUsage = {
+      provider: "openai",
+      model: "unresolved",
+      promptVersion: "live.answer.v1",
+      status: "budget_rejected",
+      tokenEstimationMethod: "utf8_bytes_upper_bound",
+      inputTokens: 8_193,
+      outputTokens: 0,
+      transcriptTokens: 3_000,
+      sourceTokens: 3_000,
+      userPromptTokens: 512,
+      systemTokens: 1_681,
+      sourceCount: 3,
+    };
+    const { port } = await startServer({
+      usageLedger,
+      liveSuggestionService: {
+        async *streamLiveSuggestion() {
+          yield await Promise.reject(
+            new ModelGatewayError(
+              "Input exceeded budget.",
+              "token_budget_exceeded",
+              undefined,
+              usage,
+            ),
+          );
+        },
+      },
+    });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const response = await sendAndReceive(
+      ws,
+      buildSuggestionRequest(sessionId, 2, "sreq_over_tokens"),
+    );
+
+    expect(response.payload).toMatchObject({ code: "suggestion_budget_exceeded" });
+    expect(usageLedger.getSnapshot("ws_test_1", sessionId)).toEqual([
+      expect.objectContaining({
+        requestId: "sreq_over_tokens",
+        status: "budget_rejected",
+        inputTokens: 8_193,
+        costEstimateStatus: "unpriced",
+      }),
+    ]);
+    expect(JSON.stringify(usageLedger.getSnapshot("ws_test_1", sessionId))).not.toContain(
+      "sensitive prompt content",
+    );
+  });
+
+  it("fails closed for the session after usage accounting becomes unavailable", async () => {
+    let costReads = 0;
+    const liveSuggestionService = createStubLiveSuggestionService();
+    const usageLedger: UsageLedger = {
+      async recordLiveSuggestionUsage() {
+        throw new Error("usage store unavailable");
+      },
+      async getSessionEstimatedCostMicrousd() {
+        costReads += 1;
+        throw new Error("usage store unavailable");
+      },
+    };
+    const { port } = await startServer({ liveSuggestionService, usageLedger });
+    const ws = await connect(port);
+    const sessionId = await authenticate(ws);
+
+    const first = await sendAndReceive(
+      ws,
+      buildSuggestionRequest(sessionId, 2, "sreq_ledger_down_1"),
+    );
+    const second = await sendAndReceive(
+      ws,
+      buildSuggestionRequest(sessionId, 3, "sreq_ledger_down_2"),
+    );
+
+    expect(first.payload).toMatchObject({ code: "usage_persistence_failed" });
+    expect(second.payload).toMatchObject({ code: "usage_persistence_failed" });
+    expect(costReads).toBe(1);
+    expect(liveSuggestionService.requestIds).toEqual([]);
   });
 
   it("retrieves authenticated workspace sources for source-enabled manual suggestions", async () => {

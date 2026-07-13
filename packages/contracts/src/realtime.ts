@@ -47,6 +47,8 @@ const ErrorCode = Type.Union([
   Type.Literal("feature_unavailable"),
   Type.Literal("llm_provider_timeout"),
   Type.Literal("suggestion_rate_limited"),
+  Type.Literal("suggestion_budget_exceeded"),
+  Type.Literal("usage_persistence_failed"),
 ]);
 
 const SessionMode = Type.Union([
