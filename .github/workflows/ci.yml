@@ -114,12 +114,10 @@ jobs:
         run: pnpm build
 
       - name: Apply database migrations
-        env:
-          PGPASSWORD: dokeza_local
-        run: |
-          for migration in infra/db/migrations/*.sql; do
-            psql -h 127.0.0.1 -U dokeza -d dokeza -v ON_ERROR_STOP=1 -f "$migration"
-          done
+        run: pnpm db:migrate
+
+      - name: Verify database migrations are idempotent
+        run: pnpm db:migrate
 
       - name: Realtime PostgreSQL integration
         run: pnpm --filter @dokeza/realtime exec vitest run src/postgres-persistence.integration.test.ts

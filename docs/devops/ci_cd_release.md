@@ -32,7 +32,7 @@ Every pull request must pass:
 The baseline GitHub Actions workflow is defined in `.github/workflows/ci.yml` and currently runs:
 
 - Node workspace formatting, linting, type checks, tests, generated-schema drift checks, frontend desktop build, and dependency audit.
-- PostgreSQL integration tests against `pgvector/pgvector:pg17` with `infra/db/migrations/*.sql` applied, covering realtime persistence and API meeting review repository paths.
+- PostgreSQL integration tests against `pgvector/pgvector:pg17` with the checksummed `pnpm db:migrate` runner executed twice, covering migration idempotency plus realtime, knowledge, and API persistence paths.
 - Desktop release configuration validation for non-secret updater, channel, signing, and rollback metadata.
 - Windows desktop native smoke checks with Rustfmt, Clippy, Cargo tests, and `tauri build --debug --no-bundle`.
 - Terraform format/init/validate for the provider-neutral Terraform root.

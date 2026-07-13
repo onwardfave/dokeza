@@ -17,7 +17,7 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "migrate": "drizzle-kit push",
+    "migrate": "node scripts/migrate.mjs",
     "migrate:generate": "drizzle-kit generate",
     "test": "vitest run src",
     "typecheck": "tsc -b --pretty false"
