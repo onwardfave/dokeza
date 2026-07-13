@@ -15,6 +15,6 @@
     "@dokeza/config": "workspace:*",
     "@dokeza/contracts": "workspace:*",
     "@dokeza/db": "workspace:*",
-    "drizzle-orm": "^0.44.0"
+    "drizzle-orm": "^0.45.2"
   }
 }
