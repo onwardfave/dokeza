@@ -1,52 +1,55 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ContinuousMicrophoneCaptureController,
-  type MicrophoneCaptureScheduler,
+  type MicrophoneCaptureClock,
 } from "./microphoneCaptureController.js";
+import type {
+  NativeMicrophoneStreamEvent,
+  NativeMicrophoneStreamHandle,
+  NativeMicrophoneStreamSource,
+} from "./nativeMicrophoneSource.js";
 import type { DroppedAudioGap } from "./realtimeRecovery.js";
 import type { SyntheticPcmChunk } from "./realtimeClient.js";
 
-class ManualScheduler implements MicrophoneCaptureScheduler {
-  readonly delays: number[] = [];
-  private readonly callbacks = new Map<number, () => void>();
-  private nextTimerId = 1;
+class ManualClock implements MicrophoneCaptureClock {
+  value = 1_000;
 
-  setTimeout(callback: () => void, delayMs: number): number {
-    const timerId = this.nextTimerId;
-    this.nextTimerId += 1;
-    this.delays.push(delayMs);
-    this.callbacks.set(timerId, callback);
-    return timerId;
-  }
-
-  clearTimeout(timerId: number): void {
-    this.callbacks.delete(timerId);
-  }
-
-  runNext(): void {
-    const [timerId, callback] = this.callbacks.entries().next().value ?? [];
-    if (timerId === undefined || callback === undefined) {
-      return;
-    }
-    this.callbacks.delete(timerId);
-    callback();
+  now(): number {
+    return this.value;
   }
 }
 
-function chunk(chunkIndex: number, timestampMs: number, durationMs = 100): SyntheticPcmChunk {
+class FakeNativeStream implements NativeMicrophoneStreamSource, NativeMicrophoneStreamHandle {
+  readonly pause = vi.fn(async () => undefined);
+  readonly resume = vi.fn(async () => undefined);
+  readonly stop = vi.fn(async () => undefined);
+  private onEvent: ((event: NativeMicrophoneStreamEvent) => void) | undefined;
+
+  async start(
+    _deviceId: string | undefined,
+    onEvent: (event: NativeMicrophoneStreamEvent) => void,
+  ): Promise<NativeMicrophoneStreamHandle> {
+    this.onEvent = onEvent;
+    return this;
+  }
+
+  emit(event: NativeMicrophoneStreamEvent): void {
+    this.onEvent?.(event);
+  }
+}
+
+function nativeChunk(): NativeMicrophoneStreamEvent {
   return {
-    meta: {
-      chunk_id: `native_${chunkIndex}`,
-      chunk_index: chunkIndex,
+    type: "chunk",
+    chunk: {
       stream: "microphone",
       format: "pcm_s16le",
       sample_rate_hz: 16_000,
       channels: 1,
-      duration_ms: durationMs,
-      timestamp_ms: timestampMs,
-      byte_length: 4,
+      duration_ms: 100,
+      byte_length: 3_200,
+      bytes: Array.from({ length: 3_200 }, () => 0),
     },
-    bytes: Uint8Array.from([1, 0, 2, 0]),
   };
 }
 
@@ -56,100 +59,137 @@ async function flushPromises(): Promise<void> {
 }
 
 describe("ContinuousMicrophoneCaptureController", () => {
-  it("streams repeated capture windows with monotonic chunk metadata", async () => {
-    const scheduler = new ManualScheduler();
-    const capture = vi
-      .fn()
-      .mockResolvedValueOnce([chunk(0, 0), chunk(1, 100)])
-      .mockResolvedValueOnce([chunk(0, 0)]);
+  it("streams native events with monotonic protocol metadata", async () => {
+    const source = new FakeNativeStream();
     const sentChunks: SyntheticPcmChunk[] = [];
-
     const controller = new ContinuousMicrophoneCaptureController({
-      deviceId: "input_1",
-      scheduler,
-      capture,
-      sendAudioChunk: (pcmChunk) => sentChunks.push(pcmChunk),
+      deviceId: "mic_deadbeef_0",
+      source,
+      sendAudioChunk: (chunk) => sentChunks.push(chunk),
       sendAudioGap: vi.fn(),
     });
 
     controller.start();
     await flushPromises();
-    scheduler.runNext();
-    await flushPromises();
+    source.emit(nativeChunk());
+    source.emit(nativeChunk());
 
-    expect(capture).toHaveBeenCalledWith({ deviceId: "input_1" });
-    expect(sentChunks.map((sent) => sent.meta.chunk_id)).toEqual(["mic_0", "mic_1", "mic_2"]);
-    expect(sentChunks.map((sent) => sent.meta.chunk_index)).toEqual([0, 1, 2]);
-    expect(sentChunks.map((sent) => sent.meta.timestamp_ms)).toEqual([0, 100, 200]);
+    expect(sentChunks.map((chunk) => chunk.meta.chunk_id)).toEqual(["mic_0", "mic_1"]);
+    expect(sentChunks.map((chunk) => chunk.meta.timestamp_ms)).toEqual([0, 100]);
     expect(controller.snapshot).toMatchObject({
       state: "capturing",
-      deviceId: "input_1",
-      chunksSent: 3,
-      nextChunkIndex: 3,
-      streamTimeMs: 300,
+      deviceId: "mic_deadbeef_0",
+      chunksSent: 2,
+      nextChunkIndex: 2,
+      streamTimeMs: 200,
     });
   });
 
-  it("emits a user pause gap and resumes later capture", async () => {
-    const scheduler = new ManualScheduler();
-    const capture = vi.fn().mockResolvedValue([chunk(0, 0)]);
+  it("measures a pause gap and advances the later chunk timeline", async () => {
+    const source = new FakeNativeStream();
+    const clock = new ManualClock();
+    const sentChunks: SyntheticPcmChunk[] = [];
     const sentGaps: DroppedAudioGap[] = [];
-
     const controller = new ContinuousMicrophoneCaptureController({
-      captureWindowMs: 500,
-      scheduler,
-      capture,
-      sendAudioChunk: vi.fn(),
+      source,
+      clock,
+      sendAudioChunk: (chunk) => sentChunks.push(chunk),
       sendAudioGap: (gap) => sentGaps.push(gap),
     });
 
     controller.start();
     await flushPromises();
+    source.emit(nativeChunk());
     controller.pause();
+    source.emit({ type: "state", state: "paused" });
+    clock.value += 550;
     controller.resume();
-    scheduler.runNext();
-    await flushPromises();
+    source.emit({ type: "state", state: "capturing" });
+    source.emit(nativeChunk());
 
     expect(sentGaps).toEqual([
       {
         stream: "microphone",
         start_ms: 100,
-        end_ms: 600,
-        dropped_chunks: 5,
+        end_ms: 650,
+        dropped_chunks: 6,
         reason: "user_paused_capture",
       },
     ]);
-    expect(controller.snapshot.state).toBe("capturing");
-    expect(controller.snapshot.chunksSent).toBe(2);
+    expect(sentChunks[1]?.meta.timestamp_ms).toBe(650);
+    expect(source.pause).toHaveBeenCalledOnce();
+    expect(source.resume).toHaveBeenCalledOnce();
   });
 
-  it("marks device capture failures and emits a device unavailable gap", async () => {
-    const capture = vi.fn().mockRejectedValue(new Error("device lost"));
+  it("maps native overflow to an explicit timeline gap", async () => {
+    const source = new FakeNativeStream();
     const sentGaps: DroppedAudioGap[] = [];
-
     const controller = new ContinuousMicrophoneCaptureController({
-      captureWindowMs: 400,
-      capture,
+      source,
       sendAudioChunk: vi.fn(),
       sendAudioGap: (gap) => sentGaps.push(gap),
     });
 
     controller.start();
     await flushPromises();
+    source.emit({ type: "gap", reason: "local_buffer_full", dropped_chunks: 3 });
+
+    expect(sentGaps[0]).toEqual({
+      stream: "microphone",
+      start_ms: 0,
+      end_ms: 300,
+      dropped_chunks: 3,
+      reason: "local_buffer_full",
+    });
+    expect(controller.snapshot.streamTimeMs).toBe(300);
+  });
+
+  it("fails safely when the native device stream errors", async () => {
+    const source = new FakeNativeStream();
+    const sentGaps: DroppedAudioGap[] = [];
+    const controller = new ContinuousMicrophoneCaptureController({
+      source,
+      sendAudioChunk: vi.fn(),
+      sendAudioGap: (gap) => sentGaps.push(gap),
+    });
+
+    controller.start();
+    await flushPromises();
+    source.emit({ type: "error", code: "microphone_stream_failed", recoverable: true });
 
     expect(controller.snapshot).toMatchObject({
       state: "failed",
-      lastErrorCode: "microphone_capture_failed",
+      lastErrorCode: "microphone_stream_failed",
       lastGapReason: "device_unavailable",
     });
-    expect(sentGaps).toEqual([
-      {
-        stream: "microphone",
-        start_ms: 0,
-        end_ms: 400,
-        dropped_chunks: 4,
-        reason: "device_unavailable",
-      },
-    ]);
+    expect(sentGaps[0]?.reason).toBe("device_unavailable");
+  });
+
+  it("stops a native handle that resolves after the controller was stopped", async () => {
+    let resolveStart: ((handle: NativeMicrophoneStreamHandle) => void) | undefined;
+    const handle: NativeMicrophoneStreamHandle = {
+      pause: vi.fn(async () => undefined),
+      resume: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    };
+    const source: NativeMicrophoneStreamSource = {
+      start: () =>
+        new Promise((resolve) => {
+          resolveStart = resolve;
+        }),
+    };
+    const controller = new ContinuousMicrophoneCaptureController({
+      source,
+      sendAudioChunk: vi.fn(),
+      sendAudioGap: vi.fn(),
+    });
+
+    controller.start();
+    controller.stop();
+    resolveStart?.(handle);
+    await flushPromises();
+
+    expect(handle.stop).toHaveBeenCalledOnce();
+    expect(controller.snapshot.state).toBe("stopped");
   });
 });

@@ -1,7 +1,18 @@
+import type {
+  NativeMicrophoneStreamEvent,
+  NativeMicrophoneStreamHandle,
+  NativeMicrophoneStreamSource,
+} from "./nativeMicrophoneSource.js";
 import type { DroppedAudioGap } from "./realtimeRecovery.js";
 import type { SyntheticPcmChunk } from "./realtimeClient.js";
 
-export type MicrophoneCaptureState = "idle" | "capturing" | "paused" | "stopped" | "failed";
+export type MicrophoneCaptureState =
+  | "idle"
+  | "starting"
+  | "capturing"
+  | "paused"
+  | "stopped"
+  | "failed";
 
 export interface MicrophoneCaptureSnapshot {
   state: MicrophoneCaptureState;
@@ -13,73 +24,74 @@ export interface MicrophoneCaptureSnapshot {
   lastGapReason?: DroppedAudioGap["reason"];
 }
 
-export interface MicrophoneCaptureScheduler {
-  setTimeout(callback: () => void, delayMs: number): number;
-  clearTimeout(timerId: number): void;
-}
-
-export interface CaptureMicrophoneBatchInput {
-  deviceId?: string;
+export interface MicrophoneCaptureClock {
+  now(): number;
 }
 
 export interface ContinuousMicrophoneCaptureControllerOptions {
   deviceId?: string;
-  captureWindowMs?: number;
   chunkDurationMs?: number;
-  scheduler?: MicrophoneCaptureScheduler;
-  capture(input: CaptureMicrophoneBatchInput): Promise<SyntheticPcmChunk[]>;
+  clock?: MicrophoneCaptureClock;
+  source: NativeMicrophoneStreamSource;
   sendAudioChunk(chunk: SyntheticPcmChunk): void;
   sendAudioGap(gap: DroppedAudioGap): void;
   onStateChange?(snapshot: MicrophoneCaptureSnapshot): void;
 }
 
 export class ContinuousMicrophoneCaptureController {
-  private readonly captureWindowMs: number;
   private readonly chunkDurationMs: number;
-  private readonly scheduler: MicrophoneCaptureScheduler;
-  private timerId: number | undefined;
-  private captureRunId = 0;
+  private readonly clock: MicrophoneCaptureClock;
+  private handle: NativeMicrophoneStreamHandle | undefined;
+  private generation = 0;
   private state: MicrophoneCaptureState = "idle";
   private chunksSent = 0;
   private nextChunkIndex = 0;
   private streamTimeMs = 0;
+  private pausedAtMs: number | undefined;
   private lastErrorCode: string | undefined;
   private lastGapReason: DroppedAudioGap["reason"] | undefined;
 
   constructor(private readonly options: ContinuousMicrophoneCaptureControllerOptions) {
-    this.captureWindowMs = options.captureWindowMs ?? 1000;
     this.chunkDurationMs = options.chunkDurationMs ?? 100;
-    this.scheduler = options.scheduler ?? new BrowserMicrophoneCaptureScheduler();
+    this.clock = options.clock ?? { now: () => Date.now() };
   }
 
   get snapshot(): MicrophoneCaptureSnapshot {
-    const snapshot: MicrophoneCaptureSnapshot = {
+    return {
       state: this.state,
       chunksSent: this.chunksSent,
       nextChunkIndex: this.nextChunkIndex,
       streamTimeMs: this.streamTimeMs,
+      ...(this.options.deviceId === undefined ? {} : { deviceId: this.options.deviceId }),
+      ...(this.lastErrorCode === undefined ? {} : { lastErrorCode: this.lastErrorCode }),
+      ...(this.lastGapReason === undefined ? {} : { lastGapReason: this.lastGapReason }),
     };
-    if (this.options.deviceId !== undefined) {
-      snapshot.deviceId = this.options.deviceId;
-    }
-    if (this.lastErrorCode !== undefined) {
-      snapshot.lastErrorCode = this.lastErrorCode;
-    }
-    if (this.lastGapReason !== undefined) {
-      snapshot.lastGapReason = this.lastGapReason;
-    }
-    return snapshot;
   }
 
   start(): void {
-    if (this.state === "capturing") {
+    if (this.state === "starting" || this.state === "capturing") {
       return;
     }
 
+    const generation = ++this.generation;
     this.lastErrorCode = undefined;
     this.lastGapReason = undefined;
-    this.setState("capturing");
-    this.captureNextWindow();
+    this.setState("starting");
+    void this.options.source
+      .start(this.options.deviceId, (event) => this.handleNativeEvent(generation, event))
+      .then((handle) => {
+        if (generation !== this.generation || this.state === "stopped") {
+          void handle.stop();
+          return;
+        }
+        this.handle = handle;
+        this.setState("capturing");
+      })
+      .catch((error: unknown) => {
+        if (generation === this.generation && this.state !== "stopped") {
+          this.fail(classifyStartError(error));
+        }
+      });
   }
 
   pause(): void {
@@ -87,10 +99,7 @@ export class ContinuousMicrophoneCaptureController {
       return;
     }
 
-    this.clearTimer();
-    this.captureRunId += 1;
-    this.emitGap("user_paused_capture");
-    this.setState("paused");
+    void this.handle?.pause().catch(() => this.fail("microphone_stream_failed"));
   }
 
   resume(): void {
@@ -98,9 +107,7 @@ export class ContinuousMicrophoneCaptureController {
       return;
     }
 
-    this.lastErrorCode = undefined;
-    this.setState("capturing");
-    this.scheduleNextWindow(0);
+    void this.handle?.resume().catch(() => this.fail("microphone_stream_failed"));
   }
 
   stop(): void {
@@ -108,91 +115,110 @@ export class ContinuousMicrophoneCaptureController {
       return;
     }
 
-    this.clearTimer();
-    this.captureRunId += 1;
+    this.generation += 1;
+    const handle = this.handle;
+    this.handle = undefined;
     this.setState("stopped");
+    void handle?.stop();
   }
 
-  private captureNextWindow(): void {
-    const runId = this.captureRunId;
-    const input: CaptureMicrophoneBatchInput = {};
-    if (this.options.deviceId !== undefined) {
-      input.deviceId = this.options.deviceId;
+  private handleNativeEvent(generation: number, event: NativeMicrophoneStreamEvent): void {
+    if (generation !== this.generation || this.state === "stopped") {
+      return;
     }
 
-    void this.options
-      .capture(input)
-      .then((chunks) => {
-        if (this.state !== "capturing" || runId !== this.captureRunId) {
-          return;
-        }
+    if (event.type === "chunk") {
+      if (this.state === "capturing" || this.state === "starting") {
+        this.sendChunk(event.chunk.bytes, event.chunk.duration_ms);
+      }
+      return;
+    }
 
-        for (const chunk of chunks) {
-          this.options.sendAudioChunk(this.reindexChunk(chunk));
-        }
-        this.scheduleNextWindow(0);
-        this.emitChange();
-      })
-      .catch(() => {
-        if (runId !== this.captureRunId) {
-          return;
-        }
+    if (event.type === "gap") {
+      this.emitGap(event.reason, Math.max(1, event.dropped_chunks));
+      return;
+    }
 
-        this.clearTimer();
-        this.lastErrorCode = "microphone_capture_failed";
-        this.emitGap("device_unavailable");
-        this.setState("failed");
-      });
-  }
+    if (event.type === "error") {
+      this.fail(event.code);
+      return;
+    }
 
-  private scheduleNextWindow(delayMs: number): void {
-    this.clearTimer();
-    this.timerId = this.scheduler.setTimeout(() => {
-      this.timerId = undefined;
-      this.captureNextWindow();
-    }, delayMs);
-  }
+    if (event.state === "paused" && this.state === "capturing") {
+      this.pausedAtMs = this.clock.now();
+      this.setState("paused");
+      return;
+    }
 
-  private clearTimer(): void {
-    if (this.timerId !== undefined) {
-      this.scheduler.clearTimeout(this.timerId);
-      this.timerId = undefined;
+    if (event.state === "capturing") {
+      if (this.state === "starting") {
+        return;
+      }
+      if (this.state === "paused" && this.pausedAtMs !== undefined) {
+        const elapsedMs = Math.max(1, Math.round(this.clock.now() - this.pausedAtMs));
+        this.pausedAtMs = undefined;
+        this.emitGap(
+          "user_paused_capture",
+          Math.max(1, Math.ceil(elapsedMs / this.chunkDurationMs)),
+          elapsedMs,
+        );
+      }
+      this.setState("capturing");
     }
   }
 
-  private reindexChunk(chunk: SyntheticPcmChunk): SyntheticPcmChunk {
+  private sendChunk(bytesInput: number[], durationMs: number): void {
+    const bytes = Uint8Array.from(bytesInput);
     const chunkIndex = this.nextChunkIndex;
     const timestampMs = this.streamTimeMs;
-    const durationMs = chunk.meta.duration_ms;
-
     this.nextChunkIndex += 1;
     this.chunksSent += 1;
     this.streamTimeMs += durationMs;
-
-    return {
+    this.options.sendAudioChunk({
       meta: {
-        ...chunk.meta,
         chunk_id: `mic_${chunkIndex}`,
         chunk_index: chunkIndex,
+        stream: "microphone",
+        format: "pcm_s16le",
+        sample_rate_hz: 16_000,
+        channels: 1,
+        duration_ms: durationMs,
         timestamp_ms: timestampMs,
-        byte_length: chunk.bytes.byteLength,
+        byte_length: bytes.byteLength,
       },
-      bytes: chunk.bytes,
-    };
+      bytes,
+    });
+    this.emitChange();
   }
 
-  private emitGap(reason: DroppedAudioGap["reason"]): void {
+  private emitGap(
+    reason: DroppedAudioGap["reason"],
+    droppedChunks: number,
+    durationMs = droppedChunks * this.chunkDurationMs,
+  ): void {
     const startMs = this.streamTimeMs;
-    const endMs = startMs + this.captureWindowMs;
-    const droppedChunks = Math.max(1, Math.ceil((endMs - startMs) / this.chunkDurationMs));
+    this.streamTimeMs += durationMs;
     this.lastGapReason = reason;
     this.options.sendAudioGap({
       stream: "microphone",
       start_ms: startMs,
-      end_ms: endMs,
+      end_ms: this.streamTimeMs,
       dropped_chunks: droppedChunks,
       reason,
     });
+    this.emitChange();
+  }
+
+  private fail(code: string): void {
+    if (this.state === "failed" || this.state === "stopped") {
+      return;
+    }
+    this.lastErrorCode = code;
+    this.emitGap("device_unavailable", 1);
+    this.setState("failed");
+    const handle = this.handle;
+    this.handle = undefined;
+    void handle?.stop();
   }
 
   private setState(state: MicrophoneCaptureState): void {
@@ -205,12 +231,8 @@ export class ContinuousMicrophoneCaptureController {
   }
 }
 
-class BrowserMicrophoneCaptureScheduler implements MicrophoneCaptureScheduler {
-  setTimeout(callback: () => void, delayMs: number): number {
-    return globalThis.setTimeout(callback, delayMs) as unknown as number;
-  }
-
-  clearTimeout(timerId: number): void {
-    globalThis.clearTimeout(timerId);
-  }
+function classifyStartError(error: unknown): string {
+  return String(error).includes("microphone_permission_denied")
+    ? "microphone_permission_denied"
+    : "microphone_stream_failed";
 }

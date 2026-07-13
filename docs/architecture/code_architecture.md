@@ -92,6 +92,12 @@ Go remains acceptable for later performance-sensitive services, but only behind 
 | Governance | Policies, retention, audit logs, admin controls. |
 | Billing | Plans, seats, usage meters, entitlements. |
 
+### Desktop Microphone Capture Boundary
+
+The main desktop window starts one long-lived CPAL input stream through Tauri commands. CPAL's realtime callback only downmixes to mono and attempts a non-blocking enqueue into a fixed 32-entry queue. A native worker owns Rubato FFT anti-aliasing resampling, assembles exact 100 ms / 3,200-byte `pcm_s16le` chunks, and drains them into a typed Tauri channel; the WebView does not poll one-second capture commands.
+
+The TypeScript controller owns realtime chunk indexes and timeline timestamps. It advances the timeline for measured user pauses, native queue overflow, and device failures before sending the existing `audio.gap` protocol message. Native errors are reduced to stable codes, and neither raw PCM nor backend/device error strings enter diagnostics. The manager stops its stream on explicit stop and process teardown. Portable CPAL device selection uses a deterministic normalized-name fingerprint plus duplicate ordinal; this is stable across ordinary enumeration changes but is not claimed as an OS hardware identifier.
+
 ## 6. Contracts
 
 Contracts are product infrastructure and must be versioned.

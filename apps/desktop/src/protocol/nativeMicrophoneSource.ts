@@ -1,33 +1,54 @@
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
-import type { SyntheticPcmChunk } from "./realtimeClient.js";
-
-export interface NativeMicrophoneChunk {
-  chunk_id: string;
-  chunk_index: number;
-  stream: "microphone";
-  format: "pcm_s16le";
-  sample_rate_hz: 16000;
-  channels: 1;
-  duration_ms: number;
-  timestamp_ms: number;
-  byte_length: number;
-  bytes: number[];
-}
-
-export interface NativeMicrophoneCaptureReport {
-  device_name?: string;
-  input_sample_rate_hz: number;
-  input_channels: number;
-  output_sample_rate_hz: 16000;
-  output_channels: 1;
-  chunk_duration_ms: number;
-  chunks: NativeMicrophoneChunk[];
-}
-
+import { Channel, invoke as tauriInvoke } from "@tauri-apps/api/core";
 export interface NativeMicrophoneCaptureDevice {
   id: string;
   name?: string;
   is_default: boolean;
+}
+
+export interface NativeMicrophoneStreamChunk {
+  stream: "microphone";
+  format: "pcm_s16le";
+  sample_rate_hz: 16000;
+  channels: 1;
+  duration_ms: 100;
+  byte_length: 3200;
+  bytes: number[];
+}
+
+export type NativeMicrophoneStreamEvent =
+  | { type: "chunk"; chunk: NativeMicrophoneStreamChunk }
+  | {
+      type: "gap";
+      reason: "local_buffer_full" | "user_paused_capture";
+      dropped_chunks: number;
+    }
+  | {
+      type: "error";
+      code: "microphone_stream_failed" | "microphone_permission_denied";
+      recoverable: boolean;
+    }
+  | { type: "state"; state: "capturing" | "paused" | "stopped" };
+
+export interface NativeMicrophoneStreamHandle {
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  stop(): Promise<void>;
+}
+
+export interface NativeMicrophoneStreamSource {
+  start(
+    deviceId: string | undefined,
+    onEvent: (event: NativeMicrophoneStreamEvent) => void,
+  ): Promise<NativeMicrophoneStreamHandle>;
+}
+
+export interface NativeMicrophoneEventChannel {
+  onmessage: (event: NativeMicrophoneStreamEvent) => void;
+}
+
+export interface NativeMicrophoneStreamRuntime {
+  invoke: NativeInvoke;
+  createChannel(): NativeMicrophoneEventChannel;
 }
 
 export type NativeInvoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -38,41 +59,30 @@ export async function listMicrophoneCaptureDevices(
   return invoke<NativeMicrophoneCaptureDevice[]>("list_microphone_capture_devices");
 }
 
-export async function captureDefaultMicrophonePcmChunks(
-  invoke: NativeInvoke = tauriInvoke,
-): Promise<SyntheticPcmChunk[]> {
-  const report = await invoke<NativeMicrophoneCaptureReport>("capture_default_microphone_chunks");
-  return toSyntheticPcmChunks(report);
-}
+export function createNativeMicrophoneStreamSource(
+  runtime: NativeMicrophoneStreamRuntime = {
+    invoke: tauriInvoke,
+    createChannel: () => new Channel<NativeMicrophoneStreamEvent>(),
+  },
+): NativeMicrophoneStreamSource {
+  return {
+    async start(deviceId, onEvent) {
+      const onEventChannel = runtime.createChannel();
+      onEventChannel.onmessage = onEvent;
+      await runtime.invoke("start_microphone_stream", {
+        deviceId,
+        onEvent: onEventChannel,
+      });
 
-export interface CaptureMicrophonePcmChunksOptions {
-  deviceId?: string;
-  invoke?: NativeInvoke;
-}
-
-export async function captureMicrophonePcmChunks(
-  options: CaptureMicrophonePcmChunksOptions = {},
-): Promise<SyntheticPcmChunk[]> {
-  const invoke = options.invoke ?? tauriInvoke;
-  const report = await invoke<NativeMicrophoneCaptureReport>("capture_microphone_chunks", {
-    deviceId: options.deviceId,
-  });
-  return toSyntheticPcmChunks(report);
-}
-
-function toSyntheticPcmChunks(report: NativeMicrophoneCaptureReport): SyntheticPcmChunk[] {
-  return report.chunks.map((chunk) => ({
-    meta: {
-      chunk_id: chunk.chunk_id,
-      chunk_index: chunk.chunk_index,
-      stream: chunk.stream,
-      format: chunk.format,
-      sample_rate_hz: chunk.sample_rate_hz,
-      channels: chunk.channels,
-      duration_ms: chunk.duration_ms,
-      timestamp_ms: chunk.timestamp_ms,
-      byte_length: chunk.byte_length,
+      return {
+        pause: () => runtime.invoke("pause_microphone_stream"),
+        resume: () => runtime.invoke("resume_microphone_stream"),
+        stop: async () => {
+          await runtime.invoke("stop_microphone_stream");
+          // Retain the Channel for the stream lifetime, then release its application callback.
+          onEventChannel.onmessage = () => undefined;
+        },
+      };
     },
-    bytes: Uint8Array.from(chunk.bytes),
-  }));
+  };
 }

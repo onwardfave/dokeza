@@ -142,6 +142,8 @@ When local buffering overflows or the desktop intentionally drops unsent audio, 
 
 The backend must persist the gap in the session timeline so downstream transcript, summary, and diagnostics views do not imply continuous capture.
 
+For native microphone capture, the desktop advances its local stream timeline across discarded partial/queued samples at the native pause boundary and across the measured acknowledged pause interval. It uses `local_buffer_full` for each aggregate of samples rejected by the bounded native callback queue. A device/stream failure uses `device_unavailable`. The first later audio chunk must start at or after the gap end; chunk timestamps must not overlap a reported gap.
+
 ### 5.5 `context.update`
 
 Context updates are accepted by the protocol for forward compatibility. Until screen context processing is enabled, the server returns a recoverable `feature_unavailable` error and must not log the context title or text.

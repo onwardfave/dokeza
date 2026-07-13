@@ -1,56 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  captureDefaultMicrophonePcmChunks,
-  captureMicrophonePcmChunks,
+  createNativeMicrophoneStreamSource,
   listMicrophoneCaptureDevices,
+  type NativeMicrophoneStreamEvent,
 } from "./nativeMicrophoneSource.js";
 
 describe("native microphone source", () => {
-  it("invokes the Tauri microphone capture command and maps chunks", async () => {
-    const invoke = vi.fn().mockResolvedValue({
-      device_name: "Synthetic microphone",
-      input_sample_rate_hz: 48_000,
-      input_channels: 2,
-      output_sample_rate_hz: 16_000,
-      output_channels: 1,
-      chunk_duration_ms: 100,
-      chunks: [
-        {
-          chunk_id: "mic_0",
-          chunk_index: 0,
-          stream: "microphone",
-          format: "pcm_s16le",
-          sample_rate_hz: 16_000,
-          channels: 1,
-          duration_ms: 100,
-          timestamp_ms: 0,
-          byte_length: 4,
-          bytes: [1, 0, 255, 255],
-        },
-      ],
-    });
-
-    const chunks = await captureDefaultMicrophonePcmChunks(invoke);
-
-    expect(invoke).toHaveBeenCalledWith("capture_default_microphone_chunks");
-    expect(chunks).toEqual([
-      {
-        meta: {
-          chunk_id: "mic_0",
-          chunk_index: 0,
-          stream: "microphone",
-          format: "pcm_s16le",
-          sample_rate_hz: 16_000,
-          channels: 1,
-          duration_ms: 100,
-          timestamp_ms: 0,
-          byte_length: 4,
-        },
-        bytes: Uint8Array.from([1, 0, 255, 255]),
-      },
-    ]);
-  });
-
   it("lists selectable microphone capture devices", async () => {
     const invoke = vi.fn().mockResolvedValue([
       {
@@ -70,25 +25,37 @@ describe("native microphone source", () => {
     expect(invoke).toHaveBeenCalledWith("list_microphone_capture_devices");
   });
 
-  it("captures from a selected microphone device", async () => {
-    const invoke = vi.fn().mockResolvedValue({
-      device_name: "Selected microphone",
-      input_sample_rate_hz: 48_000,
-      input_channels: 1,
-      output_sample_rate_hz: 16_000,
-      output_channels: 1,
-      chunk_duration_ms: 100,
-      chunks: [],
+  it("opens one typed native channel and controls the long-lived stream", async () => {
+    let onMessage: ((event: NativeMicrophoneStreamEvent) => void) | undefined;
+    const channel = {
+      set onmessage(handler: (event: NativeMicrophoneStreamEvent) => void) {
+        onMessage = handler;
+      },
+    };
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const received: NativeMicrophoneStreamEvent[] = [];
+    const source = createNativeMicrophoneStreamSource({
+      invoke,
+      createChannel: () => channel,
     });
 
-    await expect(
-      captureMicrophonePcmChunks({
-        deviceId: "input_2",
-        invoke,
-      }),
-    ).resolves.toEqual([]);
-    expect(invoke).toHaveBeenCalledWith("capture_microphone_chunks", {
-      deviceId: "input_2",
-    });
+    const handle = await source.start("mic_deadbeef_0", (event) => received.push(event));
+    const event: NativeMicrophoneStreamEvent = {
+      type: "gap",
+      reason: "local_buffer_full",
+      dropped_chunks: 2,
+    };
+    onMessage?.(event);
+    await handle.pause();
+    await handle.resume();
+    await handle.stop();
+
+    expect(invoke.mock.calls).toEqual([
+      ["start_microphone_stream", { deviceId: "mic_deadbeef_0", onEvent: channel }],
+      ["pause_microphone_stream"],
+      ["resume_microphone_stream"],
+      ["stop_microphone_stream"],
+    ]);
+    expect(received).toEqual([event]);
   });
 });

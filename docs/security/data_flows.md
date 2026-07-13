@@ -178,6 +178,7 @@ Initial launch defaults:
 
 - Raw audio is transient by default and is not stored in Dokeza Cloud after STT processing unless a workspace policy explicitly enables storage for a defined purpose.
 - Live-only and local-only policies block cloud transcript timeline persistence, including transcript segments and audio gap markers, while allowing live in-session transcript delivery.
+- Desktop microphone PCM is transient in CPAL callback buffers, a fixed 32-entry native sample queue, the worker-owned Rubato resampler, and the existing bounded reconnect buffer. It is not written to disk, logs, diagnostics, or telemetry. Overflow drops are represented by metadata-only `audio.gap` messages.
 - Individual workspaces default to 7-day cloud retention for transcripts, suggestions, and post-call artifacts.
 - Team and business workspaces default to 30-day cloud retention.
 - Enterprise workspaces default to 30-day cloud retention until a contract or admin policy sets a stricter or longer period.

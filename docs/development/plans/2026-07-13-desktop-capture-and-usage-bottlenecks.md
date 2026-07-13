@@ -48,6 +48,8 @@ Status: **Implemented; installed-build QA remains credential/release gated.**
 
 ### Checkpoint B - Long-Lived Native Microphone
 
+Status: **Implemented in code; physical Windows soak and permission QA remain manual.**
+
 1. Specify typed native chunk/state/error events and TypeScript subscription tests.
 2. Add a Rust stream lifecycle state machine with start, pause, resume, stop, and shutdown.
 3. Use a bounded callback-to-emitter queue; report overflow/device errors without content.

@@ -57,7 +57,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] Windows desktop client; macOS deferred to post-MVP fast-follow (SRS 9.1.1).
 - [ ] Authenticated user account.
 - [ ] Partial: manual meeting start and stop exist in local/dev flow; production-authenticated UX remains open.
-- [ ] Partial: microphone capture exists for bounded Windows capture; long-lived stream and QA remain open.
+- [ ] Partial: long-lived Windows microphone capture is implemented with a bounded native queue and typed WebView channel; physical-device soak/permission QA remains open.
 - [ ] System audio capture where feasible.
 - [ ] Partial: streaming transcription exists through the realtime service and desktop live panel; production QA remains open.
 - [x] Live transcript view foundation.
@@ -76,7 +76,7 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 - [ ] FR-001, FR-007, FR-009, FR-010, FR-011: user can install the desktop app on Windows through a release/update channel; macOS deferred per SRS 9.1.1.
 - [ ] FR-020, NFR-042, NFR-080: user can authenticate, complete onboarding, select a workspace, and store tokens in platform-secure storage.
 - [ ] Partial: FR-100, NFR-084: user can manually start, pause, and stop a meeting session in the local/dev vertical; production-authenticated product flow remains open.
-- [ ] Partial: FR-040, FR-060 to FR-063: permitted microphone audio can produce a live transcript in the Windows/local vertical; long-lived native streaming, system audio, macOS, and alpha QA remain open.
+- [ ] Partial: FR-040, FR-060 to FR-063: permitted microphone audio can produce a live transcript through a long-lived native stream in the Windows/local vertical; system audio, macOS, and physical alpha QA remain open.
 - [ ] FR-183, FR-200, NFR-001: app generates a useful suggestion from a manual hotkey/action within 3 seconds under normal conditions and proves that latency with measurements.
 - [ ] Partial: FR-120, FR-123, FR-140, FR-143: backend can retrieve uploaded document context and return source metadata; desktop upload UI, binary parsing, reranking/evals, and source-selection UX remain open.
 - [ ] FR-220, FR-221, FR-222, FR-224, FR-225: app produces post-call summary, action items, follow-up draft, editable notes, and export workflow.
@@ -106,8 +106,8 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ### Audio Capture and STT (FR-040 to FR-067, NFR-020 to NFR-026)
 
-- [ ] Partial: Windows selected/default microphone capture with protocol-compatible chunks exists.
-- [ ] Long-lived native microphone stream.
+- [ ] Partial: Windows selected/default long-lived microphone capture with protocol-compatible chunks exists; physical-device QA remains open.
+- [x] Long-lived native microphone stream with pause/resume/stop and teardown ownership.
 - [ ] System audio capture where supported and authorized by the OS.
 - [ ] Deferred post-MVP (SRS 9.1.1): macOS audio capture validation.
 - [ ] VAD/silence detection to reduce unnecessary processing.
@@ -245,17 +245,17 @@ Current status: production alpha is still open, MVP is not complete, and full SR
 
 ## M1A.4 — Desktop Audio Capture (Windows Mic First)
 
-‡ Verified with synthetic PCM and bounded capture windows; not yet proven with a long-lived real-microphone session (see [Alpha.3](#alpha3--native-microphone-stream-hardening) and [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice)).
+‡ Verified with synthetic PCM through a long-lived native stream boundary; not yet proven with a physical long-duration microphone session (see [Alpha.3](#alpha3--native-microphone-stream-hardening) and [Alpha.5a](#alpha5a--real-provider-smoke-test-pulled-forward-next-slice)).
 
 - [x] Enumerate selectable input devices
-- [x] Bounded selected/default microphone capture
-- [x] Downmix / resample to mono 16 kHz `pcm_s16le`
+- [x] Bounded-queue selected/default microphone capture
+- [x] Downmix / FFT anti-aliasing resample to mono 16 kHz `pcm_s16le`
 - [x] Chunk into protocol-compatible 100 ms frames
-- [x] Continuous capture controller over repeated bounded windows
-- [x] Monotonic chunk reindexing across windows
+- [x] Continuous capture controller over a typed long-lived native stream
+- [x] Monotonic chunk reindexing across capture and gap events
 - [x] Pause / resume / stop state machine
-- [x] `audio.gap` for user pause and device capture failure
-- [ ] Replace repeated bounded capture windows with long-lived native stream
+- [x] `audio.gap` for measured user pause, device capture failure, and bounded native queue overflow
+- [x] Replace repeated bounded capture windows with long-lived native stream
 - [ ] Alpha-deferred: system audio capture (Windows WASAPI loopback); open for SRS/MVP
 - [ ] Deferred post-MVP (SRS 9.1.1): macOS system audio capture
 
@@ -385,12 +385,12 @@ Status: **Partial.** Server-side hosted identity, membership, secure storage, su
 - [ ] UI tests for view models + client state transitions
 
 ### Alpha.3 — Native Microphone Stream Hardening
-- [ ] Long-lived native stream lifecycle (enumerate, start, emit PCM, pause, resume, stop, recover)
-- [ ] Tauri event streaming or tested native-to-webview bridge for continuous PCM delivery
-- [ ] Preserve mono 16 kHz `pcm_s16le` 100 ms chunk contract
-- [ ] Handle device unavailable, permission denied, stream error, app shutdown
-- [ ] Emit `audio.gap` for user pause, capture failure, buffer overflow
-- [ ] Native Rust tests + TypeScript capture controller integration tests
+- [x] Long-lived native stream lifecycle (enumerate, start, emit PCM, pause, resume, stop, retry/recover)
+- [x] Typed Tauri channel for continuous native-to-WebView PCM delivery
+- [x] Preserve mono 16 kHz `pcm_s16le` 100 ms chunk contract through FFT anti-aliasing resampling
+- [x] Handle device unavailable, permission denied, stream error, and app shutdown with sanitized boundaries
+- [x] Emit `audio.gap` for measured user pause, capture failure, and buffer overflow
+- [x] Native Rust tests + TypeScript capture controller reliability/integration tests
 - [ ] Windows manual QA with real microphone (30-minute session target)
 
 ### Alpha.4 — M2 Usage Guardrails
@@ -466,7 +466,7 @@ Status: **Partial.** Server-side hosted identity, membership, secure storage, su
 - [x] Update `data_flows.md` with provider-token exchange boundary
 - [x] Update `data_flows.md` with selected IdP redirect/session flow
 - [x] Update `failure_modes.md` with hosted provider token exchange rejection
-- [ ] Update `failure_modes.md` with usage guardrail and desktop capture failures
+- [ ] Partial: desktop capture failures documented; usage budget failure behavior remains for Alpha.4.
 - [x] Update `multi_tenancy.md` with durable provider identity mapping
 - [x] Update `multi_tenancy.md` with full membership administration
 - [x] Update `code_architecture.md` with `packages/db`, `packages/auth`

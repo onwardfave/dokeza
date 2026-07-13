@@ -37,6 +37,7 @@ The property-testing and workload-testing approach is inspired by Antithesis' pu
 - Global hotkeys.
 - Audio device selection.
 - Native audio diagnostics for microphone, output-device enumeration, and Windows loopback probes.
+- Long-lived microphone reliability properties covering FFT resampling, exact PCM chunks, stable-enough device IDs, bounded callback overflow, measured pause gaps, late-start teardown, and sanitized stream failures. See `property-catalogs/desktop-microphone-stream.md`.
 - Device disconnect recovery.
 - Local cache writes.
 - Redacted local crash diagnostics.

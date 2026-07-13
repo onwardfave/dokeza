@@ -37,7 +37,7 @@ import {
   listMeetings,
 } from "../protocol/meetingReviewApiClient.js";
 import {
-  captureMicrophonePcmChunks,
+  createNativeMicrophoneStreamSource,
   listMicrophoneCaptureDevices,
   type NativeMicrophoneCaptureDevice,
 } from "../protocol/nativeMicrophoneSource.js";
@@ -311,8 +311,7 @@ function LiveSessionPanel() {
     startRefreshLoop();
 
     const controllerOptions: ContinuousMicrophoneCaptureControllerOptions = {
-      capture: ({ deviceId }) =>
-        captureMicrophonePcmChunks(deviceId === undefined ? {} : { deviceId }),
+      source: createNativeMicrophoneStreamSource(),
       sendAudioChunk: (chunk) => client.sendAudioChunk(chunk),
       sendAudioGap: (gap) => client.sendAudioGap(gap),
       onStateChange: setCaptureSnapshot,
