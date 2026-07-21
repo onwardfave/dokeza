@@ -4,7 +4,7 @@ This ledger contains work that cannot be completed safely through repository aut
 
 ## Local Development
 
-- [ ] Reconcile the existing local Docker PostgreSQL volume before relying on `pnpm dev:infra`: it currently rejects the repository's documented default credential. Back up any needed local data, then either restore the volume's intended credential or recreate the development volume; automation intentionally did not rewrite it.
+- [x] Resolved 2026-07-20: the "rejected credential" was a **host port conflict**, not a bad volume credential. Another project's Postgres (`autorank-local-postgres-1`) already published `127.0.0.1:5432`, so the dokeza container started with no host binding and all host-side connections hit the wrong server. Fix: `docker-compose.yml` now parameterizes the host port (`${DOKEZA_POSTGRES_HOST_PORT:-5432}`, default unchanged), and this machine sets `DOKEZA_POSTGRES_HOST_PORT=5433` (User scope). Local `DATABASE_URL` must use port **5433**. Migrations are current (0001–0007 applied).
 
 ## Production Alpha
 
