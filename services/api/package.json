@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -b",
-    "dev": "tsx watch src/main.ts",
+    "dev": "tsx watch --env-file-if-exists=.env.local src/main.ts",
     "start": "tsx src/main.ts",
     "test": "vitest run src",
     "typecheck": "tsc -b --pretty false"

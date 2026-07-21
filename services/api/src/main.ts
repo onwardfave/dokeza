@@ -1,4 +1,5 @@
 import { parseConfig } from "@dokeza/config";
+import type { TelemetryEvent } from "@dokeza/telemetry";
 
 import { createHttpServer } from "./http-server.js";
 
@@ -18,7 +19,20 @@ function main(): void {
   }
 
   const config = parsed.config;
-  const handle = createHttpServer({ env: process.env });
+  // Console telemetry is a local/test diagnostic only; event fields are already
+  // redacted by createTelemetryEvent and never include token values.
+  const telemetrySink =
+    config.environment === "production"
+      ? undefined
+      : {
+          emit(event: TelemetryEvent): void {
+            console.log(`[dokeza:api] ${event.name} ${JSON.stringify(event.fields)}`);
+          },
+        };
+  const handle = createHttpServer({
+    env: process.env,
+    ...(telemetrySink === undefined ? {} : { telemetrySink }),
+  });
 
   handle.server.listen(config.port, "127.0.0.1", () => {
     console.log(
