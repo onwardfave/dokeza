@@ -182,7 +182,7 @@ async function exchangeAuth0Token(
     throw new Error("hosted_auth_invalid_token_response");
   }
 
-  const providerToken = readToken(payload.id_token) ?? readToken(payload.access_token);
+  const providerToken = readToken(payload.access_token) ?? readToken(payload.id_token);
   if (providerToken === undefined) {
     throw new Error("hosted_auth_invalid_token_response");
   }

@@ -118,7 +118,7 @@ describe("hostedAuthFlow", () => {
         fetcher,
       }),
     ).resolves.toEqual({
-      providerToken: "provider_id_token",
+      providerToken: "provider_access_token",
       refreshToken: "provider_refresh_token",
       expiresIn: 3600,
     });
