@@ -2,7 +2,7 @@ name: dokeza-observability
 
 services:
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.154.0
+    image: otel/opentelemetry-collector-contrib:0.157.0
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
       - ./otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
@@ -15,7 +15,7 @@ services:
       - jaeger
 
   prometheus:
-    image: prom/prometheus:v3.12.0
+    image: prom/prometheus:v3.13.1
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -34,7 +34,7 @@ services:
       - "127.0.0.1:16686:16686"
 
   grafana:
-    image: grafana/grafana:13.0.2
+    image: grafana/grafana:13.1.1
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
