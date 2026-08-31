@@ -12,6 +12,6 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.34.13"
+    "@sinclair/typebox": "^0.34.52"
   }
 }

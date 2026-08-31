@@ -22,7 +22,7 @@
     "@dokeza/knowledge": "workspace:*",
     "@dokeza/telemetry": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "ws": "^8.18.0"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@dokeza/test-fixtures": "workspace:*",
